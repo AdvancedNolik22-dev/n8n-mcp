@@ -17,6 +17,7 @@ export PATH="$HOME/.nvm/versions/node/v20.17.0/bin:$PATH"
 NODE_VERSION=$(node --version)
 if [ "$NODE_VERSION" != "v20.17.0" ]; then
     echo "Error: Wrong Node.js version. Expected v20.17.0, got $NODE_VERSION" >&2
+    echo "Please install Node v20.17.0 using nvm: nvm install 20.17.0" >&2
     exit 1
 fi
 
