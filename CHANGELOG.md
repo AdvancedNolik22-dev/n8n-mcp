@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.20.0] - 2025-10-18
+
+### ✨ Features
+
+**MCP Server Icon Support (SEP-973)**
+
+- Added custom server icons for MCP clients
+  - Icons served from https://www.n8n-mcp.com/logo*.png
+  - Multiple sizes: 48x48, 128x128, 192x192
+  - Future-proof for Claude Desktop icon UI support
+- Added websiteUrl field pointing to https://n8n-mcp.com
+- Server now reports correct version from package.json instead of hardcoded '1.0.0'
+
+### 📦 Dependency Updates
+
+- Upgraded `@modelcontextprotocol/sdk` from ^1.13.2 to ^1.20.1
+  - Enables icon support as per MCP specification SEP-973
+  - No breaking changes, fully backward compatible
+
+### 🔧 Technical Improvements
+
+- Server version now dynamically sourced from package.json via PROJECT_VERSION
+- Enhanced server metadata to include branding and website information
+
+### 📝 Notes
+
+- Icons won't display in Claude Desktop yet (pending upstream UI support)
+- Icons will appear automatically when Claude Desktop adds icon rendering
+- Other MCP clients (Cursor, Windsurf) may already support icon display
+
 ## [2.19.6] - 2025-10-14
 
 ### 📦 Dependency Updates

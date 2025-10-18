@@ -128,7 +128,25 @@ export class N8NDocumentationMCPServer {
     this.server = new Server(
       {
         name: 'n8n-documentation-mcp',
-        version: '1.0.0',
+        version: PROJECT_VERSION,
+        icons: [
+          {
+            src: "https://www.n8n-mcp.com/logo.png",
+            mimeType: "image/png",
+            sizes: ["192x192"]
+          },
+          {
+            src: "https://www.n8n-mcp.com/logo-128.png",
+            mimeType: "image/png",
+            sizes: ["128x128"]
+          },
+          {
+            src: "https://www.n8n-mcp.com/logo-48.png",
+            mimeType: "image/png",
+            sizes: ["48x48"]
+          }
+        ],
+        websiteUrl: "https://n8n-mcp.com"
       },
       {
         capabilities: {
