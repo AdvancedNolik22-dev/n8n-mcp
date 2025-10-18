@@ -666,6 +666,97 @@ n8n_update_partial_workflow({id: "wf-123", operations: [{...}]})
 n8n_update_partial_workflow({id: "wf-123", operations: [{...}]})
 ```
 
+###   CRITICAL: addConnection Syntax
+
+The `addConnection` operation requires **four separate string parameters**. Common mistakes cause misleading errors.
+
+❌ WRONG - Object format (fails with "Expected string, received object"):
+```json
+{
+  "type": "addConnection",
+  "connection": {
+    "source": {"nodeId": "node-1", "outputIndex": 0},
+    "destination": {"nodeId": "node-2", "inputIndex": 0}
+  }
+}
+```
+
+❌ WRONG - Combined string (fails with "Source node not found"):
+```json
+{
+  "type": "addConnection",
+  "source": "node-1:main:0",
+  "target": "node-2:main:0"
+}
+```
+
+✅ CORRECT - Four separate string parameters:
+```json
+{
+  "type": "addConnection",
+  "source": "node-id-string",
+  "target": "target-node-id-string",
+  "sourcePort": "main",
+  "targetPort": "main"
+}
+```
+
+**Reference**: [GitHub Issue #327](https://github.com/czlonkowski/n8n-mcp/issues/327)
+
+### ⚠️ CRITICAL: IF Node Multi-Output Routing
+
+IF nodes have **two outputs** (TRUE and FALSE). Use the **`branch` parameter** to route to the correct output:
+
+✅ CORRECT - Route to TRUE branch (when condition is met):
+```json
+{
+  "type": "addConnection",
+  "source": "if-node-id",
+  "target": "success-handler-id",
+  "sourcePort": "main",
+  "targetPort": "main",
+  "branch": "true"
+}
+```
+
+✅ CORRECT - Route to FALSE branch (when condition is NOT met):
+```json
+{
+  "type": "addConnection",
+  "source": "if-node-id",
+  "target": "failure-handler-id",
+  "sourcePort": "main",
+  "targetPort": "main",
+  "branch": "false"
+}
+```
+
+**Common Pattern** - Complete IF node routing:
+```json
+n8n_update_partial_workflow({
+  id: "workflow-id",
+  operations: [
+    {type: "addConnection", source: "If Node", target: "True Handler", sourcePort: "main", targetPort: "main", branch: "true"},
+    {type: "addConnection", source: "If Node", target: "False Handler", sourcePort: "main", targetPort: "main", branch: "false"}
+  ]
+})
+```
+
+**Note**: Without the `branch` parameter, both connections may end up on the same output, causing logic errors!
+
+### removeConnection Syntax
+
+Use the same four-parameter format:
+```json
+{
+  "type": "removeConnection",
+  "source": "source-node-id",
+  "target": "target-node-id",
+  "sourcePort": "main",
+  "targetPort": "main"
+}
+```
+
 ## Example Workflow
 
 ### Template-First Approach
