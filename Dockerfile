@@ -34,9 +34,13 @@ RUN apk add --no-cache curl su-exec && \
 # Copy runtime-only package.json
 COPY package.runtime.json package.json
 
-# Install runtime dependencies with cache mount
+# Install runtime dependencies with better-sqlite3 compilation
+# Build tools (python3, make, g++) are installed, used for compilation, then removed
+# This enables native SQLite (better-sqlite3) instead of sql.js, preventing memory leaks
 RUN --mount=type=cache,target=/root/.npm \
-    npm install --production --no-audit --no-fund
+    apk add --no-cache python3 make g++ && \
+    npm install --production --no-audit --no-fund && \
+    apk del python3 make g++
 
 # Copy built application
 COPY --from=builder /app/dist ./dist

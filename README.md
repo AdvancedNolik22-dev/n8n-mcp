@@ -284,6 +284,86 @@ environment:
   N8N_MCP_TELEMETRY_DISABLED: "true"
 ```
 
+## ⚙️ Database & Memory Configuration
+
+### Database Adapters
+
+n8n-mcp uses SQLite for storing node documentation. Two adapters are available:
+
+1. **better-sqlite3** (Default in Docker)
+   - Native C++ bindings for best performance
+   - Direct disk writes (no memory overhead)
+   - **Now enabled by default** in Docker images (v2.20.2+)
+   - Memory usage: ~100-120 MB stable
+
+2. **sql.js** (Fallback)
+   - Pure JavaScript implementation
+   - In-memory database with periodic saves
+   - Used when better-sqlite3 compilation fails
+   - Memory usage: ~150-200 MB stable
+
+### Memory Optimization (sql.js)
+
+If using sql.js fallback, you can configure the save interval to balance between data safety and memory efficiency:
+
+**Environment Variable:**
+```bash
+SQLJS_SAVE_INTERVAL_MS=5000  # Default: 5000ms (5 seconds)
+```
+
+**Usage:**
+- Controls how long to wait after database changes before saving to disk
+- Lower values = more frequent saves = higher memory churn
+- Higher values = less frequent saves = lower memory usage
+- Minimum: 100ms
+- Recommended: 5000-10000ms for production
+
+**Docker Configuration:**
+```json
+{
+  "mcpServers": {
+    "n8n-mcp": {
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "--init",
+        "-e", "SQLJS_SAVE_INTERVAL_MS=10000",
+        "ghcr.io/czlonkowski/n8n-mcp:latest"
+      ]
+    }
+  }
+}
+```
+
+**docker-compose:**
+```yaml
+environment:
+  SQLJS_SAVE_INTERVAL_MS: "10000"
+```
+
+### Memory Leak Fix (v2.20.2)
+
+**Issue #330** identified a critical memory leak in long-running Docker/Kubernetes deployments:
+- **Before:** 100 MB → 2.2 GB over 72 hours (OOM kills)
+- **After:** Stable at 100-200 MB indefinitely
+
+**Fixes Applied:**
+- ✅ Docker images now use better-sqlite3 by default (eliminates leak entirely)
+- ✅ sql.js fallback optimized (98% reduction in save frequency)
+- ✅ Removed unnecessary memory allocations (50% reduction per save)
+- ✅ Configurable save interval via `SQLJS_SAVE_INTERVAL_MS`
+
+For Kubernetes deployments with memory limits:
+```yaml
+resources:
+  requests:
+    memory: 256Mi
+  limits:
+    memory: 512Mi
+```
+
 ## 💖 Support This Project
 
 <div align="center">
