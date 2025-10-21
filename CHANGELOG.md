@@ -7,6 +7,126 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.20.6] - 2025-10-21
+
+### 🐛 Bug Fixes
+
+**Issue #342: Missing `tslib` Dependency Causing MODULE_NOT_FOUND on Windows**
+
+Fixed critical dependency issue where `tslib` was missing from the published npm package, causing immediate failure when users ran `npx n8n-mcp@latest` on Windows (and potentially other platforms).
+
+#### Problem
+
+Users installing via `npx n8n-mcp@latest` experienced MODULE_NOT_FOUND errors:
+```
+Error: Cannot find module 'tslib'
+Require stack:
+- node_modules/@supabase/functions-js/dist/main/FunctionsClient.js
+- node_modules/@supabase/supabase-js/dist/main/index.js
+- node_modules/n8n-mcp/dist/telemetry/telemetry-manager.js
+```
+
+**Root Cause Analysis:**
+- `@supabase/supabase-js` depends on `@supabase/functions-js` which requires `tslib` at runtime
+- `tslib` was NOT explicitly listed in `package.runtime.json` dependencies
+- The publish script (`scripts/publish-npm.sh`) copies `package.runtime.json` → `package.json` before publishing to npm
+- CI/CD workflow (`.github/workflows/release.yml` line 329) does the same: `cp package.runtime.json $PUBLISH_DIR/package.json`
+- Result: Published npm package had no `tslib` dependency
+- When users installed via `npx`, npm didn't install `tslib` → MODULE_NOT_FOUND error
+
+**Why It Worked Locally:**
+- Local development uses main `package.json` which has full n8n package dependencies
+- `tslib` existed as a transitive dependency through AWS SDK packages
+- npm's hoisting made it available locally
+
+**Why It Failed in Production:**
+- `npx` installations use the published package (which comes from `package.runtime.json`)
+- No transitive path to `tslib` in the minimal runtime dependencies
+- npm's dependency resolution on Windows didn't hoist it properly
+
+**Why Docker Worked:**
+- Docker builds used `package-lock.json` which included all transitive dependencies
+- Or the base image already had `tslib` installed
+
+#### Fixed
+
+**1. Added `tslib` to Runtime Dependencies**
+- Added `"tslib": "^2.6.2"` to `package.runtime.json` dependencies (line 14)
+- This is the **critical fix** since `package.runtime.json` gets published to npm
+- Version `^2.6.2` matches existing transitive dependency versions
+
+**2. Added `tslib` to Development Dependencies**
+- Added `"tslib": "^2.6.2"` to `package.json` dependencies (line 154)
+- Ensures consistency between development and production
+- Prevents confusion for developers
+
+**3. Synced `package.runtime.json` Version**
+- Updated `package.runtime.json` version from `2.20.2` to `2.20.5`
+- Keeps runtime package version in sync with main package version
+
+#### Technical Details
+
+**Dependency Chain:**
+```
+n8n-mcp
+└── @supabase/supabase-js@2.57.4
+    └── @supabase/functions-js@2.4.6
+        └── tslib (MISSING) ❌
+```
+
+**Publish Process:**
+```bash
+# CI/CD workflow (.github/workflows/release.yml:329)
+cp package.runtime.json $PUBLISH_DIR/package.json
+npm publish --access public
+
+# Users install via npx
+npx n8n-mcp@latest
+# → Gets dependencies from package.runtime.json (now includes tslib ✅)
+```
+
+**Files Modified:**
+- `package.json` line 154: Added `tslib: "^2.6.2"`
+- `package.runtime.json` line 14: Added `tslib: "^2.6.2"` (critical fix)
+- `package.runtime.json` line 3: Updated version `2.20.2` → `2.20.5`
+
+#### Impact
+
+**Before Fix:**
+- ❌ Package completely broken on Windows for `npx` users
+- ❌ Affected all platforms using `npx` (not just Windows)
+- ❌ 100% failure rate on fresh installations
+- ❌ Workaround: Use v2.19.6 or install with `npm install` + run locally
+
+**After Fix:**
+- ✅ `npx n8n-mcp@latest` works on all platforms
+- ✅ `tslib` guaranteed to be installed with the package
+- ✅ No breaking changes (adding a dependency that was already in transitive tree)
+- ✅ Consistent behavior across Windows, macOS, Linux
+
+#### Verification
+
+**Build & Tests:**
+- ✅ TypeScript compilation passes
+- ✅ Type checking passes (`npm run typecheck`)
+- ✅ All tests pass
+- ✅ Build succeeds (`npm run build`)
+
+**CI/CD Validation:**
+- ✅ Verified CI workflow copies `package.runtime.json` → `package.json` before publish
+- ✅ Confirmed `tslib` will be included in published package
+- ✅ No changes needed to CI/CD workflows
+
+#### Related
+
+- **Issue:** #342 - Missing `tslib` dependency in v2.20.3 causing MODULE_NOT_FOUND error on Windows
+- **Reporter:** @eddyc (thank you for the detailed bug report!)
+- **Severity:** CRITICAL - Package unusable via `npx` on Windows
+- **Affected Versions:** 2.20.0 - 2.20.5
+- **Fixed Version:** 2.20.6
+
+Conceived by Romuald Członkowski - [www.aiadvisors.pl/en](https://www.aiadvisors.pl/en)
+
 ## [2.20.5] - 2025-10-21
 
 ### 🐛 Bug Fixes
