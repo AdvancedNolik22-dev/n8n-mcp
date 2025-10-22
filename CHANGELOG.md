@@ -7,6 +7,96 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.20.7] - 2025-10-22
+
+### 🔄 Dependencies
+
+**Updated n8n to v1.116.2**
+
+Updated all n8n dependencies to the latest compatible versions:
+- `n8n`: 1.115.2 → 1.116.2
+- `n8n-core`: 1.114.0 → 1.115.1
+- `n8n-workflow`: 1.112.0 → 1.113.0
+- `@n8n/n8n-nodes-langchain`: 1.114.1 → 1.115.1
+
+**Database Rebuild:**
+- Rebuilt node database with 542 nodes from updated n8n packages
+- All 542 nodes loaded successfully from both n8n-nodes-base (439 nodes) and @n8n/n8n-nodes-langchain (103 nodes)
+- Documentation mapping completed for all nodes
+
+**Testing:**
+- Changes validated in CI/CD pipeline with full test suite (705 tests)
+- Critical nodes validated: httpRequest, code, slack, agent
+
+### 🐛 Bug Fixes
+
+**FTS5 Search Ranking - Exact Match Prioritization**
+
+Fixed critical bug in production search where exact matches weren't appearing first in search results.
+
+#### Problem
+- SQL ORDER BY clause was `ORDER BY rank, CASE ... END` (wrong order)
+- FTS5 rank sorted first, CASE statement only acted as tiebreaker
+- Since FTS5 ranks are always unique, CASE boosting never applied
+- Additionally, CASE used case-sensitive comparison failing to match nodes like "Webhook" when searching "webhook"
+- Result: Searching "webhook" returned "Webflow Trigger" first, actual "Webhook" node ranked 4th
+
+#### Root Cause Analysis
+**SQL Ordering Issue:**
+```sql
+-- BEFORE (Broken):
+ORDER BY rank, CASE ... END  -- rank first, CASE never used
+-- Result: webhook ranks 4th (-9.64 rank)
+-- Top 3: webflowTrigger (-10.20), vonage (-10.09), renameKeys (-10.01)
+
+-- AFTER (Fixed):
+ORDER BY CASE ... END, rank  -- CASE first, exact matches prioritized
+-- Result: webhook ranks 1st (CASE priority 0)
+```
+
+**Case-Sensitivity Issue:**
+- Old: `WHEN n.display_name = ?` (case-sensitive, fails on "Webhook" vs "webhook")
+- New: `WHEN LOWER(n.display_name) = LOWER(?)` (case-insensitive, matches correctly)
+
+#### Fixed
+
+**1. Production Code** (`src/mcp/server.ts` lines 1278-1295)
+- Changed ORDER BY from: `rank, CASE ... END`
+- To: `CASE WHEN LOWER(n.display_name) = LOWER(?) ... END, rank`
+- Added case-insensitive comparison with LOWER() function
+- Exact matches now consistently appear first in search results
+
+**2. Test Files Updated**
+- `tests/integration/database/node-fts5-search.test.ts` (lines 137-160)
+- `tests/integration/ci/database-population.test.ts` (lines 206-234)
+- Both updated to match corrected SQL logic with case-insensitive comparison
+- Tests now accurately validate production search behavior
+
+#### Impact
+
+**Search Quality:**
+- ✅ Exact matches now always rank first (webhook, http, code, etc.)
+- ✅ Case-insensitive matching works correctly (Webhook = webhook = WEBHOOK)
+- ✅ Better user experience - predictable search results
+- ✅ SQL query more efficient (correct ordering at database level)
+
+**Performance:**
+- Same or better performance (less JavaScript sorting needed)
+- Database does the heavy lifting with correct ORDER BY
+- JavaScript sorting still provides additional relevance refinement
+
+**Testing:**
+- All 705 tests passing (703 passed + 2 fixed)
+- Comprehensive testing by n8n-mcp-tester agent
+- Code review approved with minor optimization suggestions for future
+
+**Verified Search Results:**
+- "webhook" → nodes-base.webhook (1st)
+- "http" → nodes-base.httpRequest (1st)
+- "code" → nodes-base.code (1st)
+- "slack" → nodes-base.slack (1st)
+- All case variations work correctly (WEBHOOK, Webhook, webhook)
+
 ## [2.20.6] - 2025-10-21
 
 ### 🐛 Bug Fixes
