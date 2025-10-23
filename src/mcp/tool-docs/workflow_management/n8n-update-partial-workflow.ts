@@ -18,7 +18,8 @@ export const n8nUpdatePartialWorkflowDoc: ToolDocumentation = {
       'Validate with validateOnly first',
       'For AI connections, specify sourceOutput type (ai_languageModel, ai_tool, etc.)',
       'Batch AI component connections for atomic updates',
-      'Auto-sanitization: ALL nodes auto-fixed during updates (operator structures, missing metadata)'
+      'Auto-sanitization: ALL nodes auto-fixed during updates (operator structures, missing metadata)',
+      'Node renames automatically update all connection references - no manual connection operations needed'
     ]
   },
   full: {
@@ -108,8 +109,8 @@ When ANY workflow update is made, ALL nodes in the workflow are automatically sa
    - Invalid operator structures (e.g., \`{type: "isNotEmpty"}\`) are corrected to \`{type: "boolean", operation: "isNotEmpty"}\`
 
 2. **Missing Metadata Added**:
-   - IF v2.2+ nodes get complete \`conditions.options\` structure if missing
-   - Switch v3.2+ nodes get complete \`conditions.options\` for all rules
+   - IF nodes with conditions get complete \`conditions.options\` structure if missing
+   - Switch nodes with conditions get complete \`conditions.options\` for all rules
    - Required fields: \`{version: 2, leftValue: "", caseSensitive: true, typeValidation: "strict"}\`
 
 ### Sanitization Scope
@@ -129,7 +130,59 @@ If validation still fails after auto-sanitization:
 2. Use \`validate_workflow\` to see all validation errors
 3. For connection issues, use \`cleanStaleConnections\` operation
 4. For branch mismatches, add missing output connections
-5. For paradoxical corrupted workflows, create new workflow and migrate nodes`,
+5. For paradoxical corrupted workflows, create new workflow and migrate nodes
+
+## Automatic Connection Reference Updates
+
+When you rename a node using **updateNode**, all connection references throughout the workflow are automatically updated. Both the connection source keys and target references are updated for all connection types (main, error, ai_tool, ai_languageModel, ai_memory, etc.) and all branch configurations (IF node branches, Switch node cases, error outputs).
+
+### Basic Example
+\`\`\`javascript
+// Rename a node - connections update automatically
+n8n_update_partial_workflow({
+  id: "wf_123",
+  operations: [{
+    type: "updateNode",
+    nodeId: "node_abc",
+    updates: { name: "Data Processor" }
+  }]
+});
+// All incoming and outgoing connections now reference "Data Processor"
+\`\`\`
+
+### Multi-Output Node Example
+\`\`\`javascript
+// Rename nodes in a branching workflow
+n8n_update_partial_workflow({
+  id: "workflow_id",
+  operations: [
+    {
+      type: "updateNode",
+      nodeId: "if_node_id",
+      updates: { name: "Value Checker" }
+    },
+    {
+      type: "updateNode",
+      nodeId: "error_node_id",
+      updates: { name: "Error Handler" }
+    }
+  ]
+});
+// IF node branches and error connections automatically updated
+\`\`\`
+
+### Name Collision Protection
+Attempting to rename a node to an existing name returns a clear error:
+\`\`\`
+Cannot rename node "Old Name" to "New Name": A node with that name already exists (id: abc123...).
+Please choose a different name.
+\`\`\`
+
+### Usage Notes
+- Simply rename nodes with updateNode - no manual connection operations needed
+- Multiple renames in one call work atomically
+- Can rename a node and add/remove connections using the new name in the same batch
+- Use \`validateOnly: true\` to preview effects before applying`,
     parameters: {
       id: { type: 'string', required: true, description: 'Workflow ID to update' },
       operations: {
@@ -162,7 +215,7 @@ If validation still fails after auto-sanitization:
       '// Connect memory to AI Agent\nn8n_update_partial_workflow({id: "ai3", operations: [{type: "addConnection", source: "Window Buffer Memory", target: "AI Agent", sourceOutput: "ai_memory"}]})',
       '// Connect output parser to AI Agent\nn8n_update_partial_workflow({id: "ai4", operations: [{type: "addConnection", source: "Structured Output Parser", target: "AI Agent", sourceOutput: "ai_outputParser"}]})',
       '// Complete AI Agent setup: Add language model, tools, and memory\nn8n_update_partial_workflow({id: "ai5", operations: [\n  {type: "addConnection", source: "OpenAI Chat Model", target: "AI Agent", sourceOutput: "ai_languageModel"},\n  {type: "addConnection", source: "HTTP Request Tool", target: "AI Agent", sourceOutput: "ai_tool"},\n  {type: "addConnection", source: "Code Tool", target: "AI Agent", sourceOutput: "ai_tool"},\n  {type: "addConnection", source: "Window Buffer Memory", target: "AI Agent", sourceOutput: "ai_memory"}\n]})',
-      '// Add fallback model to AI Agent (requires v2.1+)\nn8n_update_partial_workflow({id: "ai6", operations: [\n  {type: "addConnection", source: "OpenAI Chat Model", target: "AI Agent", sourceOutput: "ai_languageModel", targetIndex: 0},\n  {type: "addConnection", source: "Anthropic Chat Model", target: "AI Agent", sourceOutput: "ai_languageModel", targetIndex: 1}\n]})',
+      '// Add fallback model to AI Agent for reliability\nn8n_update_partial_workflow({id: "ai6", operations: [\n  {type: "addConnection", source: "OpenAI Chat Model", target: "AI Agent", sourceOutput: "ai_languageModel", targetIndex: 0},\n  {type: "addConnection", source: "Anthropic Chat Model", target: "AI Agent", sourceOutput: "ai_languageModel", targetIndex: 1}\n]})',
       '// Vector Store setup: Connect embeddings and documents\nn8n_update_partial_workflow({id: "ai7", operations: [\n  {type: "addConnection", source: "Embeddings OpenAI", target: "Pinecone Vector Store", sourceOutput: "ai_embedding"},\n  {type: "addConnection", source: "Default Data Loader", target: "Pinecone Vector Store", sourceOutput: "ai_document"}\n]})',
       '// Connect Vector Store Tool to AI Agent (retrieval setup)\nn8n_update_partial_workflow({id: "ai8", operations: [\n  {type: "addConnection", source: "Pinecone Vector Store", target: "Vector Store Tool", sourceOutput: "ai_vectorStore"},\n  {type: "addConnection", source: "Vector Store Tool", target: "AI Agent", sourceOutput: "ai_tool"}\n]})',
       '// Rewire AI Agent to use different language model\nn8n_update_partial_workflow({id: "ai9", operations: [{type: "rewireConnection", source: "AI Agent", from: "OpenAI Chat Model", to: "Anthropic Chat Model", sourceOutput: "ai_languageModel"}]})',
