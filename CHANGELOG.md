@@ -7,127 +7,80 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [2.20.8] - 2025-10-22
+## [2.20.8] - 2025-10-23
 
 ### 🐛 Bug Fixes
 
-**Sticky Notes Validation - Disconnected Node False Positives**
+This release includes two critical bug fixes that improve workflow validation for sticky notes and trigger nodes.
 
-Fixed critical bug where sticky notes (UI-only annotation nodes) were incorrectly triggering "disconnected node" validation errors when updating workflows via MCP tools.
+**Fix #1: Sticky Notes Validation - Disconnected Node False Positives (PR #350)**
+
+Fixed bug where sticky notes (UI-only annotation nodes) were incorrectly triggering "disconnected node" validation errors when updating workflows via MCP tools.
 
 #### Problem
 - Workflows with sticky notes failed validation with "Node is disconnected" errors
-- `n8n_update_partial_workflow` and `n8n_update_full_workflow` tools blocked legitimate updates
-- Example error: "Validation Error: Node '📝 Webhook Trigger' is disconnected"
+- Validation logic was inconsistent between `workflow-validator.ts` and `n8n-validation.ts`
 - Sticky notes are UI-only annotations and should never trigger connection validation
 
-#### Root Cause Analysis
-
-**Inconsistent Validation Logic:**
-- `src/services/workflow-validator.ts` correctly excluded sticky notes using private `isStickyNote()` method
-- `src/services/n8n-validation.ts` lacked sticky note exclusion logic entirely
-- Code duplication led to divergent behavior between validators
-
-**Missing Checks in n8n-validation.ts:**
-```typescript
-// BEFORE (Broken) - lines 246-257:
-const webhookTypes = new Set([
-  'n8n-nodes-base.webhook',
-  'n8n-nodes-base.webhookTrigger',
-  'n8n-nodes-base.manualTrigger'
-]);
-// Only checked for webhooks, missed sticky notes entirely
-const disconnectedNodes = workflow.nodes.filter(node => {
-  const isConnected = connectedNodes.has(node.name);
-  const isTrigger = webhookTypes.has(node.type);
-  // ...
-});
-```
-
 #### Fixed
-
-**1. Created Shared Utility Module** (`src/utils/node-classification.ts`)
-- Centralized node classification logic to ensure consistency
-- Four core functions:
+- **Created Shared Utility Module** (`src/utils/node-classification.ts`):
   - `isStickyNote()`: Identifies all sticky note type variations
   - `isTriggerNode()`: Identifies trigger nodes (webhook, manual, cron, schedule)
   - `isNonExecutableNode()`: Identifies UI-only nodes
   - `requiresIncomingConnection()`: Determines if node needs incoming connections
+- **Updated Validators**: Both validation files now properly skip sticky notes
 
-**2. Updated n8n-validation.ts** (lines 198-259)
-- Added imports: `import { isNonExecutableNode, isTriggerNode } from '../utils/node-classification'`
-- Fixed disconnected nodes check to skip non-executable nodes:
-```typescript
-// AFTER (Fixed):
-const disconnectedNodes = workflow.nodes.filter(node => {
-  // Skip non-executable nodes (sticky notes, etc.) - they're UI-only annotations
-  if (isNonExecutableNode(node.type)) {
-    return false;
-  }
+**Fix #2: Issue #351 - Recognize All Trigger Node Types Including Execute Workflow Trigger (PR #352)**
 
-  const isConnected = connectedNodes.has(node.name);
-  const isTrigger = isTriggerNode(node.type);
-  // ...
-});
-```
-- Added validation for workflows with only sticky notes
-- Fixed multi-node connection check to exclude sticky notes when counting executable nodes
+Fixed validation logic that was incorrectly treating Execute Workflow Trigger and other trigger nodes as regular nodes, causing "disconnected node" errors during partial workflow updates.
 
-**3. Updated workflow-validator.ts** (8 locations)
-- Removed private `isStickyNote()` method
-- Replaced all calls with `isNonExecutableNode()` from shared utilities
-- Eliminates code duplication
+#### Problem
+The workflow validation system used a hardcoded list of only 5 trigger types, missing 200+ trigger nodes including `executeWorkflowTrigger`.
 
-#### Testing
+Additionally, no validation prevented users from activating workflows that only have `executeWorkflowTrigger` nodes (which cannot activate workflows - they can only be invoked by other workflows).
 
-**New Test Files:**
-- `tests/unit/utils/node-classification.test.ts`: 44 tests, 100% coverage
-  - Tests all classification functions
-  - Tests all sticky note type variations
-  - Tests trigger node identification
-  - Integration scenarios
+#### Fixed
+- **Enhanced Trigger Detection** (`src/utils/node-type-utils.ts`):
+  - `isTriggerNode()`: Flexible pattern matching recognizes ALL triggers (200+)
+  - `isActivatableTrigger()`: Distinguishes triggers that can activate workflows
+  - `getTriggerTypeDescription()`: Human-readable trigger descriptions
 
-- `tests/unit/services/n8n-validation-sticky-notes.test.ts`: 10 comprehensive tests
-  - Workflows with sticky notes and connected functional nodes
-  - Multiple sticky notes (10+ notes)
-  - All sticky note type variations
-  - Complex real-world scenarios (simulates POST /auth/login workflow)
-  - Detection of truly disconnected functional nodes
-  - Regression tests matching n8n UI behavior
+- **Active Workflow Validation** (`src/services/n8n-validation.ts`):
+  - Prevents activation of workflows with only `executeWorkflowTrigger` nodes
+  - Clear error messages guide users to add activatable triggers or deactivate the workflow
 
-**Updated Test Files:**
-- `tests/unit/validation-fixes.test.ts`: Updated terminology to reflect shared utilities
-
-**Test Results:**
-- All 54 new tests passing
-- 100% coverage on node-classification utilities
-- Zero regressions in existing test suite
+- **Comprehensive Test Coverage**: 30+ new tests for trigger detection
 
 #### Impact
 
-**Workflow Updates:**
-- ✅ Sticky notes no longer block workflow updates
-- ✅ `n8n_update_partial_workflow` works correctly with annotated workflows
-- ✅ `n8n_update_full_workflow` accepts workflows with documentation notes
-- ✅ Matches n8n UI behavior exactly
+**Before Fix:**
+- ❌ Execute Workflow Trigger and 195+ other triggers flagged as "disconnected nodes"
+- ❌ Sticky notes triggered false positive validation errors
+- ❌ Could activate workflows with only `executeWorkflowTrigger` (n8n API would reject)
 
-**Code Quality:**
-- ✅ Eliminated code duplication between validators
-- ✅ Centralized node classification logic
-- ✅ Future node types can be added in one place
-- ✅ Consistent behavior across all validation paths
+**After Fix:**
+- ✅ ALL trigger types recognized (executeWorkflowTrigger, scheduleTrigger, emailTrigger, etc.)
+- ✅ Sticky notes properly excluded from validation
+- ✅ Clear error messages when trying to activate workflow with only `executeWorkflowTrigger`
+- ✅ Future-proof (new trigger nodes automatically supported)
+- ✅ Consistent node classification across entire codebase
 
-**Node Type Support:**
-- ✅ Handles all sticky note variations: `n8n-nodes-base.stickyNote`, `nodes-base.stickyNote`, `@n8n/n8n-nodes-base.stickyNote`
-- ✅ Proper trigger node detection: webhook, webhookTrigger, manualTrigger, cronTrigger, scheduleTrigger
-- ✅ Correct connection requirements for all node types
+#### Technical Details
 
-**Backward Compatibility:**
-- ✅ No breaking changes
-- ✅ All existing validations continue to work
-- ✅ API remains unchanged
+**Files Modified:**
+- `src/utils/node-classification.ts` - NEW: Shared node classification utilities
+- `src/utils/node-type-utils.ts` - Enhanced trigger detection functions
+- `src/services/n8n-validation.ts` - Updated to use shared utilities
+- `src/services/workflow-validator.ts` - Updated to use shared utilities
+- `tests/unit/utils/node-type-utils.test.ts` - Added 30+ tests
+- `package.json` - Version bump to 2.20.8
 
-Concieved by Romuald Członkowski - [www.aiadvisors.pl/en](https://www.aiadvisors.pl/en)
+**Related:**
+- **Issue:** #351 - Execute Workflow Trigger not recognized as valid trigger
+- **PR:** #350 - Sticky notes validation fix
+- **PR:** #352 - Comprehensive trigger detection
+
+Conceived by Romuald Członkowski - [www.aiadvisors.pl/en](https://www.aiadvisors.pl/en)
 
 ## [2.20.7] - 2025-10-22
 

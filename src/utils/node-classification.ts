@@ -9,6 +9,8 @@
  * notes being incorrectly flagged as disconnected nodes.
  */
 
+import { isTriggerNode as isTriggerNodeImpl } from './node-type-utils';
+
 /**
  * Check if a node type is a sticky note (documentation-only node)
  *
@@ -38,29 +40,27 @@ export function isStickyNote(nodeType: string): boolean {
 /**
  * Check if a node type is a trigger node
  *
+ * This function delegates to the comprehensive trigger detection implementation
+ * in node-type-utils.ts which supports 200+ trigger types using flexible
+ * pattern matching instead of a hardcoded list.
+ *
  * Trigger nodes:
  * - Start workflow execution
  * - Only need outgoing connections (no incoming connections required)
- * - Include webhooks, manual triggers, schedule triggers, etc.
+ * - Include webhooks, manual triggers, schedule triggers, email triggers, etc.
  * - Are the entry points for workflow execution
  *
  * Examples:
  * - Webhooks: Listen for HTTP requests
  * - Manual triggers: Started manually by user
  * - Schedule/Cron triggers: Run on a schedule
+ * - Execute Workflow Trigger: Invoked by other workflows
  *
  * @param nodeType - The node type to check
  * @returns true if the node is a trigger, false otherwise
  */
 export function isTriggerNode(nodeType: string): boolean {
-  const triggerTypes = [
-    'n8n-nodes-base.webhook',
-    'n8n-nodes-base.webhookTrigger',
-    'n8n-nodes-base.manualTrigger',
-    'n8n-nodes-base.cronTrigger',
-    'n8n-nodes-base.scheduleTrigger'
-  ];
-  return triggerTypes.includes(nodeType);
+  return isTriggerNodeImpl(nodeType);
 }
 
 /**

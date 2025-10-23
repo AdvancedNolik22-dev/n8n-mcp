@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { WorkflowNode, WorkflowConnection, Workflow } from '../types/n8n-api';
-import { isNonExecutableNode, isTriggerNode } from '../utils/node-classification';
+import { isTriggerNode, isActivatableTrigger } from '../utils/node-type-utils';
+import { isNonExecutableNode } from '../utils/node-classification';
 
 // Zod schemas for n8n API validation
 
@@ -257,10 +258,10 @@ export function validateWorkflowStructure(workflow: Partial<Workflow>): string[]
         }
 
         const isConnected = connectedNodes.has(node.name);
-        const isTrigger = isTriggerNode(node.type);
+        const isNodeTrigger = isTriggerNode(node.type);
 
         // Trigger nodes only need outgoing connections
-        if (isTrigger) {
+        if (isNodeTrigger) {
           return !workflow.connections?.[node.name]; // Disconnected if no outgoing connections
         }
 
@@ -312,6 +313,29 @@ export function validateWorkflowStructure(workflow: Partial<Workflow>): string[]
       validateWorkflowConnections(workflow.connections);
     } catch (error) {
       errors.push(`Invalid connections: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  // Validate active workflows have activatable triggers
+  // Issue #351: executeWorkflowTrigger cannot activate a workflow
+  // It can only be invoked by other workflows
+  if ((workflow as any).active === true && workflow.nodes && workflow.nodes.length > 0) {
+    const activatableTriggers = workflow.nodes.filter(node =>
+      !node.disabled && isActivatableTrigger(node.type)
+    );
+
+    const executeWorkflowTriggers = workflow.nodes.filter(node =>
+      !node.disabled && node.type.toLowerCase().includes('executeworkflow')
+    );
+
+    if (activatableTriggers.length === 0 && executeWorkflowTriggers.length > 0) {
+      // Workflow is active but only has executeWorkflowTrigger nodes
+      const triggerNames = executeWorkflowTriggers.map(n => n.name).join(', ');
+      errors.push(
+        `Cannot activate workflow with only Execute Workflow Trigger nodes (${triggerNames}). ` +
+        'Execute Workflow Trigger can only be invoked by other workflows, not activated. ' +
+        'Either deactivate the workflow or add a webhook/schedule/polling trigger.'
+      );
     }
   }
 
