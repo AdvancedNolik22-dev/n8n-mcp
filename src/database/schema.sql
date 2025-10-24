@@ -145,3 +145,66 @@ ORDER BY node_type, rank;
 -- Note: Template FTS5 tables are created conditionally at runtime if FTS5 is supported
 -- See template-repository.ts initializeFTS5() method
 -- Node FTS5 table (nodes_fts) is created above during schema initialization
+
+-- Node versions table for tracking all available versions of each node
+-- Enables version upgrade detection and migration
+CREATE TABLE IF NOT EXISTS node_versions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  node_type TEXT NOT NULL,                -- e.g., "n8n-nodes-base.executeWorkflow"
+  version TEXT NOT NULL,                  -- e.g., "1.0", "1.1", "2.0"
+  package_name TEXT NOT NULL,             -- e.g., "n8n-nodes-base"
+  display_name TEXT NOT NULL,
+  description TEXT,
+  category TEXT,
+  is_current_max INTEGER DEFAULT 0,      -- 1 if this is the latest version
+  properties_schema TEXT,                 -- JSON schema for this specific version
+  operations TEXT,                        -- JSON array of operations for this version
+  credentials_required TEXT,              -- JSON array of required credentials
+  outputs TEXT,                           -- JSON array of output definitions
+  minimum_n8n_version TEXT,               -- Minimum n8n version required (e.g., "1.0.0")
+  breaking_changes TEXT,                  -- JSON array of breaking changes from previous version
+  deprecated_properties TEXT,             -- JSON array of removed/deprecated properties
+  added_properties TEXT,                  -- JSON array of newly added properties
+  released_at DATETIME,                   -- When this version was released
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(node_type, version),
+  FOREIGN KEY (node_type) REFERENCES nodes(node_type) ON DELETE CASCADE
+);
+
+-- Indexes for version queries
+CREATE INDEX IF NOT EXISTS idx_version_node_type ON node_versions(node_type);
+CREATE INDEX IF NOT EXISTS idx_version_current_max ON node_versions(is_current_max);
+CREATE INDEX IF NOT EXISTS idx_version_composite ON node_versions(node_type, version);
+
+-- Version property changes for detailed migration tracking
+-- Records specific property-level changes between versions
+CREATE TABLE IF NOT EXISTS version_property_changes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  node_type TEXT NOT NULL,
+  from_version TEXT NOT NULL,             -- Version where change occurred (e.g., "1.0")
+  to_version TEXT NOT NULL,               -- Target version (e.g., "1.1")
+  property_name TEXT NOT NULL,            -- Property path (e.g., "parameters.inputFieldMapping")
+  change_type TEXT NOT NULL CHECK(change_type IN (
+    'added',                              -- Property added (may be required)
+    'removed',                            -- Property removed/deprecated
+    'renamed',                            -- Property renamed
+    'type_changed',                       -- Property type changed
+    'requirement_changed',                -- Required → Optional or vice versa
+    'default_changed'                     -- Default value changed
+  )),
+  is_breaking INTEGER DEFAULT 0,          -- 1 if this is a breaking change
+  old_value TEXT,                         -- For renamed/type_changed: old property name or type
+  new_value TEXT,                         -- For renamed/type_changed: new property name or type
+  migration_hint TEXT,                    -- Human-readable migration guidance
+  auto_migratable INTEGER DEFAULT 0,      -- 1 if can be automatically migrated
+  migration_strategy TEXT,                -- JSON: strategy for auto-migration
+  severity TEXT CHECK(severity IN ('LOW', 'MEDIUM', 'HIGH')), -- Impact severity
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (node_type, from_version) REFERENCES node_versions(node_type, version) ON DELETE CASCADE
+);
+
+-- Indexes for property change queries
+CREATE INDEX IF NOT EXISTS idx_prop_changes_node ON version_property_changes(node_type);
+CREATE INDEX IF NOT EXISTS idx_prop_changes_versions ON version_property_changes(node_type, from_version, to_version);
+CREATE INDEX IF NOT EXISTS idx_prop_changes_breaking ON version_property_changes(is_breaking);
+CREATE INDEX IF NOT EXISTS idx_prop_changes_auto ON version_property_changes(auto_migratable);

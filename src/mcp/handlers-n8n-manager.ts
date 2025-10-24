@@ -995,7 +995,7 @@ export async function handleAutofixWorkflow(
 
     // Generate fixes using WorkflowAutoFixer
     const autoFixer = new WorkflowAutoFixer(repository);
-    const fixResult = autoFixer.generateFixes(
+    const fixResult = await autoFixer.generateFixes(
       workflow,
       validationResult,
       allFormatIssues,

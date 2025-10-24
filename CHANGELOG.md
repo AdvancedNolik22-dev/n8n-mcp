@@ -7,6 +7,80 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### ✨ New Features
+
+**Auto-Update Node Versions with Smart Migration**
+
+Added comprehensive node version upgrade functionality to the autofixer, enabling automatic detection and migration of outdated node versions with intelligent breaking change handling.
+
+#### Key Features
+
+1. **Smart Version Upgrades** (`typeversion-upgrade` fix type):
+   - Automatically detects outdated node versions
+   - Applies intelligent migrations with auto-migratable property changes
+   - Handles well-known breaking changes (Execute Workflow v1.0→v1.1, Webhook v2.0→v2.1)
+   - Generates UUIDs and sensible defaults for new required fields
+   - HIGH confidence for non-breaking upgrades, MEDIUM for breaking changes with auto-migration
+
+2. **Version Migration Guidance** (`version-migration` fix type):
+   - Documents complex migrations requiring manual intervention
+   - Provides AI-friendly post-update guidance with step-by-step instructions
+   - Lists required actions by priority (CRITICAL, HIGH, MEDIUM, LOW)
+   - Documents behavior changes and their impact
+   - Estimates time required for manual migration steps
+   - MEDIUM/LOW confidence - requires review before applying
+
+3. **Breaking Changes Registry**:
+   - Centralized registry of known breaking changes across n8n nodes
+   - Example: Execute Workflow v1.1+ requires `inputFieldMapping` (auto-added)
+   - Example: Webhook v2.1+ requires `webhookId` field (auto-generated UUID)
+   - Extensible for future node version changes
+
+4. **Post-Update Validation**:
+   - Generates comprehensive migration reports for AI agents
+   - Includes required actions, deprecated properties, behavior changes
+   - Provides actionable migration steps with estimated time
+   - Helps AI agents understand what manual work is needed after auto-migration
+
+#### Architecture
+
+- **NodeVersionService**: Version discovery, comparison, upgrade path recommendation
+- **BreakingChangeDetector**: Detects changes from registry and dynamic schema comparison
+- **NodeMigrationService**: Applies smart migrations with confidence scoring
+- **PostUpdateValidator**: Generates AI-friendly migration guidance
+- **Enhanced Database Schema**:
+  - `node_versions` table - tracks all available versions per node
+  - `version_property_changes` table - detailed migration tracking
+
+#### Usage Example
+
+```typescript
+// Preview all fixes including version upgrades
+n8n_autofix_workflow({id: "wf_123"})
+
+// Only upgrade versions with smart migrations
+n8n_autofix_workflow({
+  id: "wf_123",
+  fixTypes: ["typeversion-upgrade"],
+  applyFixes: true
+})
+
+// Get migration guidance for breaking changes
+n8n_autofix_workflow({
+  id: "wf_123",
+  fixTypes: ["version-migration"]
+})
+```
+
+#### Impact
+
+- Proactively keeps workflows up-to-date with latest node versions
+- Reduces manual migration effort for Execute Workflow, Webhook, and other versioned nodes
+- Provides clear guidance for AI agents on handling breaking changes
+- Ensures workflows benefit from latest node features and bug fixes
+
+**Conceived by Romuald Członkowski - www.aiadvisors.pl/en**
+
 ## [2.21.1] - 2025-10-23
 
 ### 🐛 Bug Fixes

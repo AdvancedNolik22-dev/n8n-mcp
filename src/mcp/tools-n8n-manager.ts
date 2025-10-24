@@ -293,7 +293,7 @@ export const n8nManagementTools: ToolDefinition[] = [
           description: 'Types of fixes to apply (default: all)',
           items: {
             type: 'string',
-            enum: ['expression-format', 'typeversion-correction', 'error-output-config', 'node-type-correction', 'webhook-missing-path']
+            enum: ['expression-format', 'typeversion-correction', 'error-output-config', 'node-type-correction', 'webhook-missing-path', 'typeversion-upgrade', 'version-migration']
           }
         },
         confidenceThreshold: {

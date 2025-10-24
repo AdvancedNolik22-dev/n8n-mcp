@@ -164,7 +164,7 @@ async function testAutofix() {
   // Step 3: Generate fixes in preview mode
   logger.info('\nStep 3: Generating fixes (preview mode)...');
   const autoFixer = new WorkflowAutoFixer();
-  const previewResult = autoFixer.generateFixes(
+  const previewResult = await autoFixer.generateFixes(
     testWorkflow as any,
     validationResult,
     allFormatIssues,
@@ -210,7 +210,7 @@ async function testAutofix() {
   logger.info('\n\n=== Testing Different Confidence Thresholds ===');
 
   for (const threshold of ['high', 'medium', 'low'] as const) {
-    const result = autoFixer.generateFixes(
+    const result = await autoFixer.generateFixes(
       testWorkflow as any,
       validationResult,
       allFormatIssues,
@@ -227,7 +227,7 @@ async function testAutofix() {
 
   const fixTypes = ['expression-format', 'typeversion-correction', 'error-output-config'] as const;
   for (const fixType of fixTypes) {
-    const result = autoFixer.generateFixes(
+    const result = await autoFixer.generateFixes(
       testWorkflow as any,
       validationResult,
       allFormatIssues,
