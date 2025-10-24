@@ -173,7 +173,7 @@ async function testNodeSimilarity() {
   console.log('='.repeat(60));
 
   const autoFixer = new WorkflowAutoFixer(repository);
-  const fixResult = autoFixer.generateFixes(
+  const fixResult = await autoFixer.generateFixes(
     testWorkflow as any,
     validationResult,
     [],

@@ -35,6 +35,10 @@ describe('WorkflowAutoFixer', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockRepository = new NodeRepository({} as any);
+
+    // Mock getNodeVersions to return empty array (no versions available)
+    vi.spyOn(mockRepository, 'getNodeVersions').mockReturnValue([]);
+
     autoFixer = new WorkflowAutoFixer(mockRepository);
   });
 
@@ -66,7 +70,7 @@ describe('WorkflowAutoFixer', () => {
   });
 
   describe('Expression Format Fixes', () => {
-    it('should fix missing prefix in expressions', () => {
+    it('should fix missing prefix in expressions', async () => {
       const workflow = createMockWorkflow([
         createMockNode('node-1', 'nodes-base.httpRequest', {
           url: '{{ $json.url }}',
@@ -100,7 +104,7 @@ describe('WorkflowAutoFixer', () => {
         suggestions: []
       };
 
-      const result = autoFixer.generateFixes(workflow, validationResult, formatIssues);
+      const result = await autoFixer.generateFixes(workflow, validationResult, formatIssues);
 
       expect(result.fixes).toHaveLength(1);
       expect(result.fixes[0].type).toBe('expression-format');
@@ -112,7 +116,7 @@ describe('WorkflowAutoFixer', () => {
       expect(result.operations[0].type).toBe('updateNode');
     });
 
-    it('should handle multiple expression fixes in same node', () => {
+    it('should handle multiple expression fixes in same node', async () => {
       const workflow = createMockWorkflow([
         createMockNode('node-1', 'nodes-base.httpRequest', {
           url: '{{ $json.url }}',
@@ -158,7 +162,7 @@ describe('WorkflowAutoFixer', () => {
         suggestions: []
       };
 
-      const result = autoFixer.generateFixes(workflow, validationResult, formatIssues);
+      const result = await autoFixer.generateFixes(workflow, validationResult, formatIssues);
 
       expect(result.fixes).toHaveLength(2);
       expect(result.operations).toHaveLength(1); // Single update operation for the node
@@ -166,7 +170,7 @@ describe('WorkflowAutoFixer', () => {
   });
 
   describe('TypeVersion Fixes', () => {
-    it('should fix typeVersion exceeding maximum', () => {
+    it('should fix typeVersion exceeding maximum', async () => {
       const workflow = createMockWorkflow([
         createMockNode('node-1', 'nodes-base.httpRequest', {})
       ]);
@@ -191,7 +195,7 @@ describe('WorkflowAutoFixer', () => {
         suggestions: []
       };
 
-      const result = autoFixer.generateFixes(workflow, validationResult, []);
+      const result = await autoFixer.generateFixes(workflow, validationResult, []);
 
       expect(result.fixes).toHaveLength(1);
       expect(result.fixes[0].type).toBe('typeversion-correction');
@@ -202,7 +206,7 @@ describe('WorkflowAutoFixer', () => {
   });
 
   describe('Error Output Configuration Fixes', () => {
-    it('should remove conflicting onError setting', () => {
+    it('should remove conflicting onError setting', async () => {
       const workflow = createMockWorkflow([
         createMockNode('node-1', 'nodes-base.httpRequest', {})
       ]);
@@ -228,7 +232,7 @@ describe('WorkflowAutoFixer', () => {
         suggestions: []
       };
 
-      const result = autoFixer.generateFixes(workflow, validationResult, []);
+      const result = await autoFixer.generateFixes(workflow, validationResult, []);
 
       expect(result.fixes).toHaveLength(1);
       expect(result.fixes[0].type).toBe('error-output-config');
@@ -295,7 +299,7 @@ describe('WorkflowAutoFixer', () => {
   });
 
   describe('Confidence Filtering', () => {
-    it('should filter fixes by confidence level', () => {
+    it('should filter fixes by confidence level', async () => {
       const workflow = createMockWorkflow([
         createMockNode('node-1', 'nodes-base.httpRequest', { url: '{{ $json.url }}' })
       ]);
@@ -326,7 +330,7 @@ describe('WorkflowAutoFixer', () => {
         suggestions: []
       };
 
-      const result = autoFixer.generateFixes(workflow, validationResult, formatIssues, {
+      const result = await autoFixer.generateFixes(workflow, validationResult, formatIssues, {
         confidenceThreshold: 'low'
       });
 
@@ -336,7 +340,7 @@ describe('WorkflowAutoFixer', () => {
   });
 
   describe('Summary Generation', () => {
-    it('should generate appropriate summary for fixes', () => {
+    it('should generate appropriate summary for fixes', async () => {
       const workflow = createMockWorkflow([
         createMockNode('node-1', 'nodes-base.httpRequest', { url: '{{ $json.url }}' })
       ]);
@@ -367,14 +371,14 @@ describe('WorkflowAutoFixer', () => {
         suggestions: []
       };
 
-      const result = autoFixer.generateFixes(workflow, validationResult, formatIssues);
+      const result = await autoFixer.generateFixes(workflow, validationResult, formatIssues);
 
       expect(result.summary).toContain('expression format');
       expect(result.stats.total).toBe(1);
       expect(result.stats.byType['expression-format']).toBe(1);
     });
 
-    it('should handle empty fixes gracefully', () => {
+    it('should handle empty fixes gracefully', async () => {
       const workflow = createMockWorkflow([]);
       const validationResult: WorkflowValidationResult = {
         valid: true,
@@ -391,7 +395,7 @@ describe('WorkflowAutoFixer', () => {
         suggestions: []
       };
 
-      const result = autoFixer.generateFixes(workflow, validationResult, []);
+      const result = await autoFixer.generateFixes(workflow, validationResult, []);
 
       expect(result.summary).toBe('No fixes available');
       expect(result.stats.total).toBe(0);

@@ -11,19 +11,22 @@ import { getTestN8nClient } from '../utils/n8n-client';
 import { N8nApiClient } from '../../../../src/services/n8n-api-client';
 import { SIMPLE_WEBHOOK_WORKFLOW, SIMPLE_HTTP_WORKFLOW } from '../utils/fixtures';
 import { cleanupOrphanedWorkflows } from '../utils/cleanup-helpers';
-import { createMcpContext } from '../utils/mcp-context';
+import { createMcpContext, getMcpRepository } from '../utils/mcp-context';
 import { InstanceContext } from '../../../../src/types/instance-context';
+import { NodeRepository } from '../../../../src/database/node-repository';
 import { handleUpdateWorkflow } from '../../../../src/mcp/handlers-n8n-manager';
 
 describe('Integration: handleUpdateWorkflow', () => {
   let context: TestContext;
   let client: N8nApiClient;
   let mcpContext: InstanceContext;
+  let repository: NodeRepository;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     context = createTestContext();
     client = getTestN8nClient();
     mcpContext = createMcpContext();
+    repository = await getMcpRepository();
   });
 
   afterEach(async () => {
@@ -68,6 +71,7 @@ describe('Integration: handleUpdateWorkflow', () => {
           nodes: replacement.nodes,
           connections: replacement.connections
         },
+        repository,
         mcpContext
       );
 
@@ -138,6 +142,7 @@ describe('Integration: handleUpdateWorkflow', () => {
           nodes: updatedNodes,
           connections: updatedConnections
         },
+        repository,
         mcpContext
       );
 
@@ -183,6 +188,7 @@ describe('Integration: handleUpdateWorkflow', () => {
             timezone: 'Europe/London'
           }
         },
+        repository,
         mcpContext
       );
 
@@ -228,6 +234,7 @@ describe('Integration: handleUpdateWorkflow', () => {
           ],
           connections: {}
         },
+        repository,
         mcpContext
       );
 
@@ -242,6 +249,7 @@ describe('Integration: handleUpdateWorkflow', () => {
           id: '99999999',
           name: 'Should Fail'
         },
+        repository,
         mcpContext
       );
 
@@ -281,6 +289,7 @@ describe('Integration: handleUpdateWorkflow', () => {
           nodes: current.nodes,         // Required by n8n API
           connections: current.connections  // Required by n8n API
         },
+        repository,
         mcpContext
       );
 
@@ -326,6 +335,7 @@ describe('Integration: handleUpdateWorkflow', () => {
             timezone: 'America/New_York'
           }
         },
+        repository,
         mcpContext
       );
 

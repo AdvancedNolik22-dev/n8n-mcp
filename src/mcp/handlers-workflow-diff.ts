@@ -12,6 +12,8 @@ import { N8nApiError, getUserFriendlyErrorMessage } from '../utils/n8n-errors';
 import { logger } from '../utils/logger';
 import { InstanceContext } from '../types/instance-context';
 import { validateWorkflowStructure } from '../services/n8n-validation';
+import { NodeRepository } from '../database/node-repository';
+import { WorkflowVersioningService } from '../services/workflow-versioning-service';
 
 // Zod schema for the diff request
 const workflowDiffSchema = z.object({
@@ -48,9 +50,14 @@ const workflowDiffSchema = z.object({
   })),
   validateOnly: z.boolean().optional(),
   continueOnError: z.boolean().optional(),
+  createBackup: z.boolean().optional(),
 });
 
-export async function handleUpdatePartialWorkflow(args: unknown, context?: InstanceContext): Promise<McpToolResponse> {
+export async function handleUpdatePartialWorkflow(
+  args: unknown,
+  repository: NodeRepository,
+  context?: InstanceContext
+): Promise<McpToolResponse> {
   try {
     // Debug logging (only in debug mode)
     if (process.env.DEBUG_MCP === 'true') {
@@ -88,7 +95,31 @@ export async function handleUpdatePartialWorkflow(args: unknown, context?: Insta
       }
       throw error;
     }
-    
+
+    // Create backup before modifying workflow (default: true)
+    if (input.createBackup !== false && !input.validateOnly) {
+      try {
+        const versioningService = new WorkflowVersioningService(repository, client);
+        const backupResult = await versioningService.createBackup(input.id, workflow, {
+          trigger: 'partial_update',
+          operations: input.operations
+        });
+
+        logger.info('Workflow backup created', {
+          workflowId: input.id,
+          versionId: backupResult.versionId,
+          versionNumber: backupResult.versionNumber,
+          pruned: backupResult.pruned
+        });
+      } catch (error: any) {
+        logger.warn('Failed to create workflow backup', {
+          workflowId: input.id,
+          error: error.message
+        });
+        // Continue with update even if backup fails (non-blocking)
+      }
+    }
+
     // Apply diff operations
     const diffEngine = new WorkflowDiffEngine();
     const diffRequest = input as WorkflowDiffRequest;

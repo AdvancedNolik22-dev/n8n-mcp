@@ -1009,10 +1009,10 @@ export class N8NDocumentationMCPServer {
         return n8nHandlers.handleGetWorkflowMinimal(args, this.instanceContext);
       case 'n8n_update_full_workflow':
         this.validateToolParams(name, args, ['id']);
-        return n8nHandlers.handleUpdateWorkflow(args, this.instanceContext);
+        return n8nHandlers.handleUpdateWorkflow(args, this.repository!, this.instanceContext);
       case 'n8n_update_partial_workflow':
         this.validateToolParams(name, args, ['id', 'operations']);
-        return handleUpdatePartialWorkflow(args, this.instanceContext);
+        return handleUpdatePartialWorkflow(args, this.repository!, this.instanceContext);
       case 'n8n_delete_workflow':
         this.validateToolParams(name, args, ['id']);
         return n8nHandlers.handleDeleteWorkflow(args, this.instanceContext);
@@ -1050,7 +1050,10 @@ export class N8NDocumentationMCPServer {
       case 'n8n_diagnostic':
         // No required parameters
         return n8nHandlers.handleDiagnostic({ params: { arguments: args } }, this.instanceContext);
-        
+      case 'n8n_workflow_versions':
+        this.validateToolParams(name, args, ['mode']);
+        return n8nHandlers.handleWorkflowVersions(args, this.repository!, this.instanceContext);
+
       default:
         throw new Error(`Unknown tool: ${name}`);
     }

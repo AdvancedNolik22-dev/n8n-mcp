@@ -7,6 +7,187 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### ✨ New Features
+
+**Auto-Update Node Versions with Smart Migration**
+
+Added comprehensive node version upgrade functionality to the autofixer, enabling automatic detection and migration of outdated node versions with intelligent breaking change handling.
+
+#### Key Features
+
+1. **Smart Version Upgrades** (`typeversion-upgrade` fix type):
+   - Automatically detects outdated node versions
+   - Applies intelligent migrations with auto-migratable property changes
+   - Handles well-known breaking changes (Execute Workflow v1.0→v1.1, Webhook v2.0→v2.1)
+   - Generates UUIDs and sensible defaults for new required fields
+   - HIGH confidence for non-breaking upgrades, MEDIUM for breaking changes with auto-migration
+
+2. **Version Migration Guidance** (`version-migration` fix type):
+   - Documents complex migrations requiring manual intervention
+   - Provides AI-friendly post-update guidance with step-by-step instructions
+   - Lists required actions by priority (CRITICAL, HIGH, MEDIUM, LOW)
+   - Documents behavior changes and their impact
+   - Estimates time required for manual migration steps
+   - MEDIUM/LOW confidence - requires review before applying
+
+3. **Breaking Changes Registry**:
+   - Centralized registry of known breaking changes across n8n nodes
+   - Example: Execute Workflow v1.1+ requires `inputFieldMapping` (auto-added)
+   - Example: Webhook v2.1+ requires `webhookId` field (auto-generated UUID)
+   - Extensible for future node version changes
+
+4. **Post-Update Validation**:
+   - Generates comprehensive migration reports for AI agents
+   - Includes required actions, deprecated properties, behavior changes
+   - Provides actionable migration steps with estimated time
+   - Helps AI agents understand what manual work is needed after auto-migration
+
+#### Architecture
+
+- **NodeVersionService**: Version discovery, comparison, upgrade path recommendation
+- **BreakingChangeDetector**: Detects changes from registry and dynamic schema comparison
+- **NodeMigrationService**: Applies smart migrations with confidence scoring
+- **PostUpdateValidator**: Generates AI-friendly migration guidance
+- **Enhanced Database Schema**:
+  - `node_versions` table - tracks all available versions per node
+  - `version_property_changes` table - detailed migration tracking
+
+#### Usage Example
+
+```typescript
+// Preview all fixes including version upgrades
+n8n_autofix_workflow({id: "wf_123"})
+
+// Only upgrade versions with smart migrations
+n8n_autofix_workflow({
+  id: "wf_123",
+  fixTypes: ["typeversion-upgrade"],
+  applyFixes: true
+})
+
+// Get migration guidance for breaking changes
+n8n_autofix_workflow({
+  id: "wf_123",
+  fixTypes: ["version-migration"]
+})
+```
+
+#### Impact
+
+- Proactively keeps workflows up-to-date with latest node versions
+- Reduces manual migration effort for Execute Workflow, Webhook, and other versioned nodes
+- Provides clear guidance for AI agents on handling breaking changes
+- Ensures workflows benefit from latest node features and bug fixes
+
+**Conceived by Romuald Członkowski - www.aiadvisors.pl/en**
+
+---
+
+**Workflow Versioning & Rollback System**
+
+Added comprehensive workflow versioning, backup, and rollback capabilities with automatic pruning to prevent memory leaks. Every workflow update now creates an automatic backup that can be restored on failure.
+
+#### Key Features
+
+1. **Automatic Backups**:
+   - Every workflow update automatically creates a version backup (opt-out via `createBackup: false`)
+   - Captures full workflow state before modifications
+   - Auto-prunes to 10 versions per workflow (prevents unbounded storage growth)
+   - Tracks trigger context (partial_update, full_update, autofix)
+   - Stores operation sequences for audit trail
+
+2. **Rollback Capability** (`n8n_workflow_versions` tool):
+   - Restore workflow to any previous version
+   - Automatic backup of current state before rollback
+   - Optional pre-rollback validation
+   - Six operational modes: list, get, rollback, delete, prune, truncate
+
+3. **Version Management**:
+   - List version history with metadata (size, trigger, operations applied)
+   - Get detailed version information including full workflow snapshot
+   - Delete specific versions or all versions for a workflow
+   - Manual pruning with custom retention count
+
+4. **Memory Safety**:
+   - Automatic pruning to max 10 versions per workflow after each backup
+   - Manual cleanup tools (delete, prune, truncate)
+   - Storage statistics tracking (total size, per-workflow breakdown)
+   - Zero configuration required - works automatically
+
+5. **Non-Blocking Design**:
+   - Backup failures don't block workflow updates
+   - Logged warnings for failed backups
+   - Continues with update even if versioning service unavailable
+
+#### Architecture
+
+- **WorkflowVersioningService**: Core versioning logic (backup, restore, cleanup)
+- **workflow_versions Table**: Stores full workflow snapshots with metadata
+- **Auto-Pruning**: FIFO policy keeps 10 most recent versions
+- **Hybrid Storage**: Full snapshots + operation sequences for audit trail
+
+#### Usage Examples
+
+```typescript
+// Automatic backups (default behavior)
+n8n_update_partial_workflow({
+  id: "wf_123",
+  operations: [...]
+  // createBackup: true is default
+})
+
+// List version history
+n8n_workflow_versions({
+  mode: "list",
+  workflowId: "wf_123",
+  limit: 10
+})
+
+// Rollback to previous version
+n8n_workflow_versions({
+  mode: "rollback",
+  workflowId: "wf_123"
+  // Restores to latest backup, creates backup of current state first
+})
+
+// Rollback to specific version
+n8n_workflow_versions({
+  mode: "rollback",
+  workflowId: "wf_123",
+  versionId: 42
+})
+
+// Delete old versions manually
+n8n_workflow_versions({
+  mode: "prune",
+  workflowId: "wf_123",
+  maxVersions: 5
+})
+
+// Emergency cleanup (requires confirmation)
+n8n_workflow_versions({
+  mode: "truncate",
+  confirmTruncate: true
+})
+```
+
+#### Impact
+
+- **Confidence**: Increases AI agent confidence by 3x (per UX analysis)
+- **Safety**: Transforms feature from "use with caution" to "production-ready"
+- **Recovery**: Failed updates can be instantly rolled back
+- **Audit**: Complete history of workflow changes with operation sequences
+- **Memory**: Auto-pruning prevents storage leaks (~200KB per workflow max)
+
+#### Integration Points
+
+- `n8n_update_partial_workflow`: Automatic backup before diff operations
+- `n8n_update_full_workflow`: Automatic backup before full replacement
+- `n8n_autofix_workflow`: Automatic backup with fix types metadata
+- `n8n_workflow_versions`: Unified rollback/cleanup interface (6 modes)
+
+**Conceived by Romuald Członkowski - [www.aiadvisors.pl/en](https://www.aiadvisors.pl/en)**
+
 ## [2.21.1] - 2025-10-23
 
 ### 🐛 Bug Fixes

@@ -462,4 +462,501 @@ export class NodeRepository {
 
     return undefined;
   }
+
+  /**
+   * VERSION MANAGEMENT METHODS
+   * Methods for working with node_versions and version_property_changes tables
+   */
+
+  /**
+   * Save a specific node version to the database
+   */
+  saveNodeVersion(versionData: {
+    nodeType: string;
+    version: string;
+    packageName: string;
+    displayName: string;
+    description?: string;
+    category?: string;
+    isCurrentMax?: boolean;
+    propertiesSchema?: any;
+    operations?: any;
+    credentialsRequired?: any;
+    outputs?: any;
+    minimumN8nVersion?: string;
+    breakingChanges?: any[];
+    deprecatedProperties?: string[];
+    addedProperties?: string[];
+    releasedAt?: Date;
+  }): void {
+    const stmt = this.db.prepare(`
+      INSERT OR REPLACE INTO node_versions (
+        node_type, version, package_name, display_name, description,
+        category, is_current_max, properties_schema, operations,
+        credentials_required, outputs, minimum_n8n_version,
+        breaking_changes, deprecated_properties, added_properties,
+        released_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    stmt.run(
+      versionData.nodeType,
+      versionData.version,
+      versionData.packageName,
+      versionData.displayName,
+      versionData.description || null,
+      versionData.category || null,
+      versionData.isCurrentMax ? 1 : 0,
+      versionData.propertiesSchema ? JSON.stringify(versionData.propertiesSchema) : null,
+      versionData.operations ? JSON.stringify(versionData.operations) : null,
+      versionData.credentialsRequired ? JSON.stringify(versionData.credentialsRequired) : null,
+      versionData.outputs ? JSON.stringify(versionData.outputs) : null,
+      versionData.minimumN8nVersion || null,
+      versionData.breakingChanges ? JSON.stringify(versionData.breakingChanges) : null,
+      versionData.deprecatedProperties ? JSON.stringify(versionData.deprecatedProperties) : null,
+      versionData.addedProperties ? JSON.stringify(versionData.addedProperties) : null,
+      versionData.releasedAt || null
+    );
+  }
+
+  /**
+   * Get all available versions for a specific node type
+   */
+  getNodeVersions(nodeType: string): any[] {
+    const normalizedType = NodeTypeNormalizer.normalizeToFullForm(nodeType);
+
+    const rows = this.db.prepare(`
+      SELECT * FROM node_versions
+      WHERE node_type = ?
+      ORDER BY version DESC
+    `).all(normalizedType) as any[];
+
+    return rows.map(row => this.parseNodeVersionRow(row));
+  }
+
+  /**
+   * Get the latest (current max) version for a node type
+   */
+  getLatestNodeVersion(nodeType: string): any | null {
+    const normalizedType = NodeTypeNormalizer.normalizeToFullForm(nodeType);
+
+    const row = this.db.prepare(`
+      SELECT * FROM node_versions
+      WHERE node_type = ? AND is_current_max = 1
+      LIMIT 1
+    `).get(normalizedType) as any;
+
+    if (!row) return null;
+    return this.parseNodeVersionRow(row);
+  }
+
+  /**
+   * Get a specific version of a node
+   */
+  getNodeVersion(nodeType: string, version: string): any | null {
+    const normalizedType = NodeTypeNormalizer.normalizeToFullForm(nodeType);
+
+    const row = this.db.prepare(`
+      SELECT * FROM node_versions
+      WHERE node_type = ? AND version = ?
+    `).get(normalizedType, version) as any;
+
+    if (!row) return null;
+    return this.parseNodeVersionRow(row);
+  }
+
+  /**
+   * Save a property change between versions
+   */
+  savePropertyChange(changeData: {
+    nodeType: string;
+    fromVersion: string;
+    toVersion: string;
+    propertyName: string;
+    changeType: 'added' | 'removed' | 'renamed' | 'type_changed' | 'requirement_changed' | 'default_changed';
+    isBreaking?: boolean;
+    oldValue?: string;
+    newValue?: string;
+    migrationHint?: string;
+    autoMigratable?: boolean;
+    migrationStrategy?: any;
+    severity?: 'LOW' | 'MEDIUM' | 'HIGH';
+  }): void {
+    const stmt = this.db.prepare(`
+      INSERT INTO version_property_changes (
+        node_type, from_version, to_version, property_name, change_type,
+        is_breaking, old_value, new_value, migration_hint, auto_migratable,
+        migration_strategy, severity
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    stmt.run(
+      changeData.nodeType,
+      changeData.fromVersion,
+      changeData.toVersion,
+      changeData.propertyName,
+      changeData.changeType,
+      changeData.isBreaking ? 1 : 0,
+      changeData.oldValue || null,
+      changeData.newValue || null,
+      changeData.migrationHint || null,
+      changeData.autoMigratable ? 1 : 0,
+      changeData.migrationStrategy ? JSON.stringify(changeData.migrationStrategy) : null,
+      changeData.severity || 'MEDIUM'
+    );
+  }
+
+  /**
+   * Get property changes between two versions
+   */
+  getPropertyChanges(nodeType: string, fromVersion: string, toVersion: string): any[] {
+    const normalizedType = NodeTypeNormalizer.normalizeToFullForm(nodeType);
+
+    const rows = this.db.prepare(`
+      SELECT * FROM version_property_changes
+      WHERE node_type = ? AND from_version = ? AND to_version = ?
+      ORDER BY severity DESC, property_name
+    `).all(normalizedType, fromVersion, toVersion) as any[];
+
+    return rows.map(row => this.parsePropertyChangeRow(row));
+  }
+
+  /**
+   * Get all breaking changes for upgrading from one version to another
+   * Can handle multi-step upgrades (e.g., 1.0 -> 2.0 via 1.5)
+   */
+  getBreakingChanges(nodeType: string, fromVersion: string, toVersion?: string): any[] {
+    const normalizedType = NodeTypeNormalizer.normalizeToFullForm(nodeType);
+
+    let sql = `
+      SELECT * FROM version_property_changes
+      WHERE node_type = ? AND is_breaking = 1
+    `;
+    const params: any[] = [normalizedType];
+
+    if (toVersion) {
+      // Get changes between specific versions
+      sql += ` AND from_version >= ? AND to_version <= ?`;
+      params.push(fromVersion, toVersion);
+    } else {
+      // Get all breaking changes from this version onwards
+      sql += ` AND from_version >= ?`;
+      params.push(fromVersion);
+    }
+
+    sql += ` ORDER BY from_version, to_version, severity DESC`;
+
+    const rows = this.db.prepare(sql).all(...params) as any[];
+    return rows.map(row => this.parsePropertyChangeRow(row));
+  }
+
+  /**
+   * Get auto-migratable changes for a version upgrade
+   */
+  getAutoMigratableChanges(nodeType: string, fromVersion: string, toVersion: string): any[] {
+    const normalizedType = NodeTypeNormalizer.normalizeToFullForm(nodeType);
+
+    const rows = this.db.prepare(`
+      SELECT * FROM version_property_changes
+      WHERE node_type = ?
+        AND from_version = ?
+        AND to_version = ?
+        AND auto_migratable = 1
+      ORDER BY severity DESC
+    `).all(normalizedType, fromVersion, toVersion) as any[];
+
+    return rows.map(row => this.parsePropertyChangeRow(row));
+  }
+
+  /**
+   * Check if a version upgrade path exists between two versions
+   */
+  hasVersionUpgradePath(nodeType: string, fromVersion: string, toVersion: string): boolean {
+    const versions = this.getNodeVersions(nodeType);
+    if (versions.length === 0) return false;
+
+    // Check if both versions exist
+    const fromExists = versions.some(v => v.version === fromVersion);
+    const toExists = versions.some(v => v.version === toVersion);
+
+    return fromExists && toExists;
+  }
+
+  /**
+   * Get count of nodes with multiple versions
+   */
+  getVersionedNodesCount(): number {
+    const result = this.db.prepare(`
+      SELECT COUNT(DISTINCT node_type) as count
+      FROM node_versions
+    `).get() as any;
+    return result.count;
+  }
+
+  /**
+   * Parse node version row from database
+   */
+  private parseNodeVersionRow(row: any): any {
+    return {
+      id: row.id,
+      nodeType: row.node_type,
+      version: row.version,
+      packageName: row.package_name,
+      displayName: row.display_name,
+      description: row.description,
+      category: row.category,
+      isCurrentMax: Number(row.is_current_max) === 1,
+      propertiesSchema: row.properties_schema ? this.safeJsonParse(row.properties_schema, []) : null,
+      operations: row.operations ? this.safeJsonParse(row.operations, []) : null,
+      credentialsRequired: row.credentials_required ? this.safeJsonParse(row.credentials_required, []) : null,
+      outputs: row.outputs ? this.safeJsonParse(row.outputs, null) : null,
+      minimumN8nVersion: row.minimum_n8n_version,
+      breakingChanges: row.breaking_changes ? this.safeJsonParse(row.breaking_changes, []) : [],
+      deprecatedProperties: row.deprecated_properties ? this.safeJsonParse(row.deprecated_properties, []) : [],
+      addedProperties: row.added_properties ? this.safeJsonParse(row.added_properties, []) : [],
+      releasedAt: row.released_at,
+      createdAt: row.created_at
+    };
+  }
+
+  /**
+   * Parse property change row from database
+   */
+  private parsePropertyChangeRow(row: any): any {
+    return {
+      id: row.id,
+      nodeType: row.node_type,
+      fromVersion: row.from_version,
+      toVersion: row.to_version,
+      propertyName: row.property_name,
+      changeType: row.change_type,
+      isBreaking: Number(row.is_breaking) === 1,
+      oldValue: row.old_value,
+      newValue: row.new_value,
+      migrationHint: row.migration_hint,
+      autoMigratable: Number(row.auto_migratable) === 1,
+      migrationStrategy: row.migration_strategy ? this.safeJsonParse(row.migration_strategy, null) : null,
+      severity: row.severity,
+      createdAt: row.created_at
+    };
+  }
+
+  // ========================================
+  // Workflow Versioning Methods
+  // ========================================
+
+  /**
+   * Create a new workflow version (backup before modification)
+   */
+  createWorkflowVersion(data: {
+    workflowId: string;
+    versionNumber: number;
+    workflowName: string;
+    workflowSnapshot: any;
+    trigger: 'partial_update' | 'full_update' | 'autofix';
+    operations?: any[];
+    fixTypes?: string[];
+    metadata?: any;
+  }): number {
+    const stmt = this.db.prepare(`
+      INSERT INTO workflow_versions (
+        workflow_id, version_number, workflow_name, workflow_snapshot,
+        trigger, operations, fix_types, metadata
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    const result = stmt.run(
+      data.workflowId,
+      data.versionNumber,
+      data.workflowName,
+      JSON.stringify(data.workflowSnapshot),
+      data.trigger,
+      data.operations ? JSON.stringify(data.operations) : null,
+      data.fixTypes ? JSON.stringify(data.fixTypes) : null,
+      data.metadata ? JSON.stringify(data.metadata) : null
+    );
+
+    return result.lastInsertRowid as number;
+  }
+
+  /**
+   * Get workflow versions ordered by version number (newest first)
+   */
+  getWorkflowVersions(workflowId: string, limit?: number): any[] {
+    let sql = `
+      SELECT * FROM workflow_versions
+      WHERE workflow_id = ?
+      ORDER BY version_number DESC
+    `;
+
+    if (limit) {
+      sql += ` LIMIT ?`;
+      const rows = this.db.prepare(sql).all(workflowId, limit) as any[];
+      return rows.map(row => this.parseWorkflowVersionRow(row));
+    }
+
+    const rows = this.db.prepare(sql).all(workflowId) as any[];
+    return rows.map(row => this.parseWorkflowVersionRow(row));
+  }
+
+  /**
+   * Get a specific workflow version by ID
+   */
+  getWorkflowVersion(versionId: number): any | null {
+    const row = this.db.prepare(`
+      SELECT * FROM workflow_versions WHERE id = ?
+    `).get(versionId) as any;
+
+    if (!row) return null;
+    return this.parseWorkflowVersionRow(row);
+  }
+
+  /**
+   * Get the latest workflow version for a workflow
+   */
+  getLatestWorkflowVersion(workflowId: string): any | null {
+    const row = this.db.prepare(`
+      SELECT * FROM workflow_versions
+      WHERE workflow_id = ?
+      ORDER BY version_number DESC
+      LIMIT 1
+    `).get(workflowId) as any;
+
+    if (!row) return null;
+    return this.parseWorkflowVersionRow(row);
+  }
+
+  /**
+   * Delete a specific workflow version
+   */
+  deleteWorkflowVersion(versionId: number): void {
+    this.db.prepare(`
+      DELETE FROM workflow_versions WHERE id = ?
+    `).run(versionId);
+  }
+
+  /**
+   * Delete all versions for a specific workflow
+   */
+  deleteWorkflowVersionsByWorkflowId(workflowId: string): number {
+    const result = this.db.prepare(`
+      DELETE FROM workflow_versions WHERE workflow_id = ?
+    `).run(workflowId);
+
+    return result.changes;
+  }
+
+  /**
+   * Prune old workflow versions, keeping only the most recent N versions
+   * Returns number of versions deleted
+   */
+  pruneWorkflowVersions(workflowId: string, keepCount: number): number {
+    // Get all versions ordered by version_number DESC
+    const versions = this.db.prepare(`
+      SELECT id FROM workflow_versions
+      WHERE workflow_id = ?
+      ORDER BY version_number DESC
+    `).all(workflowId) as any[];
+
+    // If we have fewer versions than keepCount, no pruning needed
+    if (versions.length <= keepCount) {
+      return 0;
+    }
+
+    // Get IDs of versions to delete (all except the most recent keepCount)
+    const idsToDelete = versions.slice(keepCount).map(v => v.id);
+
+    if (idsToDelete.length === 0) {
+      return 0;
+    }
+
+    // Delete old versions
+    const placeholders = idsToDelete.map(() => '?').join(',');
+    const result = this.db.prepare(`
+      DELETE FROM workflow_versions WHERE id IN (${placeholders})
+    `).run(...idsToDelete);
+
+    return result.changes;
+  }
+
+  /**
+   * Truncate the entire workflow_versions table
+   * Returns number of rows deleted
+   */
+  truncateWorkflowVersions(): number {
+    const result = this.db.prepare(`
+      DELETE FROM workflow_versions
+    `).run();
+
+    return result.changes;
+  }
+
+  /**
+   * Get count of versions for a specific workflow
+   */
+  getWorkflowVersionCount(workflowId: string): number {
+    const result = this.db.prepare(`
+      SELECT COUNT(*) as count FROM workflow_versions WHERE workflow_id = ?
+    `).get(workflowId) as any;
+
+    return result.count;
+  }
+
+  /**
+   * Get storage statistics for workflow versions
+   */
+  getVersionStorageStats(): any {
+    // Total versions
+    const totalResult = this.db.prepare(`
+      SELECT COUNT(*) as count FROM workflow_versions
+    `).get() as any;
+
+    // Total size (approximate - sum of JSON lengths)
+    const sizeResult = this.db.prepare(`
+      SELECT SUM(LENGTH(workflow_snapshot)) as total_size FROM workflow_versions
+    `).get() as any;
+
+    // Per-workflow breakdown
+    const byWorkflow = this.db.prepare(`
+      SELECT
+        workflow_id,
+        workflow_name,
+        COUNT(*) as version_count,
+        SUM(LENGTH(workflow_snapshot)) as total_size,
+        MAX(created_at) as last_backup
+      FROM workflow_versions
+      GROUP BY workflow_id
+      ORDER BY version_count DESC
+    `).all() as any[];
+
+    return {
+      totalVersions: totalResult.count,
+      totalSize: sizeResult.total_size || 0,
+      byWorkflow: byWorkflow.map(row => ({
+        workflowId: row.workflow_id,
+        workflowName: row.workflow_name,
+        versionCount: row.version_count,
+        totalSize: row.total_size,
+        lastBackup: row.last_backup
+      }))
+    };
+  }
+
+  /**
+   * Parse workflow version row from database
+   */
+  private parseWorkflowVersionRow(row: any): any {
+    return {
+      id: row.id,
+      workflowId: row.workflow_id,
+      versionNumber: row.version_number,
+      workflowName: row.workflow_name,
+      workflowSnapshot: this.safeJsonParse(row.workflow_snapshot, null),
+      trigger: row.trigger,
+      operations: row.operations ? this.safeJsonParse(row.operations, null) : null,
+      fixTypes: row.fix_types ? this.safeJsonParse(row.fix_types, null) : null,
+      metadata: row.metadata ? this.safeJsonParse(row.metadata, null) : null,
+      createdAt: row.created_at
+    };
+  }
 }

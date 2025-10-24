@@ -981,6 +981,7 @@ These powerful tools allow you to manage n8n workflows directly from Claude. The
 - **`n8n_list_workflows`** - List workflows with filtering and pagination
 - **`n8n_validate_workflow`** - Validate workflows already in n8n by ID (NEW in v2.6.3)
 - **`n8n_autofix_workflow`** - Automatically fix common workflow errors (NEW in v2.13.0!)
+- **`n8n_workflow_versions`** - Manage workflow version history and rollback (NEW in v2.22.0!)
 
 #### Execution Management
 - **`n8n_trigger_webhook_workflow`** - Trigger workflows via webhook URL

@@ -87,7 +87,7 @@ async function testWebhookAutofix() {
   // Step 2: Generate fixes (preview mode)
   logger.info('\nStep 2: Generating fixes in preview mode...');
 
-  const fixResult = autoFixer.generateFixes(
+  const fixResult = await autoFixer.generateFixes(
     testWorkflow,
     validationResult,
     [], // No expression format issues to pass

@@ -16,6 +16,10 @@ import {
 } from '../types/workflow-diff';
 import { WorkflowNode, Workflow } from '../types/n8n-api';
 import { Logger } from '../utils/logger';
+import { NodeVersionService } from './node-version-service';
+import { BreakingChangeDetector } from './breaking-change-detector';
+import { NodeMigrationService } from './node-migration-service';
+import { PostUpdateValidator, PostUpdateGuidance } from './post-update-validator';
 
 const logger = new Logger({ prefix: '[WorkflowAutoFixer]' });
 
@@ -25,7 +29,9 @@ export type FixType =
   | 'typeversion-correction'
   | 'error-output-config'
   | 'node-type-correction'
-  | 'webhook-missing-path';
+  | 'webhook-missing-path'
+  | 'typeversion-upgrade'     // NEW: Proactive version upgrades
+  | 'version-migration';       // NEW: Smart version migrations with breaking changes
 
 export interface AutoFixConfig {
   applyFixes: boolean;
@@ -53,6 +59,7 @@ export interface AutoFixResult {
     byType: Record<FixType, number>;
     byConfidence: Record<FixConfidenceLevel, number>;
   };
+  postUpdateGuidance?: PostUpdateGuidance[]; // NEW: AI-friendly migration guidance
 }
 
 export interface NodeFormatIssue extends ExpressionFormatIssue {
@@ -91,25 +98,34 @@ export class WorkflowAutoFixer {
     maxFixes: 50
   };
   private similarityService: NodeSimilarityService | null = null;
+  private versionService: NodeVersionService | null = null;
+  private breakingChangeDetector: BreakingChangeDetector | null = null;
+  private migrationService: NodeMigrationService | null = null;
+  private postUpdateValidator: PostUpdateValidator | null = null;
 
   constructor(repository?: NodeRepository) {
     if (repository) {
       this.similarityService = new NodeSimilarityService(repository);
+      this.breakingChangeDetector = new BreakingChangeDetector(repository);
+      this.versionService = new NodeVersionService(repository, this.breakingChangeDetector);
+      this.migrationService = new NodeMigrationService(this.versionService, this.breakingChangeDetector);
+      this.postUpdateValidator = new PostUpdateValidator(this.versionService, this.breakingChangeDetector);
     }
   }
 
   /**
    * Generate fix operations from validation results
    */
-  generateFixes(
+  async generateFixes(
     workflow: Workflow,
     validationResult: WorkflowValidationResult,
     formatIssues: ExpressionFormatIssue[] = [],
     config: Partial<AutoFixConfig> = {}
-  ): AutoFixResult {
+  ): Promise<AutoFixResult> {
     const fullConfig = { ...this.defaultConfig, ...config };
     const operations: WorkflowDiffOperation[] = [];
     const fixes: FixOperation[] = [];
+    const postUpdateGuidance: PostUpdateGuidance[] = [];
 
     // Create a map for quick node lookup
     const nodeMap = new Map<string, WorkflowNode>();
@@ -143,6 +159,16 @@ export class WorkflowAutoFixer {
       this.processWebhookPathFixes(validationResult, nodeMap, operations, fixes);
     }
 
+    // NEW: Process version upgrades (HIGH/MEDIUM confidence)
+    if (!fullConfig.fixTypes || fullConfig.fixTypes.includes('typeversion-upgrade')) {
+      await this.processVersionUpgradeFixes(workflow, nodeMap, operations, fixes, postUpdateGuidance);
+    }
+
+    // NEW: Process version migrations with breaking changes (MEDIUM/LOW confidence)
+    if (!fullConfig.fixTypes || fullConfig.fixTypes.includes('version-migration')) {
+      await this.processVersionMigrationFixes(workflow, nodeMap, operations, fixes, postUpdateGuidance);
+    }
+
     // Filter by confidence threshold
     const filteredFixes = this.filterByConfidence(fixes, fullConfig.confidenceThreshold);
     const filteredOperations = this.filterOperationsByFixes(operations, filteredFixes, fixes);
@@ -159,7 +185,8 @@ export class WorkflowAutoFixer {
       operations: limitedOperations,
       fixes: limitedFixes,
       summary,
-      stats
+      stats,
+      postUpdateGuidance: postUpdateGuidance.length > 0 ? postUpdateGuidance : undefined
     };
   }
 
@@ -578,7 +605,9 @@ export class WorkflowAutoFixer {
         'typeversion-correction': 0,
         'error-output-config': 0,
         'node-type-correction': 0,
-        'webhook-missing-path': 0
+        'webhook-missing-path': 0,
+        'typeversion-upgrade': 0,
+        'version-migration': 0
       },
       byConfidence: {
         'high': 0,
@@ -621,10 +650,186 @@ export class WorkflowAutoFixer {
       parts.push(`${stats.byType['webhook-missing-path']} webhook ${stats.byType['webhook-missing-path'] === 1 ? 'path' : 'paths'}`);
     }
 
+    if (stats.byType['typeversion-upgrade'] > 0) {
+      parts.push(`${stats.byType['typeversion-upgrade']} version ${stats.byType['typeversion-upgrade'] === 1 ? 'upgrade' : 'upgrades'}`);
+    }
+    if (stats.byType['version-migration'] > 0) {
+      parts.push(`${stats.byType['version-migration']} version ${stats.byType['version-migration'] === 1 ? 'migration' : 'migrations'}`);
+    }
+
     if (parts.length === 0) {
       return `Fixed ${stats.total} ${stats.total === 1 ? 'issue' : 'issues'}`;
     }
 
     return `Fixed ${parts.join(', ')}`;
+  }
+
+  /**
+   * Process version upgrade fixes (proactive upgrades to latest versions)
+   * HIGH confidence for non-breaking upgrades, MEDIUM for upgrades with auto-migratable changes
+   */
+  private async processVersionUpgradeFixes(
+    workflow: Workflow,
+    nodeMap: Map<string, WorkflowNode>,
+    operations: WorkflowDiffOperation[],
+    fixes: FixOperation[],
+    postUpdateGuidance: PostUpdateGuidance[]
+  ): Promise<void> {
+    if (!this.versionService || !this.migrationService || !this.postUpdateValidator) {
+      logger.warn('Version services not initialized. Skipping version upgrade fixes.');
+      return;
+    }
+
+    for (const node of workflow.nodes) {
+      if (!node.typeVersion || !node.type) continue;
+
+      const currentVersion = node.typeVersion.toString();
+      const analysis = this.versionService.analyzeVersion(node.type, currentVersion);
+
+      // Only upgrade if outdated and recommended
+      if (!analysis.isOutdated || !analysis.recommendUpgrade) continue;
+
+      // Skip if confidence is too low
+      if (analysis.confidence === 'LOW') continue;
+
+      const latestVersion = analysis.latestVersion;
+
+      // Attempt migration
+      try {
+        const migrationResult = await this.migrationService.migrateNode(
+          node,
+          currentVersion,
+          latestVersion
+        );
+
+        // Create fix operation
+        fixes.push({
+          node: node.name,
+          field: 'typeVersion',
+          type: 'typeversion-upgrade',
+          before: currentVersion,
+          after: latestVersion,
+          confidence: analysis.hasBreakingChanges ? 'medium' : 'high',
+          description: `Upgrade ${node.name} from v${currentVersion} to v${latestVersion}. ${analysis.reason}`
+        });
+
+        // Create update operation
+        const operation: UpdateNodeOperation = {
+          type: 'updateNode',
+          nodeId: node.id,
+          updates: {
+            typeVersion: parseFloat(latestVersion),
+            parameters: migrationResult.updatedNode.parameters,
+            ...(migrationResult.updatedNode.webhookId && { webhookId: migrationResult.updatedNode.webhookId })
+          }
+        };
+        operations.push(operation);
+
+        // Generate post-update guidance
+        const guidance = await this.postUpdateValidator.generateGuidance(
+          node.id,
+          node.name,
+          node.type,
+          currentVersion,
+          latestVersion,
+          migrationResult
+        );
+
+        postUpdateGuidance.push(guidance);
+
+        logger.info(`Generated version upgrade fix for ${node.name}: ${currentVersion} → ${latestVersion}`, {
+          appliedMigrations: migrationResult.appliedMigrations.length,
+          remainingIssues: migrationResult.remainingIssues.length
+        });
+      } catch (error) {
+        logger.error(`Failed to process version upgrade for ${node.name}`, { error });
+      }
+    }
+  }
+
+  /**
+   * Process version migration fixes (handle breaking changes with smart migrations)
+   * MEDIUM/LOW confidence for migrations requiring manual intervention
+   */
+  private async processVersionMigrationFixes(
+    workflow: Workflow,
+    nodeMap: Map<string, WorkflowNode>,
+    operations: WorkflowDiffOperation[],
+    fixes: FixOperation[],
+    postUpdateGuidance: PostUpdateGuidance[]
+  ): Promise<void> {
+    // This method handles migrations that weren't covered by typeversion-upgrade
+    // Focuses on nodes with complex breaking changes that need manual review
+
+    if (!this.versionService || !this.breakingChangeDetector || !this.postUpdateValidator) {
+      logger.warn('Version services not initialized. Skipping version migration fixes.');
+      return;
+    }
+
+    for (const node of workflow.nodes) {
+      if (!node.typeVersion || !node.type) continue;
+
+      const currentVersion = node.typeVersion.toString();
+      const latestVersion = this.versionService.getLatestVersion(node.type);
+
+      if (!latestVersion || currentVersion === latestVersion) continue;
+
+      // Check if this has breaking changes
+      const hasBreaking = this.breakingChangeDetector.hasBreakingChanges(
+        node.type,
+        currentVersion,
+        latestVersion
+      );
+
+      if (!hasBreaking) continue; // Already handled by typeversion-upgrade
+
+      // Analyze the migration
+      const analysis = await this.breakingChangeDetector.analyzeVersionUpgrade(
+        node.type,
+        currentVersion,
+        latestVersion
+      );
+
+      // Only proceed if there are non-auto-migratable changes
+      if (analysis.autoMigratableCount === analysis.changes.length) continue;
+
+      // Generate guidance for manual migration
+      const guidance = await this.postUpdateValidator.generateGuidance(
+        node.id,
+        node.name,
+        node.type,
+        currentVersion,
+        latestVersion,
+        {
+          success: false,
+          nodeId: node.id,
+          nodeName: node.name,
+          fromVersion: currentVersion,
+          toVersion: latestVersion,
+          appliedMigrations: [],
+          remainingIssues: analysis.recommendations,
+          confidence: analysis.overallSeverity === 'HIGH' ? 'LOW' : 'MEDIUM',
+          updatedNode: node
+        }
+      );
+
+      // Create a fix entry (won't be auto-applied, just documented)
+      fixes.push({
+        node: node.name,
+        field: 'typeVersion',
+        type: 'version-migration',
+        before: currentVersion,
+        after: latestVersion,
+        confidence: guidance.confidence === 'HIGH' ? 'medium' : 'low',
+        description: `Version migration required: ${node.name} v${currentVersion} → v${latestVersion}. ${analysis.manualRequiredCount} manual action(s) required.`
+      });
+
+      postUpdateGuidance.push(guidance);
+
+      logger.info(`Documented version migration for ${node.name}`, {
+        breakingChanges: analysis.changes.filter(c => c.isBreaking).length,
+        manualRequired: analysis.manualRequiredCount
+      });
+    }
   }
 }

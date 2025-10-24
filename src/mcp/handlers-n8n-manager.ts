@@ -31,6 +31,7 @@ import { InstanceContext, validateInstanceContext } from '../types/instance-cont
 import { NodeTypeNormalizer } from '../utils/node-type-normalizer';
 import { WorkflowAutoFixer, AutoFixConfig } from '../services/workflow-auto-fixer';
 import { ExpressionFormatValidator, ExpressionFormatIssue } from '../services/expression-format-validator';
+import { WorkflowVersioningService } from '../services/workflow-versioning-service';
 import { handleUpdatePartialWorkflow } from './handlers-workflow-diff';
 import { telemetry } from '../telemetry';
 import {
@@ -363,6 +364,7 @@ const updateWorkflowSchema = z.object({
   nodes: z.array(z.any()).optional(),
   connections: z.record(z.any()).optional(),
   settings: z.any().optional(),
+  createBackup: z.boolean().optional(),
 });
 
 const listWorkflowsSchema = z.object({
@@ -413,6 +415,17 @@ const listExecutionsSchema = z.object({
   projectId: z.string().optional(),
   status: z.enum(['success', 'error', 'waiting']).optional(),
   includeData: z.boolean().optional(),
+});
+
+const workflowVersionsSchema = z.object({
+  mode: z.enum(['list', 'get', 'rollback', 'delete', 'prune', 'truncate']),
+  workflowId: z.string().optional(),
+  versionId: z.number().optional(),
+  limit: z.number().default(10).optional(),
+  validateBefore: z.boolean().default(true).optional(),
+  deleteAll: z.boolean().default(false).optional(),
+  maxVersions: z.number().default(10).optional(),
+  confirmTruncate: z.boolean().default(false).optional(),
 });
 
 // Workflow Management Handlers
@@ -682,16 +695,44 @@ export async function handleGetWorkflowMinimal(args: unknown, context?: Instance
   }
 }
 
-export async function handleUpdateWorkflow(args: unknown, context?: InstanceContext): Promise<McpToolResponse> {
+export async function handleUpdateWorkflow(
+  args: unknown,
+  repository: NodeRepository,
+  context?: InstanceContext
+): Promise<McpToolResponse> {
   try {
     const client = ensureApiConfigured(context);
     const input = updateWorkflowSchema.parse(args);
-    const { id, ...updateData } = input;
+    const { id, createBackup, ...updateData } = input;
 
     // If nodes/connections are being updated, validate the structure
     if (updateData.nodes || updateData.connections) {
       // Always fetch current workflow for validation (need all fields like name)
       const current = await client.getWorkflow(id);
+
+      // Create backup before modifying workflow (default: true)
+      if (createBackup !== false) {
+        try {
+          const versioningService = new WorkflowVersioningService(repository, client);
+          const backupResult = await versioningService.createBackup(id, current, {
+            trigger: 'full_update'
+          });
+
+          logger.info('Workflow backup created', {
+            workflowId: id,
+            versionId: backupResult.versionId,
+            versionNumber: backupResult.versionNumber,
+            pruned: backupResult.pruned
+          });
+        } catch (error: any) {
+          logger.warn('Failed to create workflow backup', {
+            workflowId: id,
+            error: error.message
+          });
+          // Continue with update even if backup fails (non-blocking)
+        }
+      }
+
       const fullWorkflow = {
         ...current,
         ...updateData
@@ -707,7 +748,7 @@ export async function handleUpdateWorkflow(args: unknown, context?: InstanceCont
         };
       }
     }
-    
+
     // Update workflow
     const workflow = await client.updateWorkflow(id, updateData);
     
@@ -995,7 +1036,7 @@ export async function handleAutofixWorkflow(
 
     // Generate fixes using WorkflowAutoFixer
     const autoFixer = new WorkflowAutoFixer(repository);
-    const fixResult = autoFixer.generateFixes(
+    const fixResult = await autoFixer.generateFixes(
       workflow,
       validationResult,
       allFormatIssues,
@@ -1045,8 +1086,10 @@ export async function handleAutofixWorkflow(
       const updateResult = await handleUpdatePartialWorkflow(
         {
           id: workflow.id,
-          operations: fixResult.operations
+          operations: fixResult.operations,
+          createBackup: true  // Ensure backup is created with autofix metadata
         },
+        repository,
         context
       );
 
@@ -1961,4 +2004,192 @@ export async function handleDiagnostic(request: any, context?: InstanceContext):
     success: true,
     data: diagnostic
   };
+}
+
+export async function handleWorkflowVersions(
+  args: unknown,
+  repository: NodeRepository,
+  context?: InstanceContext
+): Promise<McpToolResponse> {
+  try {
+    const input = workflowVersionsSchema.parse(args);
+    const client = context ? getN8nApiClient(context) : null;
+    const versioningService = new WorkflowVersioningService(repository, client || undefined);
+
+    switch (input.mode) {
+      case 'list': {
+        if (!input.workflowId) {
+          return {
+            success: false,
+            error: 'workflowId is required for list mode'
+          };
+        }
+
+        const versions = await versioningService.getVersionHistory(input.workflowId, input.limit);
+
+        return {
+          success: true,
+          data: {
+            workflowId: input.workflowId,
+            versions,
+            count: versions.length,
+            message: `Found ${versions.length} version(s) for workflow ${input.workflowId}`
+          }
+        };
+      }
+
+      case 'get': {
+        if (!input.versionId) {
+          return {
+            success: false,
+            error: 'versionId is required for get mode'
+          };
+        }
+
+        const version = await versioningService.getVersion(input.versionId);
+
+        if (!version) {
+          return {
+            success: false,
+            error: `Version ${input.versionId} not found`
+          };
+        }
+
+        return {
+          success: true,
+          data: version
+        };
+      }
+
+      case 'rollback': {
+        if (!input.workflowId) {
+          return {
+            success: false,
+            error: 'workflowId is required for rollback mode'
+          };
+        }
+
+        if (!client) {
+          return {
+            success: false,
+            error: 'n8n API not configured. Cannot perform rollback without API access.'
+          };
+        }
+
+        const result = await versioningService.restoreVersion(
+          input.workflowId,
+          input.versionId,
+          input.validateBefore
+        );
+
+        return {
+          success: result.success,
+          data: result.success ? result : undefined,
+          error: result.success ? undefined : result.message,
+          details: result.success ? undefined : {
+            validationErrors: result.validationErrors
+          }
+        };
+      }
+
+      case 'delete': {
+        if (input.deleteAll) {
+          if (!input.workflowId) {
+            return {
+              success: false,
+              error: 'workflowId is required for deleteAll mode'
+            };
+          }
+
+          const result = await versioningService.deleteAllVersions(input.workflowId);
+
+          return {
+            success: true,
+            data: {
+              workflowId: input.workflowId,
+              deleted: result.deleted,
+              message: result.message
+            }
+          };
+        } else {
+          if (!input.versionId) {
+            return {
+              success: false,
+              error: 'versionId is required for single version delete'
+            };
+          }
+
+          const result = await versioningService.deleteVersion(input.versionId);
+
+          return {
+            success: result.success,
+            data: result.success ? { message: result.message } : undefined,
+            error: result.success ? undefined : result.message
+          };
+        }
+      }
+
+      case 'prune': {
+        if (!input.workflowId) {
+          return {
+            success: false,
+            error: 'workflowId is required for prune mode'
+          };
+        }
+
+        const result = await versioningService.pruneVersions(
+          input.workflowId,
+          input.maxVersions || 10
+        );
+
+        return {
+          success: true,
+          data: {
+            workflowId: input.workflowId,
+            pruned: result.pruned,
+            remaining: result.remaining,
+            message: `Pruned ${result.pruned} old version(s), ${result.remaining} version(s) remaining`
+          }
+        };
+      }
+
+      case 'truncate': {
+        if (!input.confirmTruncate) {
+          return {
+            success: false,
+            error: 'confirmTruncate must be true to truncate all versions. This action cannot be undone.'
+          };
+        }
+
+        const result = await versioningService.truncateAllVersions(true);
+
+        return {
+          success: true,
+          data: {
+            deleted: result.deleted,
+            message: result.message
+          }
+        };
+      }
+
+      default:
+        return {
+          success: false,
+          error: `Unknown mode: ${input.mode}`
+        };
+    }
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return {
+        success: false,
+        error: 'Invalid input',
+        details: { errors: error.errors }
+      };
+    }
+
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error occurred'
+    };
+  }
 }

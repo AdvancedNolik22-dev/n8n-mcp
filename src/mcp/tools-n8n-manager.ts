@@ -293,7 +293,7 @@ export const n8nManagementTools: ToolDefinition[] = [
           description: 'Types of fixes to apply (default: all)',
           items: {
             type: 'string',
-            enum: ['expression-format', 'typeversion-correction', 'error-output-config', 'node-type-correction', 'webhook-missing-path']
+            enum: ['expression-format', 'typeversion-correction', 'error-output-config', 'node-type-correction', 'webhook-missing-path', 'typeversion-upgrade', 'version-migration']
           }
         },
         confidenceThreshold: {
@@ -461,6 +461,60 @@ Examples:
           description: 'Include detailed debug information (default: false)'
         }
       }
+    }
+  },
+  {
+    name: 'n8n_workflow_versions',
+    description: `Manage workflow version history, rollback, and cleanup. Six modes:
+- list: Show version history for a workflow
+- get: Get details of specific version
+- rollback: Restore workflow to previous version (creates backup first)
+- delete: Delete specific version or all versions for a workflow
+- prune: Manually trigger pruning to keep N most recent versions
+- truncate: Delete ALL versions for ALL workflows (requires confirmation)`,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        mode: {
+          type: 'string',
+          enum: ['list', 'get', 'rollback', 'delete', 'prune', 'truncate'],
+          description: 'Operation mode'
+        },
+        workflowId: {
+          type: 'string',
+          description: 'Workflow ID (required for list, rollback, delete, prune)'
+        },
+        versionId: {
+          type: 'number',
+          description: 'Version ID (required for get mode and single version delete, optional for rollback)'
+        },
+        limit: {
+          type: 'number',
+          default: 10,
+          description: 'Max versions to return in list mode'
+        },
+        validateBefore: {
+          type: 'boolean',
+          default: true,
+          description: 'Validate workflow structure before rollback'
+        },
+        deleteAll: {
+          type: 'boolean',
+          default: false,
+          description: 'Delete all versions for workflow (delete mode only)'
+        },
+        maxVersions: {
+          type: 'number',
+          default: 10,
+          description: 'Keep N most recent versions (prune mode only)'
+        },
+        confirmTruncate: {
+          type: 'boolean',
+          default: false,
+          description: 'REQUIRED: Must be true to truncate all versions (truncate mode only)'
+        }
+      },
+      required: ['mode']
     }
   }
 ];
