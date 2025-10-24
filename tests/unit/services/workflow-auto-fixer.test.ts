@@ -35,6 +35,10 @@ describe('WorkflowAutoFixer', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockRepository = new NodeRepository({} as any);
+
+    // Mock getNodeVersions to return empty array (no versions available)
+    vi.spyOn(mockRepository, 'getNodeVersions').mockReturnValue([]);
+
     autoFixer = new WorkflowAutoFixer(mockRepository);
   });
 
