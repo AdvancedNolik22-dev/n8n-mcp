@@ -623,7 +623,9 @@ describe('Integration: handleAutofixWorkflow', () => {
       const response = await handleAutofixWorkflow(
         {
           id: created.id,
-          applyFixes: false
+          applyFixes: false,
+          // Exclude version upgrade fixes to test "no fixes" scenario
+          fixTypes: ['expression-format', 'typeversion-correction', 'error-output-config', 'node-type-correction', 'webhook-missing-path']
         },
         repository,
         mcpContext
