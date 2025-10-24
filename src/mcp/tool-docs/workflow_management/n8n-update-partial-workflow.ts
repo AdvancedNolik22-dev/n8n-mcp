@@ -272,6 +272,8 @@ Please choose a different name.
       'Use "updates" property for updateNode operations: {type: "updateNode", updates: {...}}',
       'Smart parameters (branch, case) only work with IF and Switch nodes - ignored for other node types',
       'Explicit sourceIndex overrides smart parameters (branch, case) if both provided',
+      '**CRITICAL**: For If nodes, ALWAYS use branch="true"/"false" instead of sourceIndex. Using sourceIndex=0 for multiple connections will put them ALL on the TRUE branch (main[0]), breaking your workflow logic!',
+      '**CRITICAL**: For Switch nodes, ALWAYS use case=N instead of sourceIndex. Using same sourceIndex for multiple connections will put them on the same case output.',
       'cleanStaleConnections removes ALL broken connections - cannot be selective',
       'replaceConnections overwrites entire connections object - all previous connections lost',
       '**Auto-sanitization behavior**: Binary operators (equals, contains) automatically have singleValue removed; unary operators (isEmpty, isNotEmpty) automatically get singleValue:true added',

@@ -138,6 +138,7 @@ export async function handleUpdatePartialWorkflow(
           error: 'Failed to apply diff operations',
           details: {
             errors: diffResult.errors,
+            warnings: diffResult.warnings,
             operationsApplied: diffResult.operationsApplied,
             applied: diffResult.applied,
             failed: diffResult.failed
@@ -154,6 +155,9 @@ export async function handleUpdatePartialWorkflow(
         data: {
           valid: true,
           operationsToApply: input.operations.length
+        },
+        details: {
+          warnings: diffResult.warnings
         }
       };
     }
@@ -252,7 +256,8 @@ export async function handleUpdatePartialWorkflow(
           workflowName: updatedWorkflow.name,
           applied: diffResult.applied,
           failed: diffResult.failed,
-          errors: diffResult.errors
+          errors: diffResult.errors,
+          warnings: diffResult.warnings
         }
       };
     } catch (error) {

@@ -188,6 +188,7 @@ describe('handlers-workflow-diff', () => {
         operationsApplied: 1,
         message: 'Validation successful',
         errors: [],
+        warnings: []
       });
 
       const result = await handleUpdatePartialWorkflow(diffRequest, mockRepository);
@@ -199,6 +200,9 @@ describe('handlers-workflow-diff', () => {
           valid: true,
           operationsToApply: 1,
         },
+        details: {
+          warnings: []
+        }
       });
 
       expect(mockApiClient.updateWorkflow).not.toHaveBeenCalled();

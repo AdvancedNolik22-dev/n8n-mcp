@@ -38,6 +38,8 @@ const logger = new Logger({ prefix: '[WorkflowDiffEngine]' });
 export class WorkflowDiffEngine {
   // Track node name changes during operations for connection reference updates
   private renameMap: Map<string, string> = new Map();
+  // Track warnings during operation processing
+  private warnings: WorkflowDiffValidationError[] = [];
 
   /**
    * Apply diff operations to a workflow
@@ -47,8 +49,9 @@ export class WorkflowDiffEngine {
     request: WorkflowDiffRequest
   ): Promise<WorkflowDiffResult> {
     try {
-      // Reset rename tracking for this diff operation
+      // Reset tracking for this diff operation
       this.renameMap.clear();
+      this.warnings = [];
 
       // Clone workflow to avoid modifying original
       const workflowCopy = JSON.parse(JSON.stringify(workflow));
@@ -114,6 +117,7 @@ export class WorkflowDiffEngine {
               ? 'Validation successful. All operations are valid.'
               : `Validation completed with ${errors.length} errors.`,
             errors: errors.length > 0 ? errors : undefined,
+            warnings: this.warnings.length > 0 ? this.warnings : undefined,
             applied: appliedIndices,
             failed: failedIndices
           };
@@ -126,6 +130,7 @@ export class WorkflowDiffEngine {
           operationsApplied: appliedIndices.length,
           message: `Applied ${appliedIndices.length} operations, ${failedIndices.length} failed (continueOnError mode)`,
           errors: errors.length > 0 ? errors : undefined,
+          warnings: this.warnings.length > 0 ? this.warnings : undefined,
           applied: appliedIndices,
           failed: failedIndices
         };
@@ -213,7 +218,8 @@ export class WorkflowDiffEngine {
           success: true,
           workflow: workflowCopy,
           operationsApplied,
-          message: `Successfully applied ${operationsApplied} operations (${nodeOperations.length} node ops, ${otherOperations.length} other ops)`
+          message: `Successfully applied ${operationsApplied} operations (${nodeOperations.length} node ops, ${otherOperations.length} other ops)`,
+          warnings: this.warnings.length > 0 ? this.warnings : undefined
         };
       }
     } catch (error) {
@@ -683,6 +689,24 @@ export class WorkflowDiffEngine {
     if (operation.case !== undefined && operation.sourceIndex === undefined) {
       // Only apply if sourceIndex not explicitly set
       sourceIndex = operation.case;
+    }
+
+    // Validation: Warn if using sourceIndex with If/Switch nodes without smart parameters
+    if (sourceNode && operation.sourceIndex !== undefined && operation.branch === undefined && operation.case === undefined) {
+      if (sourceNode.type === 'n8n-nodes-base.if') {
+        this.warnings.push({
+          operation: -1,  // Not tied to specific operation index in request
+          message: `Connection to If node "${operation.source}" uses sourceIndex=${operation.sourceIndex}. ` +
+            `Consider using branch="true" or branch="false" for better clarity. ` +
+            `If node outputs: main[0]=TRUE branch, main[1]=FALSE branch.`
+        });
+      } else if (sourceNode.type === 'n8n-nodes-base.switch') {
+        this.warnings.push({
+          operation: -1,  // Not tied to specific operation index in request
+          message: `Connection to Switch node "${operation.source}" uses sourceIndex=${operation.sourceIndex}. ` +
+            `Consider using case=N for better clarity (case=0 for first output, case=1 for second, etc.).`
+        });
+      }
     }
 
     return { sourceOutput, sourceIndex };
