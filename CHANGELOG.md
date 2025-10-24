@@ -7,6 +7,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 🐛 Bug Fixes
+
+**Issue #360: Enhanced Warnings for If/Switch Node Connection Parameters**
+
+Fixed issue where users could unintentionally place multiple If node connections on the same branch (TRUE/FALSE) when using `sourceIndex` parameter instead of the recommended `branch` parameter. The system now provides helpful warnings to guide users toward better practices.
+
+#### What Was Fixed
+
+1. **New Warning System**:
+   - Warns when using `sourceIndex` with If nodes - suggests `branch="true"` or `branch="false"` instead
+   - Warns when using `sourceIndex` with Switch nodes - suggests `case=N` instead
+   - Explains the correct branch structure: `main[0]=TRUE branch, main[1]=FALSE branch`
+
+2. **Enhanced Documentation**:
+   - Added **CRITICAL** pitfalls to `n8n_update_partial_workflow` tool documentation
+   - Clear guidance that using `sourceIndex=0` for multiple connections puts them ALL on the TRUE branch
+   - Examples showing correct vs. incorrect usage
+
+3. **Type System Improvements**:
+   - Added `warnings` field to `WorkflowDiffResult` interface
+   - Warnings are non-blocking (operations still succeed)
+   - Differentiated from errors for better UX
+
+#### Behavior
+
+The existing `branch` parameter works correctly and has comprehensive test coverage:
+- `branch="true"` → routes to `main[0]` (TRUE path)
+- `branch="false"` → routes to `main[1]` (FALSE path)
+
+The issue was that users who didn't know about the `branch` parameter would naturally use `sourceIndex`, which led to incorrect branch routing.
+
+#### Example Warning
+
+```
+Connection to If node "Check Condition" uses sourceIndex=0.
+Consider using branch="true" or branch="false" for better clarity.
+If node outputs: main[0]=TRUE branch, main[1]=FALSE branch.
+```
+
+#### Test Coverage
+
+- Added regression tests that reproduce the exact issue from #360
+- Verify warnings are generated for If and Switch nodes
+- Confirm existing smart parameter tests still pass
+
+**Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en**
+
+---
+
 ### ✨ New Features
 
 **Auto-Update Node Versions with Smart Migration**

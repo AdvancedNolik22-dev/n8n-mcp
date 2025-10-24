@@ -170,6 +170,7 @@ export interface WorkflowDiffResult {
   success: boolean;
   workflow?: any; // Updated workflow if successful
   errors?: WorkflowDiffValidationError[];
+  warnings?: WorkflowDiffValidationError[]; // Non-blocking warnings (e.g., parameter suggestions)
   operationsApplied?: number;
   message?: string;
   applied?: number[]; // Indices of successfully applied operations (when continueOnError is true)

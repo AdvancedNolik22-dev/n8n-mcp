@@ -1418,6 +1418,113 @@ describe('WorkflowDiffEngine', () => {
       expect(result.workflow!.connections['Switch']['main'][2][0].node).toBe('Handler');
       expect(result.workflow!.connections['Switch']['main'][1]).toEqual([]);
     });
+
+    it('should warn when using sourceIndex with If node (issue #360)', async () => {
+      const addIF: any = {
+        type: 'addNode',
+        node: {
+          name: 'Check Condition',
+          type: 'n8n-nodes-base.if',
+          position: [400, 300]
+        }
+      };
+
+      const addSuccess: any = {
+        type: 'addNode',
+        node: {
+          name: 'Success Handler',
+          type: 'n8n-nodes-base.set',
+          position: [600, 200]
+        }
+      };
+
+      const addError: any = {
+        type: 'addNode',
+        node: {
+          name: 'Error Handler',
+          type: 'n8n-nodes-base.set',
+          position: [600, 400]
+        }
+      };
+
+      // BAD: Using sourceIndex with If node (reproduces issue #360)
+      const connectSuccess: any = {
+        type: 'addConnection',
+        source: 'Check Condition',
+        target: 'Success Handler',
+        sourceIndex: 0  // Should use branch="true" instead
+      };
+
+      const connectError: any = {
+        type: 'addConnection',
+        source: 'Check Condition',
+        target: 'Error Handler',
+        sourceIndex: 0  // Should use branch="false" instead - both will end up in main[0]!
+      };
+
+      const request: WorkflowDiffRequest = {
+        id: 'test-workflow',
+        operations: [addIF, addSuccess, addError, connectSuccess, connectError]
+      };
+
+      const result = await diffEngine.applyDiff(baseWorkflow, request);
+
+      expect(result.success).toBe(true);
+
+      // Should produce warnings
+      expect(result.warnings).toBeDefined();
+      expect(result.warnings!.length).toBe(2);
+      expect(result.warnings![0].message).toContain('Consider using branch="true" or branch="false"');
+      expect(result.warnings![0].message).toContain('If node outputs: main[0]=TRUE branch, main[1]=FALSE branch');
+      expect(result.warnings![1].message).toContain('Consider using branch="true" or branch="false"');
+
+      // Both connections end up in main[0] (the bug behavior)
+      expect(result.workflow!.connections['Check Condition']['main'][0].length).toBe(2);
+      expect(result.workflow!.connections['Check Condition']['main'][0][0].node).toBe('Success Handler');
+      expect(result.workflow!.connections['Check Condition']['main'][0][1].node).toBe('Error Handler');
+    });
+
+    it('should warn when using sourceIndex with Switch node', async () => {
+      const addSwitch: any = {
+        type: 'addNode',
+        node: {
+          name: 'Switch',
+          type: 'n8n-nodes-base.switch',
+          position: [400, 300]
+        }
+      };
+
+      const addHandler: any = {
+        type: 'addNode',
+        node: {
+          name: 'Handler',
+          type: 'n8n-nodes-base.set',
+          position: [600, 300]
+        }
+      };
+
+      // BAD: Using sourceIndex with Switch node
+      const connect: any = {
+        type: 'addConnection',
+        source: 'Switch',
+        target: 'Handler',
+        sourceIndex: 1  // Should use case=1 instead
+      };
+
+      const request: WorkflowDiffRequest = {
+        id: 'test-workflow',
+        operations: [addSwitch, addHandler, connect]
+      };
+
+      const result = await diffEngine.applyDiff(baseWorkflow, request);
+
+      expect(result.success).toBe(true);
+
+      // Should produce warning
+      expect(result.warnings).toBeDefined();
+      expect(result.warnings!.length).toBe(1);
+      expect(result.warnings![0].message).toContain('Consider using case=N for better clarity');
+    });
   });
 
   describe('AddConnection with sourceIndex (Phase 0 Fix)', () => {
