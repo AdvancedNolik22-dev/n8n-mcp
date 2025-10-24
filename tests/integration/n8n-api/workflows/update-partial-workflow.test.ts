@@ -12,19 +12,22 @@ import { getTestN8nClient } from '../utils/n8n-client';
 import { N8nApiClient } from '../../../../src/services/n8n-api-client';
 import { SIMPLE_WEBHOOK_WORKFLOW, SIMPLE_HTTP_WORKFLOW, MULTI_NODE_WORKFLOW } from '../utils/fixtures';
 import { cleanupOrphanedWorkflows } from '../utils/cleanup-helpers';
-import { createMcpContext } from '../utils/mcp-context';
+import { createMcpContext, getMcpRepository } from '../utils/mcp-context';
 import { InstanceContext } from '../../../../src/types/instance-context';
+import { NodeRepository } from '../../../../src/database/node-repository';
 import { handleUpdatePartialWorkflow } from '../../../../src/mcp/handlers-workflow-diff';
 
 describe('Integration: handleUpdatePartialWorkflow', () => {
   let context: TestContext;
   let client: N8nApiClient;
   let mcpContext: InstanceContext;
+  let repository: NodeRepository;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     context = createTestContext();
     client = getTestN8nClient();
     mcpContext = createMcpContext();
+    repository = await getMcpRepository();
   });
 
   afterEach(async () => {
@@ -91,6 +94,7 @@ describe('Integration: handleUpdatePartialWorkflow', () => {
               }
             ]
           },
+          repository,
           mcpContext
         );
 
@@ -129,6 +133,7 @@ describe('Integration: handleUpdatePartialWorkflow', () => {
               }
             ]
           },
+          repository,
           mcpContext
         );
 
@@ -161,6 +166,7 @@ describe('Integration: handleUpdatePartialWorkflow', () => {
               }
             ]
           },
+          repository,
           mcpContext
         );
 
@@ -192,6 +198,7 @@ describe('Integration: handleUpdatePartialWorkflow', () => {
               }
             ]
           },
+          repository,
           mcpContext
         );
 
@@ -226,6 +233,7 @@ describe('Integration: handleUpdatePartialWorkflow', () => {
               }
             ]
           },
+          repository,
           mcpContext
         );
 
@@ -261,6 +269,7 @@ describe('Integration: handleUpdatePartialWorkflow', () => {
               }
             ]
           },
+          repository,
           mcpContext
         );
 
@@ -298,6 +307,7 @@ describe('Integration: handleUpdatePartialWorkflow', () => {
               }
             ]
           },
+          repository,
           mcpContext
         );
 
@@ -331,6 +341,7 @@ describe('Integration: handleUpdatePartialWorkflow', () => {
               }
             ]
           },
+          repository,
           mcpContext
         );
 
@@ -358,6 +369,7 @@ describe('Integration: handleUpdatePartialWorkflow', () => {
             id: created.id,
             operations: [{ type: 'disableNode', nodeName: 'Webhook' }]
           },
+          repository,
           mcpContext
         );
 
@@ -372,6 +384,7 @@ describe('Integration: handleUpdatePartialWorkflow', () => {
               }
             ]
           },
+          repository,
           mcpContext
         );
 
@@ -416,6 +429,7 @@ describe('Integration: handleUpdatePartialWorkflow', () => {
               }
             ]
           },
+          repository,
           mcpContext
         );
 
@@ -453,6 +467,7 @@ describe('Integration: handleUpdatePartialWorkflow', () => {
               }
             ]
           },
+          repository,
           mcpContext
         );
 
@@ -487,6 +502,7 @@ describe('Integration: handleUpdatePartialWorkflow', () => {
               }
             ]
           },
+          repository,
           mcpContext
         );
 
@@ -519,6 +535,7 @@ describe('Integration: handleUpdatePartialWorkflow', () => {
               }
             ]
           },
+          repository,
           mcpContext
         );
 
@@ -551,6 +568,7 @@ describe('Integration: handleUpdatePartialWorkflow', () => {
               }
             ]
           },
+          repository,
           mcpContext
         );
 
@@ -579,6 +597,7 @@ describe('Integration: handleUpdatePartialWorkflow', () => {
             id: created.id,
             operations: [{ type: 'removeNode', nodeName: 'HTTP Request' }]
           },
+          repository,
           mcpContext
         );
 
@@ -594,6 +613,7 @@ describe('Integration: handleUpdatePartialWorkflow', () => {
             ],
             validateOnly: true
           },
+          repository,
           mcpContext
         );
 
@@ -633,6 +653,7 @@ describe('Integration: handleUpdatePartialWorkflow', () => {
               }
             ]
           },
+          repository,
           mcpContext
         );
 
@@ -670,6 +691,7 @@ describe('Integration: handleUpdatePartialWorkflow', () => {
               }
             ]
           },
+          repository,
           mcpContext
         );
 
@@ -702,6 +724,7 @@ describe('Integration: handleUpdatePartialWorkflow', () => {
               }
             ]
           },
+          repository,
           mcpContext
         );
 
@@ -736,6 +759,7 @@ describe('Integration: handleUpdatePartialWorkflow', () => {
               }
             ]
           },
+          repository,
           mcpContext
         );
 
@@ -793,6 +817,7 @@ describe('Integration: handleUpdatePartialWorkflow', () => {
             }
           ]
         },
+        repository,
         mcpContext
       );
 
@@ -825,6 +850,7 @@ describe('Integration: handleUpdatePartialWorkflow', () => {
           ],
           validateOnly: true
         },
+        repository,
         mcpContext
       );
 
@@ -868,6 +894,7 @@ describe('Integration: handleUpdatePartialWorkflow', () => {
           ],
           continueOnError: true
         },
+        repository,
         mcpContext
       );
 
@@ -910,6 +937,7 @@ describe('Integration: handleUpdatePartialWorkflow', () => {
             }
           ]
         },
+        repository,
         mcpContext
       );
 
@@ -953,6 +981,7 @@ describe('Integration: handleUpdatePartialWorkflow', () => {
             }
           ]
         },
+        repository,
         mcpContext
       );
 
@@ -1005,6 +1034,7 @@ describe('Integration: handleUpdatePartialWorkflow', () => {
             }
           ]
         },
+        repository,
         mcpContext
       );
 
@@ -1050,6 +1080,7 @@ describe('Integration: handleUpdatePartialWorkflow', () => {
             }
           ]
         },
+        repository,
         mcpContext
       );
 

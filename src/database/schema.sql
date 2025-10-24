@@ -208,3 +208,29 @@ CREATE INDEX IF NOT EXISTS idx_prop_changes_node ON version_property_changes(nod
 CREATE INDEX IF NOT EXISTS idx_prop_changes_versions ON version_property_changes(node_type, from_version, to_version);
 CREATE INDEX IF NOT EXISTS idx_prop_changes_breaking ON version_property_changes(is_breaking);
 CREATE INDEX IF NOT EXISTS idx_prop_changes_auto ON version_property_changes(auto_migratable);
+
+-- Workflow versions table for rollback and version history tracking
+-- Stores full workflow snapshots before modifications for guaranteed reversibility
+-- Auto-prunes to 10 versions per workflow to prevent memory leaks
+CREATE TABLE IF NOT EXISTS workflow_versions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  workflow_id TEXT NOT NULL,              -- n8n workflow ID
+  version_number INTEGER NOT NULL,        -- Incremental version number (1, 2, 3...)
+  workflow_name TEXT NOT NULL,            -- Workflow name at time of backup
+  workflow_snapshot TEXT NOT NULL,        -- Full workflow JSON before modification
+  trigger TEXT NOT NULL CHECK(trigger IN (
+    'partial_update',                     -- Created by n8n_update_partial_workflow
+    'full_update',                        -- Created by n8n_update_full_workflow
+    'autofix'                             -- Created by n8n_autofix_workflow
+  )),
+  operations TEXT,                        -- JSON array of diff operations (if partial update)
+  fix_types TEXT,                         -- JSON array of fix types (if autofix)
+  metadata TEXT,                          -- Additional context (JSON)
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(workflow_id, version_number)
+);
+
+-- Indexes for workflow version queries
+CREATE INDEX IF NOT EXISTS idx_workflow_versions_workflow_id ON workflow_versions(workflow_id);
+CREATE INDEX IF NOT EXISTS idx_workflow_versions_created_at ON workflow_versions(created_at);
+CREATE INDEX IF NOT EXISTS idx_workflow_versions_trigger ON workflow_versions(trigger);
