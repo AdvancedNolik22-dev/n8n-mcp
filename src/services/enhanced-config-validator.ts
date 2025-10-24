@@ -415,9 +415,19 @@ export class EnhancedConfigValidator extends ConfigValidator {
     }
 
     // 2. Suggest responseFormat for API endpoints
-    const isApiEndpoint = url.includes('/api') || url.includes('/rest') ||
-                          url.includes('supabase') || url.includes('firebase') ||
-                          url.includes('googleapis') || url.includes('.com/v');
+    const lowerUrl = url.toLowerCase();
+    const isApiEndpoint =
+      // Subdomain patterns (api.example.com)
+      /^https?:\/\/api\./i.test(url) ||
+      // Path patterns with word boundaries to prevent false positives like "therapist", "restaurant"
+      /\/api[\/\?]|\/api$/i.test(url) ||
+      /\/rest[\/\?]|\/rest$/i.test(url) ||
+      // Known API service domains
+      lowerUrl.includes('supabase.co') ||
+      lowerUrl.includes('firebase') ||
+      lowerUrl.includes('googleapis.com') ||
+      // Versioned API paths (e.g., example.com/v1, example.com/v2)
+      /\.com\/v\d+/i.test(url);
 
     if (isApiEndpoint && !options.response?.response?.responseFormat) {
       result.suggestions.push(
@@ -431,10 +441,11 @@ export class EnhancedConfigValidator extends ConfigValidator {
     if (url && url.startsWith('=')) {
       // Expression-based URL - check for common protocol issues
       const expressionContent = url.slice(1); // Remove = prefix
+      const lowerExpression = expressionContent.toLowerCase();
 
-      // Check for missing protocol in expression
+      // Check for missing protocol in expression (case-insensitive)
       if (expressionContent.startsWith('www.') ||
-          (expressionContent.includes('{{') && !expressionContent.includes('http'))) {
+          (expressionContent.includes('{{') && !lowerExpression.includes('http'))) {
         result.warnings.push({
           type: 'invalid_value',
           property: 'url',

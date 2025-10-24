@@ -1020,5 +1020,117 @@ describe('EnhancedConfigValidator', () => {
       );
       expect(responseFormatSuggestion).toBeUndefined();
     });
+
+    it('should detect missing protocol in expressions with uppercase HTTP', () => {
+      const nodeType = 'nodes-base.httpRequest';
+      const config = {
+        url: '={{ "HTTP://" + $json.domain + ".com" }}',
+        method: 'GET'
+      };
+      const properties = [
+        { name: 'url', type: 'string', required: true }
+      ];
+
+      const result = EnhancedConfigValidator.validateWithMode(
+        nodeType,
+        config,
+        properties,
+        'operation',
+        'ai-friendly'
+      );
+
+      // Should NOT warn because HTTP:// is present (case-insensitive)
+      expect(result.warnings).toHaveLength(0);
+    });
+
+    it('should NOT suggest responseFormat for false positive URLs', () => {
+      const nodeType = 'nodes-base.httpRequest';
+      const testUrls = [
+        'https://example.com/therapist-directory',
+        'https://restaurant-bookings.com/reserve',
+        'https://forest-management.org/data'
+      ];
+
+      testUrls.forEach(url => {
+        const config = {
+          url,
+          method: 'GET',
+          options: {}
+        };
+        const properties = [
+          { name: 'url', type: 'string', required: true }
+        ];
+
+        const result = EnhancedConfigValidator.validateWithMode(
+          nodeType,
+          config,
+          properties,
+          'operation',
+          'ai-friendly'
+        );
+
+        const responseFormatSuggestion = result.suggestions.find(
+          (s: string) => s.includes('responseFormat')
+        );
+        expect(responseFormatSuggestion).toBeUndefined();
+      });
+    });
+
+    it('should suggest responseFormat for case-insensitive API paths', () => {
+      const nodeType = 'nodes-base.httpRequest';
+      const testUrls = [
+        'https://example.com/API/users',
+        'https://example.com/Rest/data',
+        'https://example.com/REST/v1/items'
+      ];
+
+      testUrls.forEach(url => {
+        const config = {
+          url,
+          method: 'GET',
+          options: {}
+        };
+        const properties = [
+          { name: 'url', type: 'string', required: true }
+        ];
+
+        const result = EnhancedConfigValidator.validateWithMode(
+          nodeType,
+          config,
+          properties,
+          'operation',
+          'ai-friendly'
+        );
+
+        expect(result.suggestions).toContainEqual(
+          expect.stringContaining('responseFormat')
+        );
+      });
+    });
+
+    it('should handle null and undefined URLs gracefully', () => {
+      const nodeType = 'nodes-base.httpRequest';
+      const testConfigs = [
+        { url: null, method: 'GET' },
+        { url: undefined, method: 'GET' },
+        { url: '', method: 'GET' }
+      ];
+
+      testConfigs.forEach(config => {
+        const properties = [
+          { name: 'url', type: 'string', required: true }
+        ];
+
+        expect(() => {
+          EnhancedConfigValidator.validateWithMode(
+            nodeType,
+            config,
+            properties,
+            'operation',
+            'ai-friendly'
+          );
+        }).not.toThrow();
+      });
+    });
   });
 });
