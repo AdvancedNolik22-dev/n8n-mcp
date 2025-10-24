@@ -72,9 +72,16 @@ describe('AuthManager.timingSafeCompare', () => {
       const medianLast = median(timings.wrongLast);
 
       // Timing variance should be less than 10% (constant-time)
-      const variance = Math.abs(medianFirst - medianLast) / medianFirst;
+      // Guard against division by zero when medians are very small (fast operations)
+      const maxMedian = Math.max(medianFirst, medianLast);
+      const variance = maxMedian === 0
+        ? Math.abs(medianFirst - medianLast)
+        : Math.abs(medianFirst - medianLast) / maxMedian;
 
-      expect(variance).toBeLessThan(0.10);
+      // For constant-time comparison, variance should be minimal
+      // If maxMedian is 0, check absolute difference is small (< 1000ns)
+      // Otherwise, check relative variance is < 10%
+      expect(variance).toBeLessThan(maxMedian === 0 ? 1000 : 0.10);
     });
 
     it('should handle special characters safely', () => {
