@@ -7,6 +7,89 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### ✨ Enhancements
+
+**Issue #361: Enhanced HTTP Request Node Validation Suggestions**
+
+Added helpful suggestions for HTTP Request node best practices to prevent common production issues discovered through real-world workflow analysis.
+
+#### What's New
+
+1. **alwaysOutputData Suggestion**
+   - Suggests adding `alwaysOutputData: true` at node level (not in parameters)
+   - Prevents silent workflow failures when HTTP requests error
+   - Ensures downstream error handling can process failed requests
+   - Example suggestion: "Consider adding alwaysOutputData: true at node level for better error handling. This ensures the node produces output even when HTTP requests fail, allowing downstream error handling."
+
+2. **responseFormat Suggestion for API Endpoints**
+   - Suggests setting `options.response.response.responseFormat` for API endpoints
+   - Prevents JSON parsing confusion
+   - Triggered when URL contains `/api`, `/rest`, `supabase`, `firebase`, `googleapis`, or `.com/v` patterns
+   - Example suggestion: "API endpoints should explicitly set options.response.response.responseFormat to 'json' or 'text' to prevent confusion about response parsing"
+
+3. **Enhanced URL Protocol Validation**
+   - Detects missing protocol in expression-based URLs
+   - Warns about patterns like `=www.{{ $json.domain }}.com` (missing http://)
+   - Warns about expressions without protocol: `={{ $json.domain }}/api/data`
+   - Example warning: "URL expression appears to be missing http:// or https:// protocol"
+
+#### Investigation Findings
+
+This enhancement was developed after thorough investigation of issue #361:
+
+**Key Discoveries:**
+- ✅ Mixed expression syntax `=literal{{ expression }}` **actually works in n8n** - the issue report's primary claim was incorrect
+- ✅ Real validation gaps identified: missing `alwaysOutputData` and `responseFormat` checks
+- ✅ Workflow analysis showed "?" icon in UI caused by missing required URL (already caught by validation)
+- ✅ Compared broken vs fixed workflows to identify actual production issues
+
+**Testing Evidence:**
+- Analyzed workflow SwjKJsJhe8OsYfBk with mixed syntax - executions successful
+- Compared broken workflow (mBmkyj460i5rYTG4) with fixed workflow (hQI9pby3nSFtk4TV)
+- Identified that fixed workflow has `alwaysOutputData: true` and explicit `responseFormat: "json"`
+
+#### Impact
+
+- **Non-Breaking**: All changes are suggestions/warnings, not errors
+- **Profile-Aware**: Suggestions shown in all profiles for maximum helpfulness
+- **Actionable**: Clear guidance on how to implement best practices
+- **Production-Focused**: Addresses real workflow reliability concerns from actual broken workflows
+
+#### Test Coverage
+
+Added 8 new test cases covering:
+- alwaysOutputData suggestion for all HTTP Request nodes
+- responseFormat suggestion for API endpoint detection (various patterns)
+- responseFormat NOT suggested when already configured
+- URL protocol validation for expression-based URLs
+- Protocol warnings for missing http:// in expressions
+- No false positives when protocol is correctly included
+
+#### Technical Details
+
+**Files Modified:**
+- `src/services/enhanced-config-validator.ts` - Added `enhanceHttpRequestValidation()` implementation
+- `tests/unit/services/enhanced-config-validator.test.ts` - Added 8 comprehensive test cases
+
+**Validation Flow:**
+1. Check for alwaysOutputData suggestion (all HTTP Request nodes)
+2. Detect API endpoints by URL patterns
+3. Check for explicit responseFormat configuration
+4. Validate expression-based URLs for protocol issues
+
+#### Related
+
+- **Issue**: #361 - validate_node_operation: Missing critical HTTP Request node configuration checks
+- **Analysis**: Deep investigation with @agent-Explore and @agent-n8n-mcp-tester
+- **Workflows Analyzed**:
+  - SwjKJsJhe8OsYfBk (mixed syntax test)
+  - mBmkyj460i5rYTG4 (broken workflow)
+  - hQI9pby3nSFtk4TV (fixed workflow)
+
+Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+
+---
+
 ### 🐛 Bug Fixes
 
 **Issue #360: Enhanced Warnings for If/Switch Node Connection Parameters**

@@ -401,7 +401,59 @@ export class EnhancedConfigValidator extends ConfigValidator {
     config: Record<string, any>,
     result: EnhancedValidationResult
   ): void {
-    // Examples removed - validation provides error messages and fixes instead
+    const url = String(config.url || '');
+    const options = config.options || {};
+
+    // 1. Suggest alwaysOutputData for better error handling (node-level property)
+    // Note: We can't check if it exists (it's node-level, not in parameters),
+    // but we can suggest it as a best practice
+    if (!result.suggestions.some(s => typeof s === 'string' && s.includes('alwaysOutputData'))) {
+      result.suggestions.push(
+        'Consider adding alwaysOutputData: true at node level (not in parameters) for better error handling. ' +
+        'This ensures the node produces output even when HTTP requests fail, allowing downstream error handling.'
+      );
+    }
+
+    // 2. Suggest responseFormat for API endpoints
+    const lowerUrl = url.toLowerCase();
+    const isApiEndpoint =
+      // Subdomain patterns (api.example.com)
+      /^https?:\/\/api\./i.test(url) ||
+      // Path patterns with word boundaries to prevent false positives like "therapist", "restaurant"
+      /\/api[\/\?]|\/api$/i.test(url) ||
+      /\/rest[\/\?]|\/rest$/i.test(url) ||
+      // Known API service domains
+      lowerUrl.includes('supabase.co') ||
+      lowerUrl.includes('firebase') ||
+      lowerUrl.includes('googleapis.com') ||
+      // Versioned API paths (e.g., example.com/v1, example.com/v2)
+      /\.com\/v\d+/i.test(url);
+
+    if (isApiEndpoint && !options.response?.response?.responseFormat) {
+      result.suggestions.push(
+        'API endpoints should explicitly set options.response.response.responseFormat to "json" or "text" ' +
+        'to prevent confusion about response parsing. Example: ' +
+        '{ "options": { "response": { "response": { "responseFormat": "json" } } } }'
+      );
+    }
+
+    // 3. Enhanced URL protocol validation for expressions
+    if (url && url.startsWith('=')) {
+      // Expression-based URL - check for common protocol issues
+      const expressionContent = url.slice(1); // Remove = prefix
+      const lowerExpression = expressionContent.toLowerCase();
+
+      // Check for missing protocol in expression (case-insensitive)
+      if (expressionContent.startsWith('www.') ||
+          (expressionContent.includes('{{') && !lowerExpression.includes('http'))) {
+        result.warnings.push({
+          type: 'invalid_value',
+          property: 'url',
+          message: 'URL expression appears to be missing http:// or https:// protocol',
+          suggestion: 'Include protocol in your expression. Example: ={{ "https://" + $json.domain + ".com" }}'
+        });
+      }
+    }
   }
   
   /**
