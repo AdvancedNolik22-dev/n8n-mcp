@@ -142,8 +142,9 @@ jobs:
           if [ -z "$PREVIOUS_TAG" ]; then
             echo "ℹ️ No previous tag found, this might be the first release"
 
-            # Get all commits up to current commit
-            NOTES="### 🎉 Initial Release
+            # Get all commits up to current commit - use heredoc for multiline
+            NOTES=$(cat <<EOF
+### 🎉 Initial Release
 
 This is the initial release of n8n-mcp v$CURRENT_VERSION.
 
@@ -151,7 +152,9 @@ This is the initial release of n8n-mcp v$CURRENT_VERSION.
 
 **Release Statistics:**
 - Commit count: $(git rev-list --count HEAD)
-- First release setup"
+- First release setup
+EOF
+)
 
             echo "has-notes=true" >> $GITHUB_OUTPUT
 
