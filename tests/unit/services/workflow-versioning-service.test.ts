@@ -38,7 +38,7 @@ describe('WorkflowVersioningService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockRepository = new NodeRepository({} as any);
-    mockApiClient = new N8nApiClient('http://test', 'test-key');
+    mockApiClient = new N8nApiClient({ baseUrl: 'http://test', apiKey: 'test-key' });
     service = new WorkflowVersioningService(mockRepository, mockApiClient);
   });
 
@@ -221,7 +221,7 @@ describe('WorkflowVersioningService', () => {
       vi.spyOn(mockRepository, 'createWorkflowVersion').mockReturnValue(4);
       vi.spyOn(mockRepository, 'pruneWorkflowVersions').mockReturnValue(0);
       vi.spyOn(mockApiClient, 'getWorkflow').mockResolvedValue(createMockWorkflow('workflow-1', 'Current'));
-      vi.spyOn(mockApiClient, 'updateWorkflow').mockResolvedValue(undefined);
+      vi.spyOn(mockApiClient, 'updateWorkflow').mockResolvedValue(createMockWorkflow('workflow-1', 'Restored'));
 
       const result = await service.restoreVersion('workflow-1', undefined, false);
 
@@ -266,7 +266,7 @@ describe('WorkflowVersioningService', () => {
       vi.spyOn(mockRepository, 'createWorkflowVersion').mockReturnValue(2);
       vi.spyOn(mockRepository, 'pruneWorkflowVersions').mockReturnValue(0);
       vi.spyOn(mockApiClient, 'getWorkflow').mockResolvedValue(createMockWorkflow('workflow-1', 'Current'));
-      vi.spyOn(mockApiClient, 'updateWorkflow').mockResolvedValue(undefined);
+      vi.spyOn(mockApiClient, 'updateWorkflow').mockResolvedValue(createMockWorkflow('workflow-1', 'Restored'));
 
       const mockValidator = vi.fn();
       vi.spyOn(WorkflowValidator.prototype, 'validateWorkflow').mockImplementation(mockValidator);
@@ -285,7 +285,7 @@ describe('WorkflowVersioningService', () => {
       vi.spyOn(mockRepository, 'createWorkflowVersion').mockReturnValue(3);
       vi.spyOn(mockRepository, 'pruneWorkflowVersions').mockReturnValue(0);
       vi.spyOn(mockApiClient, 'getWorkflow').mockResolvedValue(currentWorkflow);
-      vi.spyOn(mockApiClient, 'updateWorkflow').mockResolvedValue(undefined);
+      vi.spyOn(mockApiClient, 'updateWorkflow').mockResolvedValue(createMockWorkflow('workflow-1', 'Restored'));
 
       const result = await service.restoreVersion('workflow-1', 1, false);
 
@@ -322,7 +322,7 @@ describe('WorkflowVersioningService', () => {
       vi.spyOn(mockRepository, 'createWorkflowVersion').mockReturnValue(3);
       vi.spyOn(mockRepository, 'pruneWorkflowVersions').mockReturnValue(0);
       vi.spyOn(mockApiClient, 'getWorkflow').mockResolvedValue(createMockWorkflow('workflow-1', 'Current'));
-      vi.spyOn(mockApiClient, 'updateWorkflow').mockResolvedValue(undefined);
+      vi.spyOn(mockApiClient, 'updateWorkflow').mockResolvedValue(createMockWorkflow('workflow-1', 'Restored'));
 
       const result = await service.restoreVersion('workflow-1', 1, false);
 

@@ -39,6 +39,9 @@ describe('BreakingChangeDetector', () => {
   describe('analyzeVersionUpgrade', () => {
     it('should combine registry and dynamic changes', async () => {
       const registryChange: BreakingChangesRegistry.BreakingChange = {
+        nodeType: 'nodes-base.httpRequest',
+        fromVersion: '1.0',
+        toVersion: '2.0',
         propertyName: 'registryProp',
         changeType: 'removed',
         isBreaking: true,
@@ -66,6 +69,9 @@ describe('BreakingChangeDetector', () => {
 
     it('should detect breaking changes', async () => {
       const breakingChange: BreakingChangesRegistry.BreakingChange = {
+        nodeType: 'nodes-base.httpRequest',
+        fromVersion: '1.0',
+        toVersion: '2.0',
         propertyName: 'criticalProp',
         changeType: 'removed',
         isBreaking: true,
@@ -86,6 +92,9 @@ describe('BreakingChangeDetector', () => {
     it('should calculate auto-migratable and manual counts', async () => {
       const changes: BreakingChangesRegistry.BreakingChange[] = [
         {
+          nodeType: 'nodes-base.httpRequest',
+          fromVersion: '1.0',
+          toVersion: '2.0',
           propertyName: 'autoProp',
           changeType: 'added',
           isBreaking: false,
@@ -95,6 +104,9 @@ describe('BreakingChangeDetector', () => {
           migrationStrategy: { type: 'add_property', defaultValue: null }
         },
         {
+          nodeType: 'nodes-base.httpRequest',
+          fromVersion: '1.0',
+          toVersion: '2.0',
           propertyName: 'manualProp',
           changeType: 'requirement_changed',
           isBreaking: true,
@@ -116,6 +128,9 @@ describe('BreakingChangeDetector', () => {
 
     it('should determine overall severity', async () => {
       const highSeverityChange: BreakingChangesRegistry.BreakingChange = {
+        nodeType: 'nodes-base.httpRequest',
+        fromVersion: '1.0',
+        toVersion: '2.0',
         propertyName: 'criticalProp',
         changeType: 'removed',
         isBreaking: true,
@@ -136,6 +151,9 @@ describe('BreakingChangeDetector', () => {
     it('should generate recommendations', async () => {
       const changes: BreakingChangesRegistry.BreakingChange[] = [
         {
+          nodeType: 'nodes-base.httpRequest',
+          fromVersion: '1.0',
+          toVersion: '2.0',
           propertyName: 'prop1',
           changeType: 'removed',
           isBreaking: true,
@@ -145,6 +163,9 @@ describe('BreakingChangeDetector', () => {
           migrationStrategy: { type: 'remove_property' }
         },
         {
+          nodeType: 'nodes-base.httpRequest',
+          fromVersion: '1.0',
+          toVersion: '2.0',
           propertyName: 'prop2',
           changeType: 'requirement_changed',
           isBreaking: true,
@@ -306,6 +327,9 @@ describe('BreakingChangeDetector', () => {
   describe('change merging and deduplication', () => {
     it('should prioritize registry changes over dynamic', async () => {
       const registryChange: BreakingChangesRegistry.BreakingChange = {
+        nodeType: 'nodes-base.httpRequest',
+        fromVersion: '1.0',
+        toVersion: '2.0',
         propertyName: 'sharedProp',
         changeType: 'removed',
         isBreaking: true,
@@ -334,6 +358,9 @@ describe('BreakingChangeDetector', () => {
     it('should sort changes by severity', async () => {
       const changes: BreakingChangesRegistry.BreakingChange[] = [
         {
+          nodeType: 'nodes-base.httpRequest',
+          fromVersion: '1.0',
+          toVersion: '2.0',
           propertyName: 'lowProp',
           changeType: 'added',
           isBreaking: false,
@@ -343,6 +370,9 @@ describe('BreakingChangeDetector', () => {
           migrationStrategy: { type: 'add_property', defaultValue: null }
         },
         {
+          nodeType: 'nodes-base.httpRequest',
+          fromVersion: '1.0',
+          toVersion: '2.0',
           propertyName: 'highProp',
           changeType: 'removed',
           isBreaking: true,
@@ -352,6 +382,9 @@ describe('BreakingChangeDetector', () => {
           migrationStrategy: undefined
         },
         {
+          nodeType: 'nodes-base.httpRequest',
+          fromVersion: '1.0',
+          toVersion: '2.0',
           propertyName: 'medProp',
           changeType: 'renamed',
           isBreaking: true,
@@ -375,6 +408,9 @@ describe('BreakingChangeDetector', () => {
   describe('hasBreakingChanges', () => {
     it('should return true when breaking changes exist', () => {
       const breakingChange: BreakingChangesRegistry.BreakingChange = {
+        nodeType: 'nodes-base.httpRequest',
+        fromVersion: '1.0',
+        toVersion: '2.0',
         propertyName: 'prop',
         changeType: 'removed',
         isBreaking: true,
@@ -404,6 +440,9 @@ describe('BreakingChangeDetector', () => {
     it('should return list of changed property names', () => {
       const changes: BreakingChangesRegistry.BreakingChange[] = [
         {
+          nodeType: 'nodes-base.httpRequest',
+          fromVersion: '1.0',
+          toVersion: '2.0',
           propertyName: 'prop1',
           changeType: 'added',
           isBreaking: false,
@@ -413,6 +452,9 @@ describe('BreakingChangeDetector', () => {
           migrationStrategy: undefined
         },
         {
+          nodeType: 'nodes-base.httpRequest',
+          fromVersion: '1.0',
+          toVersion: '2.0',
           propertyName: 'prop2',
           changeType: 'removed',
           isBreaking: true,
@@ -443,6 +485,9 @@ describe('BreakingChangeDetector', () => {
     it('should recommend safe upgrade when no breaking changes', async () => {
       const changes: BreakingChangesRegistry.BreakingChange[] = [
         {
+          nodeType: 'nodes-base.httpRequest',
+          fromVersion: '1.0',
+          toVersion: '2.0',
           propertyName: 'prop',
           changeType: 'added',
           isBreaking: false,
@@ -465,6 +510,9 @@ describe('BreakingChangeDetector', () => {
     it('should warn about breaking changes', async () => {
       const changes: BreakingChangesRegistry.BreakingChange[] = [
         {
+          nodeType: 'nodes-base.httpRequest',
+          fromVersion: '1.0',
+          toVersion: '2.0',
           propertyName: 'prop',
           changeType: 'removed',
           isBreaking: true,
@@ -486,6 +534,9 @@ describe('BreakingChangeDetector', () => {
     it('should list manual changes required', async () => {
       const changes: BreakingChangesRegistry.BreakingChange[] = [
         {
+          nodeType: 'nodes-base.httpRequest',
+          fromVersion: '1.0',
+          toVersion: '2.0',
           propertyName: 'manualProp',
           changeType: 'requirement_changed',
           isBreaking: true,
@@ -538,6 +589,9 @@ describe('BreakingChangeDetector', () => {
     it('should return HIGH when any change is HIGH severity', async () => {
       const changes: BreakingChangesRegistry.BreakingChange[] = [
         {
+          nodeType: 'nodes-base.httpRequest',
+          fromVersion: '1.0',
+          toVersion: '2.0',
           propertyName: 'lowProp',
           changeType: 'added',
           isBreaking: false,
@@ -547,6 +601,9 @@ describe('BreakingChangeDetector', () => {
           migrationStrategy: undefined
         },
         {
+          nodeType: 'nodes-base.httpRequest',
+          fromVersion: '1.0',
+          toVersion: '2.0',
           propertyName: 'highProp',
           changeType: 'removed',
           isBreaking: true,
@@ -568,6 +625,9 @@ describe('BreakingChangeDetector', () => {
     it('should return MEDIUM when no HIGH but has MEDIUM', async () => {
       const changes: BreakingChangesRegistry.BreakingChange[] = [
         {
+          nodeType: 'nodes-base.httpRequest',
+          fromVersion: '1.0',
+          toVersion: '2.0',
           propertyName: 'lowProp',
           changeType: 'added',
           isBreaking: false,
@@ -577,6 +637,9 @@ describe('BreakingChangeDetector', () => {
           migrationStrategy: undefined
         },
         {
+          nodeType: 'nodes-base.httpRequest',
+          fromVersion: '1.0',
+          toVersion: '2.0',
           propertyName: 'medProp',
           changeType: 'renamed',
           isBreaking: true,
@@ -598,6 +661,9 @@ describe('BreakingChangeDetector', () => {
     it('should return LOW when all changes are LOW severity', async () => {
       const changes: BreakingChangesRegistry.BreakingChange[] = [
         {
+          nodeType: 'nodes-base.httpRequest',
+          fromVersion: '1.0',
+          toVersion: '2.0',
           propertyName: 'prop',
           changeType: 'added',
           isBreaking: false,

@@ -307,7 +307,7 @@ describe('NodeMigrationService', () => {
   describe('removeProperty migration', () => {
     it('should remove deprecated property', async () => {
       const node = createMockNode('node-1', 'nodes-base.httpRequest', 1, {});
-      node.oldField = 'value';
+      (node as any).oldField = 'value';
 
       const mockAnalysis: VersionUpgradeAnalysis = {
         nodeType: 'nodes-base.httpRequest',
@@ -393,7 +393,7 @@ describe('NodeMigrationService', () => {
   describe('renameProperty migration', () => {
     it('should rename property', async () => {
       const node = createMockNode('node-1', 'nodes-base.httpRequest', 1, {});
-      node.oldName = 'value';
+      (node as any).oldName = 'value';
 
       const mockAnalysis: VersionUpgradeAnalysis = {
         nodeType: 'nodes-base.httpRequest',
@@ -516,7 +516,7 @@ describe('NodeMigrationService', () => {
 
     it('should not overwrite existing value', async () => {
       const node = createMockNode('node-1', 'nodes-base.httpRequest', 1, {});
-      node.field = 'existing';
+      (node as any).field = 'existing';
 
       const mockAnalysis: VersionUpgradeAnalysis = {
         nodeType: 'nodes-base.httpRequest',
