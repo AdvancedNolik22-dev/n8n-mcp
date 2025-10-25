@@ -144,7 +144,7 @@ jobs:
 
             # Get all commits up to current commit - use heredoc for multiline
             NOTES=$(cat <<EOF
-### 🎉 Initial Release
+### Initial Release
 
 This is the initial release of n8n-mcp v$CURRENT_VERSION.
 
