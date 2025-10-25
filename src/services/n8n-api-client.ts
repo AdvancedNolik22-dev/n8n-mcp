@@ -173,7 +173,28 @@ export class N8nApiClient {
   async listWorkflows(params: WorkflowListParams = {}): Promise<WorkflowListResponse> {
     try {
       const response = await this.client.get('/workflows', { params });
-      return response.data;
+      const responseData = response.data;
+
+      // Validate response structure
+      if (!responseData || typeof responseData !== 'object') {
+        throw new Error('Invalid response from n8n API: response is not an object');
+      }
+
+      // Handle case where response.data is an array (older n8n versions or different API format)
+      if (Array.isArray(responseData)) {
+        logger.warn('n8n API returned array directly instead of {data, nextCursor} object. Wrapping in expected format.');
+        return {
+          data: responseData,
+          nextCursor: null
+        };
+      }
+
+      // Validate expected format {data: [], nextCursor?: string}
+      if (!Array.isArray(responseData.data)) {
+        throw new Error(`Invalid response from n8n API: expected {data: [], nextCursor?: string}, got: ${JSON.stringify(Object.keys(responseData))}`);
+      }
+
+      return responseData;
     } catch (error) {
       throw handleN8nApiError(error);
     }
@@ -194,7 +215,28 @@ export class N8nApiClient {
   async listExecutions(params: ExecutionListParams = {}): Promise<ExecutionListResponse> {
     try {
       const response = await this.client.get('/executions', { params });
-      return response.data;
+      const responseData = response.data;
+
+      // Validate response structure
+      if (!responseData || typeof responseData !== 'object') {
+        throw new Error('Invalid response from n8n API: response is not an object');
+      }
+
+      // Handle case where response.data is an array (older n8n versions or different API format)
+      if (Array.isArray(responseData)) {
+        logger.warn('n8n API returned array directly instead of {data, nextCursor} object for executions. Wrapping in expected format.');
+        return {
+          data: responseData,
+          nextCursor: null
+        };
+      }
+
+      // Validate expected format {data: [], nextCursor?: string}
+      if (!Array.isArray(responseData.data)) {
+        throw new Error(`Invalid response from n8n API for executions: expected {data: [], nextCursor?: string}, got: ${JSON.stringify(Object.keys(responseData))}`);
+      }
+
+      return responseData;
     } catch (error) {
       throw handleN8nApiError(error);
     }
@@ -264,7 +306,28 @@ export class N8nApiClient {
   async listCredentials(params: CredentialListParams = {}): Promise<CredentialListResponse> {
     try {
       const response = await this.client.get('/credentials', { params });
-      return response.data;
+      const responseData = response.data;
+
+      // Validate response structure
+      if (!responseData || typeof responseData !== 'object') {
+        throw new Error('Invalid response from n8n API: response is not an object');
+      }
+
+      // Handle case where response.data is an array (older n8n versions or different API format)
+      if (Array.isArray(responseData)) {
+        logger.warn('n8n API returned array directly instead of {data, nextCursor} object for credentials. Wrapping in expected format.');
+        return {
+          data: responseData,
+          nextCursor: null
+        };
+      }
+
+      // Validate expected format {data: [], nextCursor?: string}
+      if (!Array.isArray(responseData.data)) {
+        throw new Error(`Invalid response from n8n API for credentials: expected {data: [], nextCursor?: string}, got: ${JSON.stringify(Object.keys(responseData))}`);
+      }
+
+      return responseData;
     } catch (error) {
       throw handleN8nApiError(error);
     }
@@ -309,7 +372,28 @@ export class N8nApiClient {
   async listTags(params: TagListParams = {}): Promise<TagListResponse> {
     try {
       const response = await this.client.get('/tags', { params });
-      return response.data;
+      const responseData = response.data;
+
+      // Validate response structure
+      if (!responseData || typeof responseData !== 'object') {
+        throw new Error('Invalid response from n8n API: response is not an object');
+      }
+
+      // Handle case where response.data is an array (older n8n versions or different API format)
+      if (Array.isArray(responseData)) {
+        logger.warn('n8n API returned array directly instead of {data, nextCursor} object for tags. Wrapping in expected format.');
+        return {
+          data: responseData,
+          nextCursor: null
+        };
+      }
+
+      // Validate expected format {data: [], nextCursor?: string}
+      if (!Array.isArray(responseData.data)) {
+        throw new Error(`Invalid response from n8n API for tags: expected {data: [], nextCursor?: string}, got: ${JSON.stringify(Object.keys(responseData))}`);
+      }
+
+      return responseData;
     } catch (error) {
       throw handleN8nApiError(error);
     }
