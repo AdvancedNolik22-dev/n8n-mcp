@@ -170,31 +170,23 @@ export class N8nApiClient {
     }
   }
 
+  /**
+   * Lists workflows from n8n instance.
+   *
+   * @param params - Query parameters for filtering and pagination
+   * @returns Paginated list of workflows
+   *
+   * @remarks
+   * This method handles two response formats for backwards compatibility:
+   * - Modern (n8n v0.200.0+): {data: Workflow[], nextCursor?: string}
+   * - Legacy (older versions): Workflow[] (wrapped automatically)
+   *
+   * @see https://github.com/czlonkowski/n8n-mcp/issues/349
+   */
   async listWorkflows(params: WorkflowListParams = {}): Promise<WorkflowListResponse> {
     try {
       const response = await this.client.get('/workflows', { params });
-      const responseData = response.data;
-
-      // Validate response structure
-      if (!responseData || typeof responseData !== 'object') {
-        throw new Error('Invalid response from n8n API: response is not an object');
-      }
-
-      // Handle case where response.data is an array (older n8n versions or different API format)
-      if (Array.isArray(responseData)) {
-        logger.warn('n8n API returned array directly instead of {data, nextCursor} object. Wrapping in expected format.');
-        return {
-          data: responseData,
-          nextCursor: null
-        };
-      }
-
-      // Validate expected format {data: [], nextCursor?: string}
-      if (!Array.isArray(responseData.data)) {
-        throw new Error(`Invalid response from n8n API: expected {data: [], nextCursor?: string}, got: ${JSON.stringify(Object.keys(responseData))}`);
-      }
-
-      return responseData;
+      return this.validateListResponse<Workflow>(response.data, 'workflows');
     } catch (error) {
       throw handleN8nApiError(error);
     }
@@ -212,31 +204,23 @@ export class N8nApiClient {
     }
   }
 
+  /**
+   * Lists executions from n8n instance.
+   *
+   * @param params - Query parameters for filtering and pagination
+   * @returns Paginated list of executions
+   *
+   * @remarks
+   * This method handles two response formats for backwards compatibility:
+   * - Modern (n8n v0.200.0+): {data: Execution[], nextCursor?: string}
+   * - Legacy (older versions): Execution[] (wrapped automatically)
+   *
+   * @see https://github.com/czlonkowski/n8n-mcp/issues/349
+   */
   async listExecutions(params: ExecutionListParams = {}): Promise<ExecutionListResponse> {
     try {
       const response = await this.client.get('/executions', { params });
-      const responseData = response.data;
-
-      // Validate response structure
-      if (!responseData || typeof responseData !== 'object') {
-        throw new Error('Invalid response from n8n API: response is not an object');
-      }
-
-      // Handle case where response.data is an array (older n8n versions or different API format)
-      if (Array.isArray(responseData)) {
-        logger.warn('n8n API returned array directly instead of {data, nextCursor} object for executions. Wrapping in expected format.');
-        return {
-          data: responseData,
-          nextCursor: null
-        };
-      }
-
-      // Validate expected format {data: [], nextCursor?: string}
-      if (!Array.isArray(responseData.data)) {
-        throw new Error(`Invalid response from n8n API for executions: expected {data: [], nextCursor?: string}, got: ${JSON.stringify(Object.keys(responseData))}`);
-      }
-
-      return responseData;
+      return this.validateListResponse<Execution>(response.data, 'executions');
     } catch (error) {
       throw handleN8nApiError(error);
     }
@@ -303,31 +287,23 @@ export class N8nApiClient {
   }
 
   // Credential Management
+  /**
+   * Lists credentials from n8n instance.
+   *
+   * @param params - Query parameters for filtering and pagination
+   * @returns Paginated list of credentials
+   *
+   * @remarks
+   * This method handles two response formats for backwards compatibility:
+   * - Modern (n8n v0.200.0+): {data: Credential[], nextCursor?: string}
+   * - Legacy (older versions): Credential[] (wrapped automatically)
+   *
+   * @see https://github.com/czlonkowski/n8n-mcp/issues/349
+   */
   async listCredentials(params: CredentialListParams = {}): Promise<CredentialListResponse> {
     try {
       const response = await this.client.get('/credentials', { params });
-      const responseData = response.data;
-
-      // Validate response structure
-      if (!responseData || typeof responseData !== 'object') {
-        throw new Error('Invalid response from n8n API: response is not an object');
-      }
-
-      // Handle case where response.data is an array (older n8n versions or different API format)
-      if (Array.isArray(responseData)) {
-        logger.warn('n8n API returned array directly instead of {data, nextCursor} object for credentials. Wrapping in expected format.');
-        return {
-          data: responseData,
-          nextCursor: null
-        };
-      }
-
-      // Validate expected format {data: [], nextCursor?: string}
-      if (!Array.isArray(responseData.data)) {
-        throw new Error(`Invalid response from n8n API for credentials: expected {data: [], nextCursor?: string}, got: ${JSON.stringify(Object.keys(responseData))}`);
-      }
-
-      return responseData;
+      return this.validateListResponse<Credential>(response.data, 'credentials');
     } catch (error) {
       throw handleN8nApiError(error);
     }
@@ -369,31 +345,23 @@ export class N8nApiClient {
   }
 
   // Tag Management
+  /**
+   * Lists tags from n8n instance.
+   *
+   * @param params - Query parameters for filtering and pagination
+   * @returns Paginated list of tags
+   *
+   * @remarks
+   * This method handles two response formats for backwards compatibility:
+   * - Modern (n8n v0.200.0+): {data: Tag[], nextCursor?: string}
+   * - Legacy (older versions): Tag[] (wrapped automatically)
+   *
+   * @see https://github.com/czlonkowski/n8n-mcp/issues/349
+   */
   async listTags(params: TagListParams = {}): Promise<TagListResponse> {
     try {
       const response = await this.client.get('/tags', { params });
-      const responseData = response.data;
-
-      // Validate response structure
-      if (!responseData || typeof responseData !== 'object') {
-        throw new Error('Invalid response from n8n API: response is not an object');
-      }
-
-      // Handle case where response.data is an array (older n8n versions or different API format)
-      if (Array.isArray(responseData)) {
-        logger.warn('n8n API returned array directly instead of {data, nextCursor} object for tags. Wrapping in expected format.');
-        return {
-          data: responseData,
-          nextCursor: null
-        };
-      }
-
-      // Validate expected format {data: [], nextCursor?: string}
-      if (!Array.isArray(responseData.data)) {
-        throw new Error(`Invalid response from n8n API for tags: expected {data: [], nextCursor?: string}, got: ${JSON.stringify(Object.keys(responseData))}`);
-      }
-
-      return responseData;
+      return this.validateListResponse<Tag>(response.data, 'tags');
     } catch (error) {
       throw handleN8nApiError(error);
     }
@@ -495,5 +463,50 @@ export class N8nApiClient {
     } catch (error) {
       throw handleN8nApiError(error);
     }
+  }
+
+  /**
+   * Validates and normalizes n8n API list responses.
+   * Handles both modern format {data: [], nextCursor?: string} and legacy array format.
+   *
+   * @param responseData - Raw response data from n8n API
+   * @param resourceType - Resource type for error messages (e.g., 'workflows', 'executions')
+   * @returns Normalized response in modern format
+   * @throws Error if response structure is invalid
+   */
+  private validateListResponse<T>(
+    responseData: any,
+    resourceType: string
+  ): { data: T[]; nextCursor?: string | null } {
+    // Validate response structure
+    if (!responseData || typeof responseData !== 'object') {
+      throw new Error(`Invalid response from n8n API for ${resourceType}: response is not an object`);
+    }
+
+    // Handle legacy case where API returns array directly (older n8n versions)
+    if (Array.isArray(responseData)) {
+      logger.warn(
+        `n8n API returned array directly instead of {data, nextCursor} object for ${resourceType}. ` +
+        'Wrapping in expected format for backwards compatibility.'
+      );
+      return {
+        data: responseData,
+        nextCursor: null
+      };
+    }
+
+    // Validate expected format {data: [], nextCursor?: string}
+    if (!Array.isArray(responseData.data)) {
+      const keys = Object.keys(responseData).slice(0, 5);
+      const keysPreview = keys.length < Object.keys(responseData).length
+        ? `${keys.join(', ')}...`
+        : keys.join(', ');
+      throw new Error(
+        `Invalid response from n8n API for ${resourceType}: expected {data: [], nextCursor?: string}, ` +
+        `got object with keys: [${keysPreview}]`
+      );
+    }
+
+    return responseData;
   }
 }
