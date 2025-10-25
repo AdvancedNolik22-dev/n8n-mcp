@@ -142,19 +142,13 @@ jobs:
           if [ -z "$PREVIOUS_TAG" ]; then
             echo "ℹ️ No previous tag found, this might be the first release"
 
-            # Get all commits up to current commit - use heredoc for multiline
-            NOTES=$(cat <<EOF
-### Initial Release
-
-This is the initial release of n8n-mcp v$CURRENT_VERSION.
-
----
-
-**Release Statistics:**
-- Commit count: $(git rev-list --count HEAD)
-- First release setup
-EOF
-)
+            # Generate initial release notes using script
+            if NOTES=$(node scripts/generate-initial-release-notes.js "$CURRENT_VERSION" 2>/dev/null); then
+              echo "✅ Successfully generated initial release notes for version $CURRENT_VERSION"
+            else
+              echo "⚠️ Could not generate initial release notes for version $CURRENT_VERSION"
+              NOTES="Initial release v$CURRENT_VERSION"
+            fi
 
             echo "has-notes=true" >> $GITHUB_OUTPUT
 
