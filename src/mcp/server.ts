@@ -296,19 +296,24 @@ export class N8NDocumentationMCPServer {
         throw new Error('Database is empty. Run "npm run rebuild" to populate node data.');
       }
 
-      // Check if FTS5 table exists
-      const ftsExists = this.db.prepare(`
-        SELECT name FROM sqlite_master
-        WHERE type='table' AND name='nodes_fts'
-      `).get();
+      // Check if FTS5 table exists (wrap in try-catch for sql.js compatibility)
+      try {
+        const ftsExists = this.db.prepare(`
+          SELECT name FROM sqlite_master
+          WHERE type='table' AND name='nodes_fts'
+        `).get();
 
-      if (!ftsExists) {
-        logger.warn('FTS5 table missing - search performance will be degraded. Please run: npm run rebuild');
-      } else {
-        const ftsCount = this.db.prepare('SELECT COUNT(*) as count FROM nodes_fts').get() as { count: number };
-        if (ftsCount.count === 0) {
-          logger.warn('FTS5 index is empty - search will not work properly. Please run: npm run rebuild');
+        if (!ftsExists) {
+          logger.warn('FTS5 table missing - search performance will be degraded. Please run: npm run rebuild');
+        } else {
+          const ftsCount = this.db.prepare('SELECT COUNT(*) as count FROM nodes_fts').get() as { count: number };
+          if (ftsCount.count === 0) {
+            logger.warn('FTS5 index is empty - search will not work properly. Please run: npm run rebuild');
+          }
         }
+      } catch (ftsError) {
+        // FTS5 not supported (e.g., sql.js fallback) - this is OK, just warn
+        logger.warn('FTS5 not available - using fallback search. For better performance, ensure better-sqlite3 is properly installed.');
       }
 
       logger.info(`Database health check passed: ${nodeCount.count} nodes loaded`);
