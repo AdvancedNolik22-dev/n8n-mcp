@@ -70,4 +70,4 @@ We may update this privacy policy from time to time. Updates will be reflected i
 For questions about telemetry or privacy, please open an issue on GitHub:
 https://github.com/czlonkowski/n8n-mcp/issues
 
-Last updated: 2025-09-25
+Last updated: 2025-11-06
