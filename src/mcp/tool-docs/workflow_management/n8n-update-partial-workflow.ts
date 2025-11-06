@@ -4,7 +4,7 @@ export const n8nUpdatePartialWorkflowDoc: ToolDocumentation = {
   name: 'n8n_update_partial_workflow',
   category: 'workflow_management',
   essentials: {
-    description: 'Update workflow incrementally with diff operations. Types: addNode, removeNode, updateNode, moveNode, enable/disableNode, addConnection, removeConnection, rewireConnection, cleanStaleConnections, replaceConnections, updateSettings, updateName, add/removeTag. Supports smart parameters (branch, case) for multi-output nodes. Full support for AI connections (ai_languageModel, ai_tool, ai_memory, ai_embedding, ai_vectorStore, ai_document, ai_textSplitter, ai_outputParser).',
+    description: 'Update workflow incrementally with diff operations. Types: addNode, removeNode, updateNode, moveNode, enable/disableNode, addConnection, removeConnection, rewireConnection, cleanStaleConnections, replaceConnections, updateSettings, updateName, add/removeTag, activateWorkflow, deactivateWorkflow. Supports smart parameters (branch, case) for multi-output nodes. Full support for AI connections (ai_languageModel, ai_tool, ai_memory, ai_embedding, ai_vectorStore, ai_document, ai_textSplitter, ai_outputParser).',
     keyParameters: ['id', 'operations', 'continueOnError'],
     example: 'n8n_update_partial_workflow({id: "wf_123", operations: [{type: "rewireConnection", source: "IF", from: "Old", to: "New", branch: "true"}]})',
     performance: 'Fast (50-200ms)',
@@ -19,11 +19,12 @@ export const n8nUpdatePartialWorkflowDoc: ToolDocumentation = {
       'For AI connections, specify sourceOutput type (ai_languageModel, ai_tool, etc.)',
       'Batch AI component connections for atomic updates',
       'Auto-sanitization: ALL nodes auto-fixed during updates (operator structures, missing metadata)',
-      'Node renames automatically update all connection references - no manual connection operations needed'
+      'Node renames automatically update all connection references - no manual connection operations needed',
+      'Activate/deactivate workflows: Use activateWorkflow/deactivateWorkflow operations (requires activatable triggers like webhook/schedule)'
     ]
   },
   full: {
-    description: `Updates workflows using surgical diff operations instead of full replacement. Supports 15 operation types for precise modifications. Operations are validated and applied atomically by default - all succeed or none are applied.
+    description: `Updates workflows using surgical diff operations instead of full replacement. Supports 17 operation types for precise modifications. Operations are validated and applied atomically by default - all succeed or none are applied.
 
 ## Available Operations:
 
@@ -47,6 +48,10 @@ export const n8nUpdatePartialWorkflowDoc: ToolDocumentation = {
 - **updateName**: Rename the workflow
 - **addTag**: Add a workflow tag
 - **removeTag**: Remove a workflow tag
+
+### Workflow Activation Operations (2 types):
+- **activateWorkflow**: Activate the workflow to enable automatic execution via triggers
+- **deactivateWorkflow**: Deactivate the workflow to prevent automatic execution
 
 ## Smart Parameters for Multi-Output Nodes
 

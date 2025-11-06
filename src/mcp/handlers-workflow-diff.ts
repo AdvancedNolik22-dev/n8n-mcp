@@ -245,15 +245,52 @@ export async function handleUpdatePartialWorkflow(
     // Update workflow via API
     try {
       const updatedWorkflow = await client.updateWorkflow(input.id, diffResult.workflow!);
-      
+
+      // Handle activation/deactivation if requested
+      let finalWorkflow = updatedWorkflow;
+      let activationMessage = '';
+
+      if (diffResult.shouldActivate) {
+        try {
+          finalWorkflow = await client.activateWorkflow(input.id);
+          activationMessage = ' Workflow activated.';
+        } catch (activationError) {
+          logger.error('Failed to activate workflow after update', activationError);
+          return {
+            success: false,
+            error: 'Workflow updated successfully but activation failed',
+            details: {
+              workflowUpdated: true,
+              activationError: activationError instanceof Error ? activationError.message : 'Unknown error'
+            }
+          };
+        }
+      } else if (diffResult.shouldDeactivate) {
+        try {
+          finalWorkflow = await client.deactivateWorkflow(input.id);
+          activationMessage = ' Workflow deactivated.';
+        } catch (deactivationError) {
+          logger.error('Failed to deactivate workflow after update', deactivationError);
+          return {
+            success: false,
+            error: 'Workflow updated successfully but deactivation failed',
+            details: {
+              workflowUpdated: true,
+              deactivationError: deactivationError instanceof Error ? deactivationError.message : 'Unknown error'
+            }
+          };
+        }
+      }
+
       return {
         success: true,
-        data: updatedWorkflow,
-        message: `Workflow "${updatedWorkflow.name}" updated successfully. Applied ${diffResult.operationsApplied} operations.`,
+        data: finalWorkflow,
+        message: `Workflow "${finalWorkflow.name}" updated successfully. Applied ${diffResult.operationsApplied} operations.${activationMessage}`,
         details: {
           operationsApplied: diffResult.operationsApplied,
-          workflowId: updatedWorkflow.id,
-          workflowName: updatedWorkflow.name,
+          workflowId: finalWorkflow.id,
+          workflowName: finalWorkflow.name,
+          active: finalWorkflow.active,
           applied: diffResult.applied,
           failed: diffResult.failed,
           errors: diffResult.errors,
