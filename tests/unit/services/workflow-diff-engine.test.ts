@@ -4320,6 +4320,7 @@ describe('WorkflowDiffEngine', () => {
           id: 'set-1',
           name: 'Set Node',
           type: 'n8n-nodes-base.set',
+          typeVersion: 1,
           position: [100, 100],
           parameters: {}
         })
@@ -4411,6 +4412,7 @@ describe('WorkflowDiffEngine', () => {
           id: 'schedule-1',
           name: 'Schedule',
           type: 'n8n-nodes-base.scheduleTrigger',
+          typeVersion: 1,
           position: [100, 100],
           parameters: { rule: { interval: [{ field: 'hours', hoursInterval: 1 }] } }
         })
@@ -4477,6 +4479,7 @@ describe('WorkflowDiffEngine', () => {
           id: 'set-1',
           name: 'Set',
           type: 'n8n-nodes-base.set',
+          typeVersion: 1,
           position: [300, 100],
           parameters: {}
         })
@@ -4577,6 +4580,7 @@ describe('WorkflowDiffEngine', () => {
           id: 'execute-1',
           name: 'Execute Workflow Trigger',
           type: 'n8n-nodes-base.executeWorkflowTrigger',
+          typeVersion: 1,
           position: [100, 100],
           parameters: {}
         })
