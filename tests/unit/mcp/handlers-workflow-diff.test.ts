@@ -156,9 +156,11 @@ describe('handlers-workflow-diff', () => {
           operationsApplied: 1,
           workflowId: 'test-workflow-id',
           workflowName: 'Test Workflow',
+          active: true,
           applied: [0],
           failed: [],
           errors: [],
+          warnings: undefined,
         },
       });
 
