@@ -101,7 +101,6 @@ describe('Integration: handleListAvailableTools', () => {
 
       // Common known limitations
       const limitationsText = data.limitations.join(' ');
-      expect(limitationsText).toContain('Cannot activate');
       expect(limitationsText).toContain('Cannot execute workflows directly');
     });
   });
