@@ -1561,7 +1561,6 @@ export async function handleListAvailableTools(context?: InstanceContext): Promi
         maxRetries: config.maxRetries
       } : null,
       limitations: [
-        'Cannot activate/deactivate workflows via API',
         'Cannot execute workflows directly (must use webhooks)',
         'Cannot stop running executions',
         'Tags and credentials have limited API support'

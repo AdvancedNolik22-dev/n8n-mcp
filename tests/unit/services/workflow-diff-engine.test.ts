@@ -4269,4 +4269,358 @@ describe('WorkflowDiffEngine', () => {
       expect(result.workflow.connections["When clicking 'Execute workflow'"]).toBeDefined();
     });
   });
+
+  describe('Workflow Activation/Deactivation Operations', () => {
+    it('should activate workflow with activatable trigger nodes', async () => {
+      // Create workflow with webhook trigger (activatable)
+      const workflowWithTrigger = createWorkflow('Test Workflow')
+        .addWebhookNode({ id: 'webhook-1', name: 'Webhook Trigger' })
+        .addHttpRequestNode({ id: 'http-1', name: 'HTTP Request' })
+        .connect('webhook-1', 'http-1')
+        .build() as Workflow;
+
+      // Fix connections to use node names
+      const newConnections: any = {};
+      for (const [nodeId, outputs] of Object.entries(workflowWithTrigger.connections)) {
+        const node = workflowWithTrigger.nodes.find((n: any) => n.id === nodeId);
+        if (node) {
+          newConnections[node.name] = {};
+          for (const [outputName, connections] of Object.entries(outputs)) {
+            newConnections[node.name][outputName] = (connections as any[]).map((conns: any) =>
+              conns.map((conn: any) => {
+                const targetNode = workflowWithTrigger.nodes.find((n: any) => n.id === conn.node);
+                return { ...conn, node: targetNode ? targetNode.name : conn.node };
+              })
+            );
+          }
+        }
+      }
+      workflowWithTrigger.connections = newConnections;
+
+      const operation: any = {
+        type: 'activateWorkflow'
+      };
+
+      const request: WorkflowDiffRequest = {
+        id: 'test-workflow',
+        operations: [operation]
+      };
+
+      const result = await diffEngine.applyDiff(workflowWithTrigger, request);
+
+      expect(result.success).toBe(true);
+      expect(result.shouldActivate).toBe(true);
+      expect((result.workflow as any)._shouldActivate).toBeUndefined(); // Flag should be cleaned up
+    });
+
+    it('should reject activation if no activatable trigger nodes', async () => {
+      // Create workflow with no trigger nodes at all
+      const workflowWithoutActivatableTrigger = createWorkflow('Test Workflow')
+        .addNode({
+          id: 'set-1',
+          name: 'Set Node',
+          type: 'n8n-nodes-base.set',
+          typeVersion: 1,
+          position: [100, 100],
+          parameters: {}
+        })
+        .addHttpRequestNode({ id: 'http-1', name: 'HTTP Request' })
+        .connect('set-1', 'http-1')
+        .build() as Workflow;
+
+      // Fix connections to use node names
+      const newConnections: any = {};
+      for (const [nodeId, outputs] of Object.entries(workflowWithoutActivatableTrigger.connections)) {
+        const node = workflowWithoutActivatableTrigger.nodes.find((n: any) => n.id === nodeId);
+        if (node) {
+          newConnections[node.name] = {};
+          for (const [outputName, connections] of Object.entries(outputs)) {
+            newConnections[node.name][outputName] = (connections as any[]).map((conns: any) =>
+              conns.map((conn: any) => {
+                const targetNode = workflowWithoutActivatableTrigger.nodes.find((n: any) => n.id === conn.node);
+                return { ...conn, node: targetNode ? targetNode.name : conn.node };
+              })
+            );
+          }
+        }
+      }
+      workflowWithoutActivatableTrigger.connections = newConnections;
+
+      const operation: any = {
+        type: 'activateWorkflow'
+      };
+
+      const request: WorkflowDiffRequest = {
+        id: 'test-workflow',
+        operations: [operation]
+      };
+
+      const result = await diffEngine.applyDiff(workflowWithoutActivatableTrigger, request);
+
+      expect(result.success).toBe(false);
+      expect(result.errors).toBeDefined();
+      expect(result.errors![0].message).toContain('No activatable trigger nodes found');
+      expect(result.errors![0].message).toContain('executeWorkflowTrigger cannot activate workflows');
+    });
+
+    it('should reject activation if all trigger nodes are disabled', async () => {
+      // Create workflow with disabled webhook trigger
+      const workflowWithDisabledTrigger = createWorkflow('Test Workflow')
+        .addWebhookNode({ id: 'webhook-1', name: 'Webhook Trigger', disabled: true })
+        .addHttpRequestNode({ id: 'http-1', name: 'HTTP Request' })
+        .connect('webhook-1', 'http-1')
+        .build() as Workflow;
+
+      // Fix connections to use node names
+      const newConnections: any = {};
+      for (const [nodeId, outputs] of Object.entries(workflowWithDisabledTrigger.connections)) {
+        const node = workflowWithDisabledTrigger.nodes.find((n: any) => n.id === nodeId);
+        if (node) {
+          newConnections[node.name] = {};
+          for (const [outputName, connections] of Object.entries(outputs)) {
+            newConnections[node.name][outputName] = (connections as any[]).map((conns: any) =>
+              conns.map((conn: any) => {
+                const targetNode = workflowWithDisabledTrigger.nodes.find((n: any) => n.id === conn.node);
+                return { ...conn, node: targetNode ? targetNode.name : conn.node };
+              })
+            );
+          }
+        }
+      }
+      workflowWithDisabledTrigger.connections = newConnections;
+
+      const operation: any = {
+        type: 'activateWorkflow'
+      };
+
+      const request: WorkflowDiffRequest = {
+        id: 'test-workflow',
+        operations: [operation]
+      };
+
+      const result = await diffEngine.applyDiff(workflowWithDisabledTrigger, request);
+
+      expect(result.success).toBe(false);
+      expect(result.errors).toBeDefined();
+      expect(result.errors![0].message).toContain('No activatable trigger nodes found');
+    });
+
+    it('should activate workflow with schedule trigger', async () => {
+      // Create workflow with schedule trigger (activatable)
+      const workflowWithSchedule = createWorkflow('Test Workflow')
+        .addNode({
+          id: 'schedule-1',
+          name: 'Schedule',
+          type: 'n8n-nodes-base.scheduleTrigger',
+          typeVersion: 1,
+          position: [100, 100],
+          parameters: { rule: { interval: [{ field: 'hours', hoursInterval: 1 }] } }
+        })
+        .addHttpRequestNode({ id: 'http-1', name: 'HTTP Request' })
+        .connect('schedule-1', 'http-1')
+        .build() as Workflow;
+
+      // Fix connections
+      const newConnections: any = {};
+      for (const [nodeId, outputs] of Object.entries(workflowWithSchedule.connections)) {
+        const node = workflowWithSchedule.nodes.find((n: any) => n.id === nodeId);
+        if (node) {
+          newConnections[node.name] = {};
+          for (const [outputName, connections] of Object.entries(outputs)) {
+            newConnections[node.name][outputName] = (connections as any[]).map((conns: any) =>
+              conns.map((conn: any) => {
+                const targetNode = workflowWithSchedule.nodes.find((n: any) => n.id === conn.node);
+                return { ...conn, node: targetNode ? targetNode.name : conn.node };
+              })
+            );
+          }
+        }
+      }
+      workflowWithSchedule.connections = newConnections;
+
+      const operation: any = {
+        type: 'activateWorkflow'
+      };
+
+      const request: WorkflowDiffRequest = {
+        id: 'test-workflow',
+        operations: [operation]
+      };
+
+      const result = await diffEngine.applyDiff(workflowWithSchedule, request);
+
+      expect(result.success).toBe(true);
+      expect(result.shouldActivate).toBe(true);
+    });
+
+    it('should deactivate workflow successfully', async () => {
+      // Any workflow can be deactivated
+      const operation: any = {
+        type: 'deactivateWorkflow'
+      };
+
+      const request: WorkflowDiffRequest = {
+        id: 'test-workflow',
+        operations: [operation]
+      };
+
+      const result = await diffEngine.applyDiff(baseWorkflow, request);
+
+      expect(result.success).toBe(true);
+      expect(result.shouldDeactivate).toBe(true);
+      expect((result.workflow as any)._shouldDeactivate).toBeUndefined(); // Flag should be cleaned up
+    });
+
+    it('should deactivate workflow without trigger nodes', async () => {
+      // Create workflow without any trigger nodes
+      const workflowWithoutTrigger = createWorkflow('Test Workflow')
+        .addHttpRequestNode({ id: 'http-1', name: 'HTTP Request' })
+        .addNode({
+          id: 'set-1',
+          name: 'Set',
+          type: 'n8n-nodes-base.set',
+          typeVersion: 1,
+          position: [300, 100],
+          parameters: {}
+        })
+        .connect('http-1', 'set-1')
+        .build() as Workflow;
+
+      // Fix connections
+      const newConnections: any = {};
+      for (const [nodeId, outputs] of Object.entries(workflowWithoutTrigger.connections)) {
+        const node = workflowWithoutTrigger.nodes.find((n: any) => n.id === nodeId);
+        if (node) {
+          newConnections[node.name] = {};
+          for (const [outputName, connections] of Object.entries(outputs)) {
+            newConnections[node.name][outputName] = (connections as any[]).map((conns: any) =>
+              conns.map((conn: any) => {
+                const targetNode = workflowWithoutTrigger.nodes.find((n: any) => n.id === conn.node);
+                return { ...conn, node: targetNode ? targetNode.name : conn.node };
+              })
+            );
+          }
+        }
+      }
+      workflowWithoutTrigger.connections = newConnections;
+
+      const operation: any = {
+        type: 'deactivateWorkflow'
+      };
+
+      const request: WorkflowDiffRequest = {
+        id: 'test-workflow',
+        operations: [operation]
+      };
+
+      const result = await diffEngine.applyDiff(workflowWithoutTrigger, request);
+
+      expect(result.success).toBe(true);
+      expect(result.shouldDeactivate).toBe(true);
+    });
+
+    it('should combine activation with other operations', async () => {
+      // Create workflow with webhook trigger
+      const workflowWithTrigger = createWorkflow('Test Workflow')
+        .addWebhookNode({ id: 'webhook-1', name: 'Webhook Trigger' })
+        .addHttpRequestNode({ id: 'http-1', name: 'HTTP Request' })
+        .connect('webhook-1', 'http-1')
+        .build() as Workflow;
+
+      // Fix connections
+      const newConnections: any = {};
+      for (const [nodeId, outputs] of Object.entries(workflowWithTrigger.connections)) {
+        const node = workflowWithTrigger.nodes.find((n: any) => n.id === nodeId);
+        if (node) {
+          newConnections[node.name] = {};
+          for (const [outputName, connections] of Object.entries(outputs)) {
+            newConnections[node.name][outputName] = (connections as any[]).map((conns: any) =>
+              conns.map((conn: any) => {
+                const targetNode = workflowWithTrigger.nodes.find((n: any) => n.id === conn.node);
+                return { ...conn, node: targetNode ? targetNode.name : conn.node };
+              })
+            );
+          }
+        }
+      }
+      workflowWithTrigger.connections = newConnections;
+
+      const operations: any[] = [
+        {
+          type: 'updateName',
+          name: 'Updated Workflow Name'
+        },
+        {
+          type: 'addTag',
+          tag: 'production'
+        },
+        {
+          type: 'activateWorkflow'
+        }
+      ];
+
+      const request: WorkflowDiffRequest = {
+        id: 'test-workflow',
+        operations
+      };
+
+      const result = await diffEngine.applyDiff(workflowWithTrigger, request);
+
+      expect(result.success).toBe(true);
+      expect(result.operationsApplied).toBe(3);
+      expect(result.workflow!.name).toBe('Updated Workflow Name');
+      expect(result.workflow!.tags).toContain('production');
+      expect(result.shouldActivate).toBe(true);
+    });
+
+    it('should reject activation if workflow has executeWorkflowTrigger only', async () => {
+      // Create workflow with executeWorkflowTrigger (not activatable - Issue #351)
+      const workflowWithExecuteTrigger = createWorkflow('Test Workflow')
+        .addNode({
+          id: 'execute-1',
+          name: 'Execute Workflow Trigger',
+          type: 'n8n-nodes-base.executeWorkflowTrigger',
+          typeVersion: 1,
+          position: [100, 100],
+          parameters: {}
+        })
+        .addHttpRequestNode({ id: 'http-1', name: 'HTTP Request' })
+        .connect('execute-1', 'http-1')
+        .build() as Workflow;
+
+      // Fix connections
+      const newConnections: any = {};
+      for (const [nodeId, outputs] of Object.entries(workflowWithExecuteTrigger.connections)) {
+        const node = workflowWithExecuteTrigger.nodes.find((n: any) => n.id === nodeId);
+        if (node) {
+          newConnections[node.name] = {};
+          for (const [outputName, connections] of Object.entries(outputs)) {
+            newConnections[node.name][outputName] = (connections as any[]).map((conns: any) =>
+              conns.map((conn: any) => {
+                const targetNode = workflowWithExecuteTrigger.nodes.find((n: any) => n.id === conn.node);
+                return { ...conn, node: targetNode ? targetNode.name : conn.node };
+              })
+            );
+          }
+        }
+      }
+      workflowWithExecuteTrigger.connections = newConnections;
+
+      const operation: any = {
+        type: 'activateWorkflow'
+      };
+
+      const request: WorkflowDiffRequest = {
+        id: 'test-workflow',
+        operations: [operation]
+      };
+
+      const result = await diffEngine.applyDiff(workflowWithExecuteTrigger, request);
+
+      expect(result.success).toBe(false);
+      expect(result.errors).toBeDefined();
+      expect(result.errors![0].message).toContain('No activatable trigger nodes found');
+      expect(result.errors![0].message).toContain('executeWorkflowTrigger cannot activate workflows');
+    });
+  });
 });

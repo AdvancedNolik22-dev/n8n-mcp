@@ -362,19 +362,19 @@ describe('N8nApiClient', () => {
 
     it('should delete workflow successfully', async () => {
       mockAxiosInstance.delete.mockResolvedValue({ data: {} });
-      
+
       await client.deleteWorkflow('123');
-      
+
       expect(mockAxiosInstance.delete).toHaveBeenCalledWith('/workflows/123');
     });
 
     it('should handle deletion error', async () => {
-      const error = { 
+      const error = {
         message: 'Request failed',
-        response: { status: 404, data: { message: 'Not found' } } 
+        response: { status: 404, data: { message: 'Not found' } }
       };
       await mockAxiosInstance.simulateError('delete', error);
-      
+
       try {
         await client.deleteWorkflow('123');
         expect.fail('Should have thrown an error');
@@ -382,6 +382,178 @@ describe('N8nApiClient', () => {
         expect(err).toBeInstanceOf(N8nNotFoundError);
         expect((err as N8nNotFoundError).message).toContain('not found');
         expect((err as N8nNotFoundError).statusCode).toBe(404);
+      }
+    });
+  });
+
+  describe('activateWorkflow', () => {
+    beforeEach(() => {
+      client = new N8nApiClient(defaultConfig);
+    });
+
+    it('should activate workflow successfully', async () => {
+      const workflow = { id: '123', name: 'Test', active: false, nodes: [], connections: {} };
+      const activatedWorkflow = { ...workflow, active: true };
+      mockAxiosInstance.post.mockResolvedValue({ data: activatedWorkflow });
+
+      const result = await client.activateWorkflow('123');
+
+      expect(mockAxiosInstance.post).toHaveBeenCalledWith('/workflows/123/activate');
+      expect(result).toEqual(activatedWorkflow);
+      expect(result.active).toBe(true);
+    });
+
+    it('should handle activation error - no trigger nodes', async () => {
+      const error = {
+        message: 'Request failed',
+        response: { status: 400, data: { message: 'Workflow must have at least one trigger node' } }
+      };
+      await mockAxiosInstance.simulateError('post', error);
+
+      try {
+        await client.activateWorkflow('123');
+        expect.fail('Should have thrown an error');
+      } catch (err) {
+        expect(err).toBeInstanceOf(N8nValidationError);
+        expect((err as N8nValidationError).message).toContain('trigger node');
+        expect((err as N8nValidationError).statusCode).toBe(400);
+      }
+    });
+
+    it('should handle activation error - workflow not found', async () => {
+      const error = {
+        message: 'Request failed',
+        response: { status: 404, data: { message: 'Workflow not found' } }
+      };
+      await mockAxiosInstance.simulateError('post', error);
+
+      try {
+        await client.activateWorkflow('non-existent');
+        expect.fail('Should have thrown an error');
+      } catch (err) {
+        expect(err).toBeInstanceOf(N8nNotFoundError);
+        expect((err as N8nNotFoundError).message).toContain('not found');
+        expect((err as N8nNotFoundError).statusCode).toBe(404);
+      }
+    });
+
+    it('should handle activation error - workflow already active', async () => {
+      const error = {
+        message: 'Request failed',
+        response: { status: 400, data: { message: 'Workflow is already active' } }
+      };
+      await mockAxiosInstance.simulateError('post', error);
+
+      try {
+        await client.activateWorkflow('123');
+        expect.fail('Should have thrown an error');
+      } catch (err) {
+        expect(err).toBeInstanceOf(N8nValidationError);
+        expect((err as N8nValidationError).message).toContain('already active');
+        expect((err as N8nValidationError).statusCode).toBe(400);
+      }
+    });
+
+    it('should handle server error during activation', async () => {
+      const error = {
+        message: 'Request failed',
+        response: { status: 500, data: { message: 'Internal server error' } }
+      };
+      await mockAxiosInstance.simulateError('post', error);
+
+      try {
+        await client.activateWorkflow('123');
+        expect.fail('Should have thrown an error');
+      } catch (err) {
+        expect(err).toBeInstanceOf(N8nServerError);
+        expect((err as N8nServerError).message).toBe('Internal server error');
+        expect((err as N8nServerError).statusCode).toBe(500);
+      }
+    });
+  });
+
+  describe('deactivateWorkflow', () => {
+    beforeEach(() => {
+      client = new N8nApiClient(defaultConfig);
+    });
+
+    it('should deactivate workflow successfully', async () => {
+      const workflow = { id: '123', name: 'Test', active: true, nodes: [], connections: {} };
+      const deactivatedWorkflow = { ...workflow, active: false };
+      mockAxiosInstance.post.mockResolvedValue({ data: deactivatedWorkflow });
+
+      const result = await client.deactivateWorkflow('123');
+
+      expect(mockAxiosInstance.post).toHaveBeenCalledWith('/workflows/123/deactivate');
+      expect(result).toEqual(deactivatedWorkflow);
+      expect(result.active).toBe(false);
+    });
+
+    it('should handle deactivation error - workflow not found', async () => {
+      const error = {
+        message: 'Request failed',
+        response: { status: 404, data: { message: 'Workflow not found' } }
+      };
+      await mockAxiosInstance.simulateError('post', error);
+
+      try {
+        await client.deactivateWorkflow('non-existent');
+        expect.fail('Should have thrown an error');
+      } catch (err) {
+        expect(err).toBeInstanceOf(N8nNotFoundError);
+        expect((err as N8nNotFoundError).message).toContain('not found');
+        expect((err as N8nNotFoundError).statusCode).toBe(404);
+      }
+    });
+
+    it('should handle deactivation error - workflow already inactive', async () => {
+      const error = {
+        message: 'Request failed',
+        response: { status: 400, data: { message: 'Workflow is already inactive' } }
+      };
+      await mockAxiosInstance.simulateError('post', error);
+
+      try {
+        await client.deactivateWorkflow('123');
+        expect.fail('Should have thrown an error');
+      } catch (err) {
+        expect(err).toBeInstanceOf(N8nValidationError);
+        expect((err as N8nValidationError).message).toContain('already inactive');
+        expect((err as N8nValidationError).statusCode).toBe(400);
+      }
+    });
+
+    it('should handle server error during deactivation', async () => {
+      const error = {
+        message: 'Request failed',
+        response: { status: 500, data: { message: 'Internal server error' } }
+      };
+      await mockAxiosInstance.simulateError('post', error);
+
+      try {
+        await client.deactivateWorkflow('123');
+        expect.fail('Should have thrown an error');
+      } catch (err) {
+        expect(err).toBeInstanceOf(N8nServerError);
+        expect((err as N8nServerError).message).toBe('Internal server error');
+        expect((err as N8nServerError).statusCode).toBe(500);
+      }
+    });
+
+    it('should handle authentication error during deactivation', async () => {
+      const error = {
+        message: 'Request failed',
+        response: { status: 401, data: { message: 'Invalid API key' } }
+      };
+      await mockAxiosInstance.simulateError('post', error);
+
+      try {
+        await client.deactivateWorkflow('123');
+        expect.fail('Should have thrown an error');
+      } catch (err) {
+        expect(err).toBeInstanceOf(N8nAuthenticationError);
+        expect((err as N8nAuthenticationError).message).toBe('Invalid API key');
+        expect((err as N8nAuthenticationError).statusCode).toBe(401);
       }
     });
   });

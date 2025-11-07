@@ -7,6 +7,111 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.22.11] - 2025-01-06
+
+### ✨ New Features
+
+**Issue #399: Workflow Activation via Diff Operations**
+
+Added workflow activation and deactivation as diff operations in `n8n_update_partial_workflow`, using n8n's dedicated API endpoints.
+
+#### Problem
+
+The n8n API provides dedicated `POST /workflows/{id}/activate` and `POST /workflows/{id}/deactivate` endpoints, but these were not accessible through n8n-mcp. Users could not programmatically control workflow activation status, forcing manual activation through the n8n UI.
+
+#### Solution
+
+Implemented activation/deactivation as diff operations, following the established pattern of metadata operations like `updateSettings` and `updateName`. This keeps the tool count manageable (40 tools, not 42) and provides a consistent interface.
+
+#### Changes
+
+**API Client** (`src/services/n8n-api-client.ts`):
+- Added `activateWorkflow(id: string): Promise<Workflow>` method
+- Added `deactivateWorkflow(id: string): Promise<Workflow>` method
+- Both use POST requests to dedicated n8n API endpoints
+
+**Diff Engine Types** (`src/types/workflow-diff.ts`):
+- Added `ActivateWorkflowOperation` interface
+- Added `DeactivateWorkflowOperation` interface
+- Added `shouldActivate` and `shouldDeactivate` flags to `WorkflowDiffResult`
+- Increased supported operations from 15 to 17
+
+**Diff Engine** (`src/services/workflow-diff-engine.ts`):
+- Added validation for activation (requires activatable triggers)
+- Added operation application logic
+- Transfers activation intent from workflow object to result
+- Validates workflow has activatable triggers (webhook, schedule, etc.)
+- Rejects workflows with only `executeWorkflowTrigger` (cannot activate)
+
+**Handler** (`src/mcp/handlers-workflow-diff.ts`):
+- Checks `shouldActivate` and `shouldDeactivate` flags after workflow update
+- Calls appropriate API methods
+- Includes activation status in response message and details
+- Handles activation/deactivation errors gracefully
+
+**Documentation** (`src/mcp/tool-docs/workflow_management/n8n-update-partial-workflow.ts`):
+- Updated operation count from 15 to 17
+- Added "Workflow Activation Operations" section
+- Added activation tip to essentials
+
+**Tool Registration** (`src/mcp/handlers-n8n-manager.ts`):
+- Removed "Cannot activate/deactivate workflows via API" from limitations
+
+#### Usage
+
+```javascript
+// Activate workflow
+n8n_update_partial_workflow({
+  id: "workflow_id",
+  operations: [{
+    type: "activateWorkflow"
+  }]
+})
+
+// Deactivate workflow
+n8n_update_partial_workflow({
+  id: "workflow_id",
+  operations: [{
+    type: "deactivateWorkflow"
+  }]
+})
+
+// Combine with other operations
+n8n_update_partial_workflow({
+  id: "workflow_id",
+  operations: [
+    {type: "updateNode", nodeId: "abc", updates: {name: "Updated"}},
+    {type: "activateWorkflow"}
+  ]
+})
+```
+
+#### Validation
+
+- **Activation**: Requires at least one enabled activatable trigger node
+- **Deactivation**: Always valid
+- **Error Handling**: Clear messages when activation fails due to missing triggers
+- **Trigger Detection**: Uses `isActivatableTrigger()` utility (Issue #351 compliance)
+
+#### Benefits
+
+- ✅ Consistent with existing architecture (metadata operations pattern)
+- ✅ Keeps tool count at 40 (not 42)
+- ✅ Atomic operations - activation happens after workflow update
+- ✅ Proper validation - prevents activation without triggers
+- ✅ Clear error messages - guides users on trigger requirements
+- ✅ Works with other operations - can update and activate in one call
+
+#### Credits
+
+- **@ArtemisAI** - Original investigation and API endpoint discovery
+- **@cmj-hub** - Implementation attempt and PR contribution
+- Architectural guidance from project maintainer
+
+Resolves #399
+
+Conceived by Romuald Członkowski - [www.aiadvisors.pl/en](https://www.aiadvisors.pl/en)
+
 ## [2.22.10] - 2025-11-04
 
 ### 🐛 Bug Fixes
