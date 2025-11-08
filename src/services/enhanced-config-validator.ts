@@ -319,7 +319,7 @@ export class EnhancedConfigValidator extends ConfigValidator {
         NodeSpecificValidators.validateMySQL(context);
         break;
 
-      case '@n8n/n8n-nodes-langchain.agent':
+      case 'nodes-langchain.agent':
         NodeSpecificValidators.validateAIAgent(context);
         break;
 

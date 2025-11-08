@@ -139,6 +139,22 @@ Each node must have a unique ID. Generate a new UUID using crypto.randomUUID() -
 
 Conceived by Romuald Członkowski - [www.aiadvisors.pl/en](https://www.aiadvisors.pl/en)
 
+### 🐛 Bug Fixes
+
+**Critical: AI Agent Validator Not Executing**
+
+Fixed nodeType format mismatch bug that prevented the AI Agent validator (Quick Win #3 above) from ever executing.
+
+**The Bug**: Switch case checked for `@n8n/n8n-nodes-langchain.agent` but nodeType was normalized to `nodes-langchain.agent` first, so validator never matched.
+
+**Fix**: Changed `enhanced-config-validator.ts:322` from `case '@n8n/n8n-nodes-langchain.agent':` to `case 'nodes-langchain.agent':`
+
+**Impact**: Without this fix, the AI Agent validator code from Quick Win #3 would never execute, missing 179 configuration errors (30% of failures).
+
+**Testing**: Added verification test in `enhanced-config-validator.test.ts:1137-1169` to ensure validator executes.
+
+**Discovery**: Found by n8n-mcp-tester agent during post-deployment verification of Quick Win #3.
+
 ## [2.22.12] - 2025-01-08
 
 ### 🐛 Bug Fixes

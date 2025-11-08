@@ -14,7 +14,8 @@ vi.mock('@/services/node-specific-validators', () => ({
     validateMongoDB: vi.fn(),
     validateWebhook: vi.fn(),
     validatePostgres: vi.fn(),
-    validateMySQL: vi.fn()
+    validateMySQL: vi.fn(),
+    validateAIAgent: vi.fn()
   }
 }));
 
@@ -1130,6 +1131,40 @@ describe('EnhancedConfigValidator', () => {
             'ai-friendly'
           );
         }).not.toThrow();
+      });
+    });
+
+    describe('AI Agent node validation', () => {
+      it('should call validateAIAgent for AI Agent nodes', () => {
+        const nodeType = 'nodes-langchain.agent';
+        const config = {
+          promptType: 'define',
+          text: 'You are a helpful assistant'
+        };
+        const properties = [
+          { name: 'promptType', type: 'options', required: true },
+          { name: 'text', type: 'string', required: false }
+        ];
+
+        EnhancedConfigValidator.validateWithMode(
+          nodeType,
+          config,
+          properties,
+          'operation',
+          'ai-friendly'
+        );
+
+        // Verify the validator was called (fix for issue where it wasn't being called at all)
+        expect(NodeSpecificValidators.validateAIAgent).toHaveBeenCalledTimes(1);
+
+        // Verify it was called with a context object containing our config
+        const callArgs = (NodeSpecificValidators.validateAIAgent as any).mock.calls[0][0];
+        expect(callArgs).toHaveProperty('config');
+        expect(callArgs.config).toEqual(config);
+        expect(callArgs).toHaveProperty('errors');
+        expect(callArgs).toHaveProperty('warnings');
+        expect(callArgs).toHaveProperty('suggestions');
+        expect(callArgs).toHaveProperty('autofix');
       });
     });
   });
