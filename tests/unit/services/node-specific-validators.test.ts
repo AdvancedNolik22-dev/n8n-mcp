@@ -2355,6 +2355,62 @@ return [{"json": {"result": result}}]
         const textErrors = context.errors.filter(e => e.property === 'text');
         expect(textErrors).toHaveLength(0);
       });
+
+      it('should reject whitespace-only text with promptType "define"', () => {
+        // Edge case: Text is only whitespace
+        context.config.promptType = 'define';
+        context.config.text = '   \n\t  ';
+
+        NodeSpecificValidators.validateAIAgent(context);
+
+        expect(context.errors).toContainEqual({
+          type: 'missing_required',
+          property: 'text',
+          message: 'Custom prompt text is required when promptType is "define"',
+          fix: 'Provide a custom prompt in the text field, or change promptType to "auto"'
+        });
+      });
+
+      it('should accept very long text with promptType "define"', () => {
+        // Edge case: Very long prompt text (common for complex AI agents)
+        context.config.promptType = 'define';
+        context.config.text = 'You are a helpful assistant. '.repeat(100); // 3200 characters
+
+        NodeSpecificValidators.validateAIAgent(context);
+
+        const textErrors = context.errors.filter(e => e.property === 'text');
+        expect(textErrors).toHaveLength(0);
+      });
+
+      it('should handle undefined text with promptType "define"', () => {
+        // Edge case: Text is undefined
+        context.config.promptType = 'define';
+        context.config.text = undefined;
+
+        NodeSpecificValidators.validateAIAgent(context);
+
+        expect(context.errors).toContainEqual({
+          type: 'missing_required',
+          property: 'text',
+          message: 'Custom prompt text is required when promptType is "define"',
+          fix: 'Provide a custom prompt in the text field, or change promptType to "auto"'
+        });
+      });
+
+      it('should handle null text with promptType "define"', () => {
+        // Edge case: Text is null
+        context.config.promptType = 'define';
+        context.config.text = null;
+
+        NodeSpecificValidators.validateAIAgent(context);
+
+        expect(context.errors).toContainEqual({
+          type: 'missing_required',
+          property: 'text',
+          message: 'Custom prompt text is required when promptType is "define"',
+          fix: 'Provide a custom prompt in the text field, or change promptType to "auto"'
+        });
+      });
     });
 
     describe('system message validation', () => {
@@ -2363,9 +2419,11 @@ return [{"json": {"result": result}}]
 
         NodeSpecificValidators.validateAIAgent(context);
 
-        expect(context.suggestions).toContain(
-          expect.stringContaining('system message')
+        // Should contain a suggestion about system message
+        const hasSysMessageSuggestion = context.suggestions.some(s =>
+          s.toLowerCase().includes('system message')
         );
+        expect(hasSysMessageSuggestion).toBe(true);
       });
 
       it('should warn when system message is too short', () => {
@@ -2383,6 +2441,93 @@ return [{"json": {"result": result}}]
 
       it('should accept adequate system message', () => {
         context.config.systemMessage = 'You are a helpful assistant that analyzes customer feedback.';
+
+        NodeSpecificValidators.validateAIAgent(context);
+
+        const systemWarnings = context.warnings.filter(w => w.property === 'systemMessage');
+        expect(systemWarnings).toHaveLength(0);
+      });
+
+      it('should suggest adding system message when empty string', () => {
+        // Edge case: Empty string system message
+        context.config.systemMessage = '';
+
+        NodeSpecificValidators.validateAIAgent(context);
+
+        // Should contain a suggestion about system message
+        const hasSysMessageSuggestion = context.suggestions.some(s =>
+          s.toLowerCase().includes('system message')
+        );
+        expect(hasSysMessageSuggestion).toBe(true);
+      });
+
+      it('should suggest adding system message when whitespace only', () => {
+        // Edge case: Whitespace-only system message
+        context.config.systemMessage = '   \n\t  ';
+
+        NodeSpecificValidators.validateAIAgent(context);
+
+        // Should contain a suggestion about system message
+        const hasSysMessageSuggestion = context.suggestions.some(s =>
+          s.toLowerCase().includes('system message')
+        );
+        expect(hasSysMessageSuggestion).toBe(true);
+      });
+
+      it('should accept very long system messages', () => {
+        // Edge case: Very long system message (>1000 chars) for complex agents
+        context.config.systemMessage = 'You are a highly specialized assistant. '.repeat(30); // ~1260 chars
+
+        NodeSpecificValidators.validateAIAgent(context);
+
+        const systemWarnings = context.warnings.filter(w => w.property === 'systemMessage');
+        expect(systemWarnings).toHaveLength(0);
+      });
+
+      it('should handle system messages with special characters', () => {
+        // Edge case: System message with special characters, emojis, unicode
+        context.config.systemMessage = 'You are an assistant 🤖 that handles data with special chars: @#$%^&*(){}[]|\\/<>~`';
+
+        NodeSpecificValidators.validateAIAgent(context);
+
+        const systemWarnings = context.warnings.filter(w => w.property === 'systemMessage');
+        expect(systemWarnings).toHaveLength(0);
+      });
+
+      it('should handle system messages with newlines and formatting', () => {
+        // Edge case: Multi-line system message with formatting
+        context.config.systemMessage = `You are a helpful assistant.
+
+Your responsibilities include:
+1. Analyzing customer feedback
+2. Generating reports
+3. Providing insights
+
+Always be professional and concise.`;
+
+        NodeSpecificValidators.validateAIAgent(context);
+
+        const systemWarnings = context.warnings.filter(w => w.property === 'systemMessage');
+        expect(systemWarnings).toHaveLength(0);
+      });
+
+      it('should warn about exactly 19 character system message', () => {
+        // Edge case: Just under the 20 character threshold
+        context.config.systemMessage = 'Be a good assistant'; // 19 chars
+
+        NodeSpecificValidators.validateAIAgent(context);
+
+        expect(context.warnings).toContainEqual({
+          type: 'inefficient',
+          property: 'systemMessage',
+          message: 'System message is very short (< 20 characters)',
+          suggestion: 'Consider a more detailed system message to guide the agent\'s behavior'
+        });
+      });
+
+      it('should not warn about exactly 20 character system message', () => {
+        // Edge case: Exactly at the 20 character threshold
+        context.config.systemMessage = 'Be a great assistant'; // 20 chars
 
         NodeSpecificValidators.validateAIAgent(context);
 
@@ -2425,6 +2570,87 @@ return [{"json": {"result": result}}]
 
         const maxIterErrors = context.errors.filter(e => e.property === 'maxIterations');
         expect(maxIterErrors).toHaveLength(0);
+      });
+
+      it('should reject maxIterations of 0', () => {
+        // Edge case: Zero iterations is invalid
+        context.config.maxIterations = 0;
+
+        NodeSpecificValidators.validateAIAgent(context);
+
+        expect(context.errors).toContainEqual({
+          type: 'invalid_value',
+          property: 'maxIterations',
+          message: 'maxIterations must be a positive number',
+          fix: 'Set maxIterations to a value >= 1 (e.g., 10)'
+        });
+      });
+
+      it('should accept maxIterations of 1', () => {
+        // Edge case: Minimum valid value
+        context.config.maxIterations = 1;
+
+        NodeSpecificValidators.validateAIAgent(context);
+
+        const maxIterErrors = context.errors.filter(e => e.property === 'maxIterations');
+        expect(maxIterErrors).toHaveLength(0);
+      });
+
+      it('should warn about maxIterations of 51', () => {
+        // Edge case: Just above the threshold (50)
+        context.config.maxIterations = 51;
+
+        NodeSpecificValidators.validateAIAgent(context);
+
+        expect(context.warnings).toContainEqual(
+          expect.objectContaining({
+            type: 'inefficient',
+            property: 'maxIterations',
+            message: expect.stringContaining('51')
+          })
+        );
+      });
+
+      it('should handle extreme maxIterations values', () => {
+        // Edge case: Very large number
+        context.config.maxIterations = Number.MAX_SAFE_INTEGER;
+
+        NodeSpecificValidators.validateAIAgent(context);
+
+        expect(context.warnings).toContainEqual(
+          expect.objectContaining({
+            type: 'inefficient',
+            property: 'maxIterations'
+          })
+        );
+      });
+
+      it('should reject NaN maxIterations', () => {
+        // Edge case: Not a number
+        context.config.maxIterations = 'invalid';
+
+        NodeSpecificValidators.validateAIAgent(context);
+
+        expect(context.errors).toContainEqual({
+          type: 'invalid_value',
+          property: 'maxIterations',
+          message: 'maxIterations must be a positive number',
+          fix: 'Set maxIterations to a value >= 1 (e.g., 10)'
+        });
+      });
+
+      it('should reject negative decimal maxIterations', () => {
+        // Edge case: Negative decimal
+        context.config.maxIterations = -0.5;
+
+        NodeSpecificValidators.validateAIAgent(context);
+
+        expect(context.errors).toContainEqual({
+          type: 'invalid_value',
+          property: 'maxIterations',
+          message: 'maxIterations must be a positive number',
+          fix: 'Set maxIterations to a value >= 1 (e.g., 10)'
+        });
       });
     });
 
