@@ -3,6 +3,7 @@
  * Validates complete workflow structure, connections, and node configurations
  */
 
+import crypto from 'crypto';
 import { NodeRepository } from '../database/node-repository';
 import { EnhancedConfigValidator } from './enhanced-config-validator';
 import { ExpressionValidator } from './expression-validator';
@@ -297,8 +298,11 @@ export class WorkflowValidator {
     // Check for duplicate node names
     const nodeNames = new Set<string>();
     const nodeIds = new Set<string>();
-    
-    for (const node of workflow.nodes) {
+    const nodeIdToIndex = new Map<string, number>(); // Track which node index has which ID
+
+    for (let i = 0; i < workflow.nodes.length; i++) {
+      const node = workflow.nodes[i];
+
       if (nodeNames.has(node.name)) {
         result.errors.push({
           type: 'error',
@@ -310,13 +314,18 @@ export class WorkflowValidator {
       nodeNames.add(node.name);
 
       if (nodeIds.has(node.id)) {
+        const firstNodeIndex = nodeIdToIndex.get(node.id);
+        const firstNode = firstNodeIndex !== undefined ? workflow.nodes[firstNodeIndex] : undefined;
+
         result.errors.push({
           type: 'error',
           nodeId: node.id,
-          message: `Duplicate node ID: "${node.id}"`
+          message: `Duplicate node ID: "${node.id}". Node at index ${i} (name: "${node.name}", type: "${node.type}") conflicts with node at index ${firstNodeIndex} (name: "${firstNode?.name || 'unknown'}", type: "${firstNode?.type || 'unknown'}"). Each node must have a unique ID. Generate a new UUID using crypto.randomUUID() - Example: {id: "${crypto.randomUUID()}", name: "${node.name}", type: "${node.type}", ...}`
         });
+      } else {
+        nodeIds.add(node.id);
+        nodeIdToIndex.set(node.id, i);
       }
-      nodeIds.add(node.id);
     }
 
     // Count trigger nodes using shared trigger detection

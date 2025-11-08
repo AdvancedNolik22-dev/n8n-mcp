@@ -2303,8 +2303,189 @@ return [{"json": {"result": result}}]
           message: 'Code nodes can throw errors - consider error handling',
           suggestion: 'Add onError: "continueRegularOutput" to handle errors gracefully'
         });
-        
+
         expect(context.autofix.onError).toBe('continueRegularOutput');
+      });
+    });
+  });
+
+  describe('validateAIAgent', () => {
+    let context: NodeValidationContext;
+
+    beforeEach(() => {
+      context = {
+        config: {},
+        errors: [],
+        warnings: [],
+        suggestions: [],
+        autofix: {}
+      };
+    });
+
+    describe('prompt configuration', () => {
+      it('should require text when promptType is "define"', () => {
+        context.config.promptType = 'define';
+        context.config.text = '';
+
+        NodeSpecificValidators.validateAIAgent(context);
+
+        expect(context.errors).toContainEqual({
+          type: 'missing_required',
+          property: 'text',
+          message: 'Custom prompt text is required when promptType is "define"',
+          fix: 'Provide a custom prompt in the text field, or change promptType to "auto"'
+        });
+      });
+
+      it('should not require text when promptType is "auto"', () => {
+        context.config.promptType = 'auto';
+
+        NodeSpecificValidators.validateAIAgent(context);
+
+        const textErrors = context.errors.filter(e => e.property === 'text');
+        expect(textErrors).toHaveLength(0);
+      });
+
+      it('should accept valid text with promptType "define"', () => {
+        context.config.promptType = 'define';
+        context.config.text = 'You are a helpful assistant that analyzes data.';
+
+        NodeSpecificValidators.validateAIAgent(context);
+
+        const textErrors = context.errors.filter(e => e.property === 'text');
+        expect(textErrors).toHaveLength(0);
+      });
+    });
+
+    describe('system message validation', () => {
+      it('should suggest adding system message when missing', () => {
+        context.config = {};
+
+        NodeSpecificValidators.validateAIAgent(context);
+
+        expect(context.suggestions).toContain(
+          expect.stringContaining('system message')
+        );
+      });
+
+      it('should warn when system message is too short', () => {
+        context.config.systemMessage = 'Help';
+
+        NodeSpecificValidators.validateAIAgent(context);
+
+        expect(context.warnings).toContainEqual({
+          type: 'inefficient',
+          property: 'systemMessage',
+          message: 'System message is very short (< 20 characters)',
+          suggestion: 'Consider a more detailed system message to guide the agent\'s behavior'
+        });
+      });
+
+      it('should accept adequate system message', () => {
+        context.config.systemMessage = 'You are a helpful assistant that analyzes customer feedback.';
+
+        NodeSpecificValidators.validateAIAgent(context);
+
+        const systemWarnings = context.warnings.filter(w => w.property === 'systemMessage');
+        expect(systemWarnings).toHaveLength(0);
+      });
+    });
+
+    describe('maxIterations validation', () => {
+      it('should reject invalid maxIterations values', () => {
+        context.config.maxIterations = -5;
+
+        NodeSpecificValidators.validateAIAgent(context);
+
+        expect(context.errors).toContainEqual({
+          type: 'invalid_value',
+          property: 'maxIterations',
+          message: 'maxIterations must be a positive number',
+          fix: 'Set maxIterations to a value >= 1 (e.g., 10)'
+        });
+      });
+
+      it('should warn about very high maxIterations', () => {
+        context.config.maxIterations = 100;
+
+        NodeSpecificValidators.validateAIAgent(context);
+
+        expect(context.warnings).toContainEqual(
+          expect.objectContaining({
+            type: 'inefficient',
+            property: 'maxIterations'
+          })
+        );
+      });
+
+      it('should accept reasonable maxIterations', () => {
+        context.config.maxIterations = 15;
+
+        NodeSpecificValidators.validateAIAgent(context);
+
+        const maxIterErrors = context.errors.filter(e => e.property === 'maxIterations');
+        expect(maxIterErrors).toHaveLength(0);
+      });
+    });
+
+    describe('error handling', () => {
+      it('should suggest error handling when not configured', () => {
+        context.config = {};
+
+        NodeSpecificValidators.validateAIAgent(context);
+
+        expect(context.warnings).toContainEqual({
+          type: 'best_practice',
+          property: 'errorHandling',
+          message: 'AI models can fail due to API limits, rate limits, or invalid responses',
+          suggestion: 'Add onError: "continueRegularOutput" with retryOnFail for resilience'
+        });
+
+        expect(context.autofix).toMatchObject({
+          onError: 'continueRegularOutput',
+          retryOnFail: true,
+          maxTries: 2,
+          waitBetweenTries: 5000
+        });
+      });
+
+      it('should warn about deprecated continueOnFail', () => {
+        context.config.continueOnFail = true;
+
+        NodeSpecificValidators.validateAIAgent(context);
+
+        expect(context.warnings).toContainEqual({
+          type: 'deprecated',
+          property: 'continueOnFail',
+          message: 'continueOnFail is deprecated. Use onError instead',
+          suggestion: 'Replace with onError: "continueRegularOutput" or "stopWorkflow"'
+        });
+      });
+    });
+
+    describe('output parser and fallback warnings', () => {
+      it('should warn when output parser is enabled', () => {
+        context.config.hasOutputParser = true;
+
+        NodeSpecificValidators.validateAIAgent(context);
+
+        expect(context.warnings).toContainEqual(
+          expect.objectContaining({
+            property: 'hasOutputParser'
+          })
+        );
+      });
+
+      it('should warn when fallback model is enabled', () => {
+        context.config.needsFallback = true;
+
+        NodeSpecificValidators.validateAIAgent(context);
+
+        expect(context.warnings).toContainEqual(
+          expect.objectContaining({
+            property: 'needsFallback'
+          })
+        );
       });
     });
   });

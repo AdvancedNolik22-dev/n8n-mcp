@@ -718,9 +718,110 @@ export class NodeSpecificValidators {
       });
     }
   }
-  
+
   /**
-   * Validate MySQL node configuration  
+   * Validate AI Agent node configuration
+   * Note: This provides basic model connection validation at the node level.
+   * Full AI workflow validation (tools, memory, etc.) is handled by workflow-validator.
+   */
+  static validateAIAgent(context: NodeValidationContext): void {
+    const { config, errors, warnings, suggestions, autofix } = context;
+
+    // Check for language model configuration
+    // AI Agent nodes receive model connections via ai_languageModel connection type
+    // We validate this during workflow validation, but provide hints here for common issues
+
+    // Check prompt type configuration
+    if (config.promptType === 'define') {
+      if (!config.text || (typeof config.text === 'string' && config.text.trim() === '')) {
+        errors.push({
+          type: 'missing_required',
+          property: 'text',
+          message: 'Custom prompt text is required when promptType is "define"',
+          fix: 'Provide a custom prompt in the text field, or change promptType to "auto"'
+        });
+      }
+    }
+
+    // Check system message (RECOMMENDED)
+    if (!config.systemMessage || (typeof config.systemMessage === 'string' && config.systemMessage.trim() === '')) {
+      suggestions.push('AI Agent works best with a system message that defines the agent\'s role, capabilities, and constraints. Set systemMessage to provide context.');
+    } else if (typeof config.systemMessage === 'string' && config.systemMessage.trim().length < 20) {
+      warnings.push({
+        type: 'inefficient',
+        property: 'systemMessage',
+        message: 'System message is very short (< 20 characters)',
+        suggestion: 'Consider a more detailed system message to guide the agent\'s behavior'
+      });
+    }
+
+    // Check output parser configuration
+    if (config.hasOutputParser === true) {
+      warnings.push({
+        type: 'best_practice',
+        property: 'hasOutputParser',
+        message: 'Output parser is enabled. Ensure an ai_outputParser connection is configured in the workflow.',
+        suggestion: 'Connect an output parser node (e.g., Structured Output Parser) via ai_outputParser connection type'
+      });
+    }
+
+    // Check fallback model configuration
+    if (config.needsFallback === true) {
+      warnings.push({
+        type: 'best_practice',
+        property: 'needsFallback',
+        message: 'Fallback model is enabled. Ensure 2 language models are connected via ai_languageModel connections.',
+        suggestion: 'Connect a primary model and a fallback model to handle failures gracefully'
+      });
+    }
+
+    // Check maxIterations
+    if (config.maxIterations !== undefined) {
+      const maxIter = Number(config.maxIterations);
+      if (isNaN(maxIter) || maxIter < 1) {
+        errors.push({
+          type: 'invalid_value',
+          property: 'maxIterations',
+          message: 'maxIterations must be a positive number',
+          fix: 'Set maxIterations to a value >= 1 (e.g., 10)'
+        });
+      } else if (maxIter > 50) {
+        warnings.push({
+          type: 'inefficient',
+          property: 'maxIterations',
+          message: `maxIterations is set to ${maxIter}. High values can lead to long execution times and high costs.`,
+          suggestion: 'Consider reducing maxIterations to 10-20 for most use cases'
+        });
+      }
+    }
+
+    // Error handling for AI operations
+    if (!config.onError && !config.retryOnFail && !config.continueOnFail) {
+      warnings.push({
+        type: 'best_practice',
+        property: 'errorHandling',
+        message: 'AI models can fail due to API limits, rate limits, or invalid responses',
+        suggestion: 'Add onError: "continueRegularOutput" with retryOnFail for resilience'
+      });
+      autofix.onError = 'continueRegularOutput';
+      autofix.retryOnFail = true;
+      autofix.maxTries = 2;
+      autofix.waitBetweenTries = 5000; // AI models may have rate limits
+    }
+
+    // Check for deprecated continueOnFail
+    if (config.continueOnFail !== undefined) {
+      warnings.push({
+        type: 'deprecated',
+        property: 'continueOnFail',
+        message: 'continueOnFail is deprecated. Use onError instead',
+        suggestion: 'Replace with onError: "continueRegularOutput" or "stopWorkflow"'
+      });
+    }
+  }
+
+  /**
+   * Validate MySQL node configuration
    */
   static validateMySQL(context: NodeValidationContext): void {
     const { config, errors, warnings, suggestions } = context;

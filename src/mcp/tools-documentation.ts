@@ -84,14 +84,16 @@ When working with Code nodes, always start by calling the relevant guide:
 
 ## Standard Workflow Pattern
 
+⚠️ **CRITICAL**: Always call get_node_essentials() FIRST before configuring any node!
+
 1. **Find** the node you need:
    - search_nodes({query: "slack"}) - Search by keyword
    - list_nodes({category: "communication"}) - List by category
    - list_ai_tools() - List AI-capable nodes
 
-2. **Configure** the node:
-   - get_node_essentials("nodes-base.slack") - Get essential properties only (5KB)
-   - get_node_info("nodes-base.slack") - Get complete schema (100KB+)
+2. **Configure** the node (ALWAYS START WITH ESSENTIALS):
+   - ✅ get_node_essentials("nodes-base.slack") - Get essential properties FIRST (5KB, shows required fields)
+   - get_node_info("nodes-base.slack") - Get complete schema only if essentials insufficient (100KB+)
    - search_node_properties("nodes-base.slack", "auth") - Find specific properties
 
 3. **Validate** before deployment:
@@ -107,8 +109,8 @@ When working with Code nodes, always start by calling the relevant guide:
 - list_ai_tools - List all AI-capable nodes with usage guidance
 
 **Configuration Tools**
-- get_node_essentials - Returns 10-20 key properties with examples
-- get_node_info - Returns complete node schema with all properties
+- get_node_essentials - ✅ CALL THIS FIRST! Returns 10-20 key properties with examples and required fields
+- get_node_info - Returns complete node schema (only use if essentials is insufficient)
 - search_node_properties - Search for specific properties within a node
 - get_property_dependencies - Analyze property visibility dependencies
 
