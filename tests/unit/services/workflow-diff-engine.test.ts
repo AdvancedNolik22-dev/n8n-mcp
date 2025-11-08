@@ -380,9 +380,51 @@ describe('WorkflowDiffEngine', () => {
       };
 
       const result = await diffEngine.applyDiff(baseWorkflow, request);
-      
+
       expect(result.success).toBe(false);
       expect(result.errors![0].message).toContain('Node not found');
+    });
+
+    it('should provide helpful error when using "changes" instead of "updates" (Issue #392)', async () => {
+      // Simulate the common mistake of using "changes" instead of "updates"
+      const operation: any = {
+        type: 'updateNode',
+        nodeId: 'http-1',
+        changes: {  // Wrong property name
+          'parameters.url': 'https://example.com'
+        }
+      };
+
+      const request: WorkflowDiffRequest = {
+        id: 'test-workflow',
+        operations: [operation]
+      };
+
+      const result = await diffEngine.applyDiff(baseWorkflow, request);
+
+      expect(result.success).toBe(false);
+      expect(result.errors![0].message).toContain('Invalid parameter \'changes\'');
+      expect(result.errors![0].message).toContain('requires \'updates\'');
+      expect(result.errors![0].message).toContain('Example:');
+    });
+
+    it('should provide helpful error when "updates" parameter is missing', async () => {
+      const operation: any = {
+        type: 'updateNode',
+        nodeId: 'http-1'
+        // Missing "updates" property
+      };
+
+      const request: WorkflowDiffRequest = {
+        id: 'test-workflow',
+        operations: [operation]
+      };
+
+      const result = await diffEngine.applyDiff(baseWorkflow, request);
+
+      expect(result.success).toBe(false);
+      expect(result.errors![0].message).toContain('Missing required parameter \'updates\'');
+      expect(result.errors![0].message).toContain('Example:');
     });
   });
 

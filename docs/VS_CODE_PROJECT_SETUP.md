@@ -162,7 +162,7 @@ n8n_validate_workflow({id: createdWorkflowId})
 n8n_update_partial_workflow({
   workflowId: id,
   operations: [
-    {type: 'updateNode', nodeId: 'slack1', changes: {position: [100, 200]}}
+    {type: 'updateNode', nodeId: 'slack1', updates: {position: [100, 200]}}
   ]
 })
 

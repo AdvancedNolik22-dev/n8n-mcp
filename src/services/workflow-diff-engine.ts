@@ -397,6 +397,17 @@ export class WorkflowDiffEngine {
   }
 
   private validateUpdateNode(workflow: Workflow, operation: UpdateNodeOperation): string | null {
+    // Check for common parameter mistake: "changes" instead of "updates" (Issue #392)
+    const operationAny = operation as any;
+    if (operationAny.changes && !operation.updates) {
+      return `Invalid parameter 'changes'. The updateNode operation requires 'updates' (not 'changes'). Example: {type: "updateNode", nodeId: "abc", updates: {name: "New Name", "parameters.url": "https://example.com"}}`;
+    }
+
+    // Check for missing required parameter
+    if (!operation.updates) {
+      return `Missing required parameter 'updates'. The updateNode operation requires an 'updates' object containing properties to modify. Example: {type: "updateNode", nodeId: "abc", updates: {name: "New Name"}}`;
+    }
+
     const node = this.findNode(workflow, operation.nodeId, operation.nodeName);
     if (!node) {
       return this.formatNodeNotFoundError(workflow, operation.nodeId || operation.nodeName || '', 'updateNode');
