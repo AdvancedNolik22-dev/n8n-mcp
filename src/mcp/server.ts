@@ -323,6 +323,30 @@ export class N8NDocumentationMCPServer {
     }
   }
 
+  /**
+   * Parse and cache disabled tools from DISABLED_TOOLS environment variable.
+   * Returns a Set of tool names that should be filtered from registration.
+   *
+   * @returns Set of disabled tool names
+   */
+  private getDisabledTools(): Set<string> {
+    const disabledToolsEnv = process.env.DISABLED_TOOLS || '';
+    if (!disabledToolsEnv) {
+      return new Set();
+    }
+
+    const tools = disabledToolsEnv
+      .split(',')
+      .map(t => t.trim())
+      .filter(Boolean);
+
+    if (tools.length > 0) {
+      logger.info(`Disabled tools configured: ${tools.join(', ')}`);
+    }
+
+    return new Set(tools);
+  }
+
   private setupHandlers(): void {
     // Handle initialization
     this.server.setRequestHandler(InitializeRequestSchema, async (request) => {
@@ -376,8 +400,16 @@ export class N8NDocumentationMCPServer {
 
     // Handle tool listing
     this.server.setRequestHandler(ListToolsRequestSchema, async (request) => {
+      // Get disabled tools from environment variable
+      const disabledTools = this.getDisabledTools();
+
+      // Filter documentation tools based on disabled list
+      const enabledDocTools = n8nDocumentationToolsFinal.filter(
+        tool => !disabledTools.has(tool.name)
+      );
+
       // Combine documentation tools with management tools if API is configured
-      let tools = [...n8nDocumentationToolsFinal];
+      let tools = [...enabledDocTools];
 
       // Check if n8n API tools should be available
       // 1. Environment variables (backward compatibility)
@@ -390,18 +422,30 @@ export class N8NDocumentationMCPServer {
       const shouldIncludeManagementTools = hasEnvConfig || hasInstanceConfig || isMultiTenantEnabled;
 
       if (shouldIncludeManagementTools) {
-        tools.push(...n8nManagementTools);
-        logger.debug(`Tool listing: ${tools.length} tools available (${n8nDocumentationToolsFinal.length} documentation + ${n8nManagementTools.length} management)`, {
+        // Filter management tools based on disabled list
+        const enabledMgmtTools = n8nManagementTools.filter(
+          tool => !disabledTools.has(tool.name)
+        );
+        tools.push(...enabledMgmtTools);
+        logger.debug(`Tool listing: ${tools.length} tools available (${enabledDocTools.length} documentation + ${enabledMgmtTools.length} management)`, {
           hasEnvConfig,
           hasInstanceConfig,
-          isMultiTenantEnabled
+          isMultiTenantEnabled,
+          disabledToolsCount: disabledTools.size
         });
       } else {
         logger.debug(`Tool listing: ${tools.length} tools available (documentation only)`, {
           hasEnvConfig,
           hasInstanceConfig,
-          isMultiTenantEnabled
+          isMultiTenantEnabled,
+          disabledToolsCount: disabledTools.size
         });
+      }
+
+      // Log filtered tools count if any tools are disabled
+      if (disabledTools.size > 0) {
+        const totalAvailableTools = n8nDocumentationToolsFinal.length + (shouldIncludeManagementTools ? n8nManagementTools.length : 0);
+        logger.info(`Filtered ${disabledTools.size} disabled tools, ${tools.length}/${totalAvailableTools} tools available`);
       }
       
       // Check if client is n8n (from initialization)
@@ -443,7 +487,23 @@ export class N8NDocumentationMCPServer {
         configType: args && args.config ? typeof args.config : 'N/A',
         rawRequest: JSON.stringify(request.params)
       });
-      
+
+      // Check if tool is disabled via DISABLED_TOOLS environment variable
+      const disabledTools = this.getDisabledTools();
+      if (disabledTools.has(name)) {
+        logger.warn(`Attempted to call disabled tool: ${name}`);
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              error: 'TOOL_DISABLED',
+              message: `Tool '${name}' is not available in this deployment. It has been disabled via DISABLED_TOOLS environment variable.`,
+              disabledTools: Array.from(disabledTools)
+            }, null, 2)
+          }]
+        };
+      }
+
       // Workaround for n8n's nested output bug
       // Check if args contains nested 'output' structure from n8n's memory corruption
       let processedArgs = args;
@@ -845,19 +905,25 @@ export class N8NDocumentationMCPServer {
   async executeTool(name: string, args: any): Promise<any> {
     // Ensure args is an object and validate it
     args = args || {};
-    
+
+    // Safety check for disabled tools (defense in depth)
+    const disabledTools = this.getDisabledTools();
+    if (disabledTools.has(name)) {
+      throw new Error(`Tool '${name}' is disabled via DISABLED_TOOLS environment variable`);
+    }
+
     // Log the tool call for debugging n8n issues
-    logger.info(`Tool execution: ${name}`, { 
+    logger.info(`Tool execution: ${name}`, {
       args: typeof args === 'object' ? JSON.stringify(args) : args,
       argsType: typeof args,
       argsKeys: typeof args === 'object' ? Object.keys(args) : 'not-object'
     });
-    
+
     // Validate that args is actually an object
     if (typeof args !== 'object' || args === null) {
       throw new Error(`Invalid arguments for tool ${name}: expected object, got ${typeof args}`);
     }
-    
+
     switch (name) {
       case 'tools_documentation':
         // No required parameters
