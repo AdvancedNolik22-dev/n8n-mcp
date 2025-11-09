@@ -7,13 +7,26 @@ vi.mock('../../../src/database/node-repository');
 vi.mock('../../../src/templates/template-service');
 vi.mock('../../../src/utils/logger');
 
+/**
+ * Test wrapper class that exposes private methods for unit testing.
+ * This pattern is preferred over modifying production code visibility
+ * or using reflection-based testing utilities.
+ */
 class TestableN8NMCPServer extends N8NDocumentationMCPServer {
-  // Expose the private getDisabledTools method for testing
+  /**
+   * Expose getDisabledTools() for testing environment variable parsing.
+   * @returns Set of disabled tool names from DISABLED_TOOLS env var
+   */
   public testGetDisabledTools(): Set<string> {
     return (this as any).getDisabledTools();
   }
 
-  // Expose the private executeTool method for testing
+  /**
+   * Expose executeTool() for testing the defense-in-depth guard.
+   * @param name - Tool name to execute
+   * @param args - Tool arguments
+   * @returns Tool execution result
+   */
   public async testExecuteTool(name: string, args: any): Promise<any> {
     return (this as any).executeTool(name, args);
   }
@@ -198,7 +211,7 @@ describe('Disabled Tools Additional Coverage (Issue #410)', () => {
       expect(duration).toBeLessThan(50); // Should be very fast
     });
 
-    it('should handle 1000 disabled tools efficiently', () => {
+    it('should handle 1000 disabled tools efficiently and enforce 200 tool limit', () => {
       const manyTools = Array.from({ length: 1000 }, (_, i) => `tool_${i}`);
       process.env.DISABLED_TOOLS = manyTools.join(',');
 
@@ -207,7 +220,8 @@ describe('Disabled Tools Additional Coverage (Issue #410)', () => {
       const disabledTools = server.testGetDisabledTools();
       const duration = Date.now() - start;
 
-      expect(disabledTools.size).toBe(1000);
+      // Safety limit: max 200 tools enforced
+      expect(disabledTools.size).toBe(200);
       expect(duration).toBeLessThan(100); // Should still be fast
     });
 

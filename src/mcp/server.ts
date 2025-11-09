@@ -70,6 +70,7 @@ export class N8NDocumentationMCPServer {
   private previousTool: string | null = null;
   private previousToolTimestamp: number = Date.now();
   private earlyLogger: EarlyErrorLogger | null = null;
+  private disabledToolsCache: Set<string> | null = null;
 
   constructor(instanceContext?: InstanceContext, earlyLogger?: EarlyErrorLogger) {
     this.instanceContext = instanceContext;
@@ -327,24 +328,46 @@ export class N8NDocumentationMCPServer {
    * Parse and cache disabled tools from DISABLED_TOOLS environment variable.
    * Returns a Set of tool names that should be filtered from registration.
    *
+   * Cached after first call since environment variables don't change at runtime.
+   * Includes safety limits: max 10KB env var length, max 200 tools.
+   *
    * @returns Set of disabled tool names
    */
   private getDisabledTools(): Set<string> {
-    const disabledToolsEnv = process.env.DISABLED_TOOLS || '';
-    if (!disabledToolsEnv) {
-      return new Set();
+    // Return cached value if available
+    if (this.disabledToolsCache !== null) {
+      return this.disabledToolsCache;
     }
 
-    const tools = disabledToolsEnv
+    let disabledToolsEnv = process.env.DISABLED_TOOLS || '';
+    if (!disabledToolsEnv) {
+      this.disabledToolsCache = new Set();
+      return this.disabledToolsCache;
+    }
+
+    // Safety limit: prevent abuse with very long environment variables
+    if (disabledToolsEnv.length > 10000) {
+      logger.warn(`DISABLED_TOOLS environment variable too long (${disabledToolsEnv.length} chars), truncating to 10000`);
+      disabledToolsEnv = disabledToolsEnv.substring(0, 10000);
+    }
+
+    let tools = disabledToolsEnv
       .split(',')
       .map(t => t.trim())
       .filter(Boolean);
+
+    // Safety limit: prevent abuse with too many tools
+    if (tools.length > 200) {
+      logger.warn(`DISABLED_TOOLS contains ${tools.length} tools, limiting to first 200`);
+      tools = tools.slice(0, 200);
+    }
 
     if (tools.length > 0) {
       logger.info(`Disabled tools configured: ${tools.join(', ')}`);
     }
 
-    return new Set(tools);
+    this.disabledToolsCache = new Set(tools);
+    return this.disabledToolsCache;
   }
 
   private setupHandlers(): void {
@@ -445,7 +468,7 @@ export class N8NDocumentationMCPServer {
       // Log filtered tools count if any tools are disabled
       if (disabledTools.size > 0) {
         const totalAvailableTools = n8nDocumentationToolsFinal.length + (shouldIncludeManagementTools ? n8nManagementTools.length : 0);
-        logger.info(`Filtered ${disabledTools.size} disabled tools, ${tools.length}/${totalAvailableTools} tools available`);
+        logger.debug(`Filtered ${disabledTools.size} disabled tools, ${tools.length}/${totalAvailableTools} tools available`);
       }
       
       // Check if client is n8n (from initialization)
@@ -498,7 +521,7 @@ export class N8NDocumentationMCPServer {
             text: JSON.stringify({
               error: 'TOOL_DISABLED',
               message: `Tool '${name}' is not available in this deployment. It has been disabled via DISABLED_TOOLS environment variable.`,
-              disabledTools: Array.from(disabledTools)
+              tool: name
             }, null, 2)
           }]
         };
@@ -906,7 +929,9 @@ export class N8NDocumentationMCPServer {
     // Ensure args is an object and validate it
     args = args || {};
 
-    // Safety check for disabled tools (defense in depth)
+    // Defense in depth: This should never be reached since CallToolRequestSchema
+    // handler already checks disabled tools (line 514-528), but we guard here
+    // in case of future refactoring or direct executeTool() calls
     const disabledTools = this.getDisabledTools();
     if (disabledTools.has(name)) {
       throw new Error(`Tool '${name}' is disabled via DISABLED_TOOLS environment variable`);
