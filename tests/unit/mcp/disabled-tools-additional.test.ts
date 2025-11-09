@@ -287,6 +287,33 @@ describe('Disabled Tools Additional Coverage (Issue #410)', () => {
       expect(disabledTools.has('tool2')).toBe(true);
       expect(disabledTools.has('tool3')).toBe(true);
     });
+
+    it('should enforce 10KB limit on DISABLED_TOOLS environment variable', () => {
+      // Create a very long env var (15KB) by repeating tool names
+      const longTools = Array.from({ length: 1500 }, (_, i) => `tool_${i}`);
+      const longValue = longTools.join(',');
+
+      // Verify we created >10KB string
+      expect(longValue.length).toBeGreaterThan(10000);
+
+      process.env.DISABLED_TOOLS = longValue;
+      server = new TestableN8NMCPServer();
+
+      // Should succeed and truncate to 10KB
+      const disabledTools = server.testGetDisabledTools();
+
+      // Should have parsed some tools (at least the first ones)
+      expect(disabledTools.size).toBeGreaterThan(0);
+
+      // First few tools should be present (they're in the first 10KB)
+      expect(disabledTools.has('tool_0')).toBe(true);
+      expect(disabledTools.has('tool_1')).toBe(true);
+      expect(disabledTools.has('tool_2')).toBe(true);
+
+      // Last tools should NOT be present (they were truncated)
+      expect(disabledTools.has('tool_1499')).toBe(false);
+      expect(disabledTools.has('tool_1498')).toBe(false);
+    });
   });
 
   describe('Defense in Depth - Multiple Layers', () => {
@@ -331,6 +358,33 @@ describe('Disabled Tools Additional Coverage (Issue #410)', () => {
         // Should not be disabled error
         expect(error.message).not.toContain('disabled via DISABLED_TOOLS');
       }
+    });
+
+    it('should not leak list of disabled tools in error response', async () => {
+      // Set multiple disabled tools including some "secret" ones
+      process.env.DISABLED_TOOLS = 'secret_tool_1,secret_tool_2,secret_tool_3,attempted_tool';
+      server = new TestableN8NMCPServer();
+
+      // Try to execute one of the disabled tools
+      let errorMessage = '';
+      try {
+        await server.testExecuteTool('attempted_tool', {});
+      } catch (error: any) {
+        errorMessage = error.message;
+      }
+
+      // Error message should mention the attempted tool
+      expect(errorMessage).toContain('attempted_tool');
+      expect(errorMessage).toContain('disabled via DISABLED_TOOLS');
+
+      // Error message should NOT leak the other disabled tools
+      expect(errorMessage).not.toContain('secret_tool_1');
+      expect(errorMessage).not.toContain('secret_tool_2');
+      expect(errorMessage).not.toContain('secret_tool_3');
+
+      // Should not contain any arrays or lists
+      expect(errorMessage).not.toContain('[');
+      expect(errorMessage).not.toContain(']');
     });
   });
 
