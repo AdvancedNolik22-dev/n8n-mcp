@@ -70,13 +70,18 @@ describe('TelemetryManager', () => {
       updateToolSequence: vi.fn(),
       getEventQueue: vi.fn().mockReturnValue([]),
       getWorkflowQueue: vi.fn().mockReturnValue([]),
+      getMutationQueue: vi.fn().mockReturnValue([]),
       clearEventQueue: vi.fn(),
       clearWorkflowQueue: vi.fn(),
+      clearMutationQueue: vi.fn(),
+      enqueueMutation: vi.fn(),
+      getMutationQueueSize: vi.fn().mockReturnValue(0),
       getStats: vi.fn().mockReturnValue({
         rateLimiter: { currentEvents: 0, droppedEvents: 0 },
         validator: { successes: 0, errors: 0 },
         eventQueueSize: 0,
         workflowQueueSize: 0,
+        mutationQueueSize: 0,
         performanceMetrics: {}
       })
     };
@@ -317,17 +322,21 @@ describe('TelemetryManager', () => {
     it('should flush events and workflows', async () => {
       const mockEvents = [{ user_id: 'user1', event: 'test', properties: {} }];
       const mockWorkflows = [{ user_id: 'user1', workflow_hash: 'hash1' }];
+      const mockMutations: any[] = [];
 
       mockEventTracker.getEventQueue.mockReturnValue(mockEvents);
       mockEventTracker.getWorkflowQueue.mockReturnValue(mockWorkflows);
+      mockEventTracker.getMutationQueue.mockReturnValue(mockMutations);
 
       await manager.flush();
 
       expect(mockEventTracker.getEventQueue).toHaveBeenCalled();
       expect(mockEventTracker.getWorkflowQueue).toHaveBeenCalled();
+      expect(mockEventTracker.getMutationQueue).toHaveBeenCalled();
       expect(mockEventTracker.clearEventQueue).toHaveBeenCalled();
       expect(mockEventTracker.clearWorkflowQueue).toHaveBeenCalled();
-      expect(mockBatchProcessor.flush).toHaveBeenCalledWith(mockEvents, mockWorkflows);
+      expect(mockEventTracker.clearMutationQueue).toHaveBeenCalled();
+      expect(mockBatchProcessor.flush).toHaveBeenCalledWith(mockEvents, mockWorkflows, mockMutations);
     });
 
     it('should not flush when disabled', async () => {

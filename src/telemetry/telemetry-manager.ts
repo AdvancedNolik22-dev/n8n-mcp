@@ -148,6 +148,50 @@ export class TelemetryManager {
     }
   }
 
+  /**
+   * Track workflow mutation from partial updates
+   */
+  async trackWorkflowMutation(data: any): Promise<void> {
+    this.ensureInitialized();
+
+    if (!this.isEnabled()) {
+      logger.debug('Telemetry disabled, skipping mutation tracking');
+      return;
+    }
+
+    this.performanceMonitor.startOperation('trackWorkflowMutation');
+    try {
+      const { mutationTracker } = await import('./mutation-tracker.js');
+      const userId = this.configManager.getUserId();
+
+      const mutationRecord = await mutationTracker.processMutation(data, userId);
+
+      if (mutationRecord) {
+        // Queue for batch processing
+        this.eventTracker.enqueueMutation(mutationRecord);
+
+        // Auto-flush if queue reaches threshold
+        // Lower threshold (2) for mutations since they're less frequent than regular events
+        const queueSize = this.eventTracker.getMutationQueueSize();
+        if (queueSize >= 2) {
+          await this.flushMutations();
+        }
+      }
+    } catch (error) {
+      const telemetryError = error instanceof TelemetryError
+        ? error
+        : new TelemetryError(
+            TelemetryErrorType.UNKNOWN_ERROR,
+            'Failed to track workflow mutation',
+            { error: String(error) }
+          );
+      this.errorAggregator.record(telemetryError);
+      logger.debug('Error tracking workflow mutation:', error);
+    } finally {
+      this.performanceMonitor.endOperation('trackWorkflowMutation');
+    }
+  }
+
 
   /**
    * Track an error event
@@ -221,14 +265,16 @@ export class TelemetryManager {
     // Get queued data from event tracker
     const events = this.eventTracker.getEventQueue();
     const workflows = this.eventTracker.getWorkflowQueue();
+    const mutations = this.eventTracker.getMutationQueue();
 
     // Clear queues immediately to prevent duplicate processing
     this.eventTracker.clearEventQueue();
     this.eventTracker.clearWorkflowQueue();
+    this.eventTracker.clearMutationQueue();
 
     try {
       // Use batch processor to flush
-      await this.batchProcessor.flush(events, workflows);
+      await this.batchProcessor.flush(events, workflows, mutations);
     } catch (error) {
       const telemetryError = error instanceof TelemetryError
         ? error
@@ -245,6 +291,21 @@ export class TelemetryManager {
       if (duration > 100) {
         logger.debug(`Telemetry flush took ${duration.toFixed(2)}ms`);
       }
+    }
+  }
+
+  /**
+   * Flush queued mutations only
+   */
+  async flushMutations(): Promise<void> {
+    this.ensureInitialized();
+    if (!this.isEnabled() || !this.supabase) return;
+
+    const mutations = this.eventTracker.getMutationQueue();
+    this.eventTracker.clearMutationQueue();
+
+    if (mutations.length > 0) {
+      await this.batchProcessor.flush([], [], mutations);
     }
   }
 

@@ -9,6 +9,7 @@ export const n8nUpdatePartialWorkflowDoc: ToolDocumentation = {
     example: 'n8n_update_partial_workflow({id: "wf_123", operations: [{type: "rewireConnection", source: "IF", from: "Old", to: "New", branch: "true"}]})',
     performance: 'Fast (50-200ms)',
     tips: [
+      'Include intent parameter in every call - helps to return better responses',
       'Use rewireConnection to change connection targets',
       'Use branch="true"/"false" for IF nodes',
       'Use case=N for Switch nodes',
@@ -308,10 +309,12 @@ n8n_update_partial_workflow({
         description: 'Array of diff operations. Each must have "type" field and operation-specific properties. Nodes can be referenced by ID or name.'
       },
       validateOnly: { type: 'boolean', description: 'If true, only validate operations without applying them' },
-      continueOnError: { type: 'boolean', description: 'If true, apply valid operations even if some fail (best-effort mode). Returns applied and failed operation indices. Default: false (atomic)' }
+      continueOnError: { type: 'boolean', description: 'If true, apply valid operations even if some fail (best-effort mode). Returns applied and failed operation indices. Default: false (atomic)' },
+      intent: { type: 'string', description: 'Intent of the change - helps to return better response. Include in every tool call. Example: "Add error handling for API failures".' }
     },
     returns: 'Updated workflow object or validation results if validateOnly=true',
     examples: [
+      '// Include intent parameter for better responses\nn8n_update_partial_workflow({id: "abc", intent: "Add error handling for API failures", operations: [{type: "addConnection", source: "HTTP Request", target: "Error Handler"}]})',
       '// Add a basic node (minimal configuration)\nn8n_update_partial_workflow({id: "abc", operations: [{type: "addNode", node: {name: "Process Data", type: "n8n-nodes-base.set", position: [400, 300], parameters: {}}}]})',
       '// Add node with full configuration\nn8n_update_partial_workflow({id: "def", operations: [{type: "addNode", node: {name: "Send Slack Alert", type: "n8n-nodes-base.slack", position: [600, 300], typeVersion: 2, parameters: {resource: "message", operation: "post", channel: "#alerts", text: "Success!"}}}]})',
       '// Add node AND connect it (common pattern)\nn8n_update_partial_workflow({id: "ghi", operations: [\n  {type: "addNode", node: {name: "HTTP Request", type: "n8n-nodes-base.httpRequest", position: [400, 300], parameters: {url: "https://api.example.com", method: "GET"}}},\n  {type: "addConnection", source: "Webhook", target: "HTTP Request"}\n]})',
@@ -364,6 +367,7 @@ n8n_update_partial_workflow({
     ],
     performance: 'Very fast - typically 50-200ms. Much faster than full updates as only changes are processed.',
     bestPractices: [
+      'Always include intent parameter - it helps provide better responses',
       'Use rewireConnection instead of remove+add for changing targets',
       'Use branch="true"/"false" for IF nodes instead of sourceIndex',
       'Use case=N for Switch nodes instead of sourceIndex',
