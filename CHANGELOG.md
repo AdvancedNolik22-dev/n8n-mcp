@@ -7,6 +7,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.22.18] - 2025-11-14
+
+### ✨ Features
+
+**Structural Hash Tracking for Workflow Mutations**
+
+Added structural hash tracking to enable cross-referencing between workflow mutations and workflow quality data:
+
+#### Structural Hash Generation
+- Added `workflowStructureHashBefore` and `workflowStructureHashAfter` fields to mutation records
+- Hashes based on node types + connections (structural elements only)
+- Compatible with `telemetry_workflows.workflow_hash` format for cross-referencing
+- Implementation: Uses `WorkflowSanitizer.generateWorkflowHash()` for consistency
+- Enables linking mutation impact to workflow quality scores and grades
+
+#### Success Tracking Enhancement
+- Added `isTrulySuccessful` computed field to mutation records
+- Definition: Mutation executed successfully AND improved/maintained validation AND has known intent
+- Enables filtering to high-quality mutation data
+- Provides automated success detection without manual review
+
+#### Testing & Verification
+- All 17 mutation-tracker unit tests passing
+- Verified with live mutations: structural changes detected (hash changes), config-only updates detected (hash stays same)
+- Success tracking working accurately (64% truly successful rate in testing)
+
+**Files Modified**:
+- `src/telemetry/mutation-tracker.ts`: Generate structural hashes during mutation processing
+- `src/telemetry/mutation-types.ts`: Add new fields to WorkflowMutationRecord interface
+- `src/telemetry/workflow-sanitizer.ts`: Expose generateWorkflowHash() method
+- `tests/unit/telemetry/mutation-tracker.test.ts`: Add 5 new test cases
+
+**Impact**:
+- Enables cross-referencing between mutation and workflow data
+- Provides labeled dataset with quality indicators
+- Maintains backward compatibility (new fields optional)
+
+Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+
 ## [2.22.17] - 2025-11-13
 
 ### 🐛 Bug Fixes
