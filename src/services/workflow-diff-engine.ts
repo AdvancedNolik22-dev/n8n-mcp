@@ -861,10 +861,14 @@ export class WorkflowDiffEngine {
 
   // Metadata operation appliers
   private applyUpdateSettings(workflow: Workflow, operation: UpdateSettingsOperation): void {
-    if (!workflow.settings) {
-      workflow.settings = {};
+    // Only create/update settings if operation provides actual properties
+    // This prevents creating empty settings objects that would be rejected by n8n API
+    if (operation.settings && Object.keys(operation.settings).length > 0) {
+      if (!workflow.settings) {
+        workflow.settings = {};
+      }
+      Object.assign(workflow.settings, operation.settings);
     }
-    Object.assign(workflow.settings, operation.settings);
   }
 
   private applyUpdateName(workflow: Workflow, operation: UpdateNameOperation): void {

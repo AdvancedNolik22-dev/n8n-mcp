@@ -56,6 +56,7 @@ export interface WorkflowSettings {
 export interface Workflow {
   id?: string;
   name: string;
+  description?: string; // Returned by GET but must be excluded from PUT/PATCH (n8n API limitation, Issue #431)
   nodes: WorkflowNode[];
   connections: WorkflowConnection;
   active?: boolean; // Optional for creation as it's read-only

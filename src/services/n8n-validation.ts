@@ -103,7 +103,8 @@ export function cleanWorkflowForCreate(workflow: Partial<Workflow>): Partial<Wor
   } = workflow;
 
   // Ensure settings are present with defaults
-  if (!cleanedWorkflow.settings) {
+  // Treat empty settings object {} the same as missing settings
+  if (!cleanedWorkflow.settings || Object.keys(cleanedWorkflow.settings).length === 0) {
     cleanedWorkflow.settings = defaultWorkflowSettings;
   }
 
@@ -139,6 +140,7 @@ export function cleanWorkflowForUpdate(workflow: Workflow): Partial<Workflow> {
     // Remove fields that cause API errors
     pinData,
     tags,
+    description, // Issue #431: n8n returns this field but rejects it in updates
     // Remove additional fields that n8n API doesn't accept
     isArchived,
     usedCredentials,
@@ -155,16 +157,17 @@ export function cleanWorkflowForUpdate(workflow: Workflow): Partial<Workflow> {
   //
   // PROBLEM:
   // - Some versions reject updates with settings properties (community forum reports)
-  // - Cloud versions REQUIRE settings property to be present (n8n.estyl.team)
   // - Properties like callerPolicy cause "additional properties" errors
+  // - Empty settings objects {} cause "additional properties" validation errors (Issue #431)
   //
   // SOLUTION:
   // - Filter settings to only include whitelisted properties (OpenAPI spec)
-  // - If no settings provided, use empty object {} for safety
-  // - Empty object satisfies "required property" validation (cloud API)
+  // - If no settings after filtering, omit the property entirely (n8n API rejects empty objects)
+  // - Omitting the property prevents "additional properties" validation errors
   // - Whitelisted properties prevent "additional properties" errors
   //
   // References:
+  // - Issue #431: Empty settings validation error
   // - https://community.n8n.io/t/api-workflow-update-endpoint-doesnt-support-setting-callerpolicy/161916
   // - OpenAPI spec: workflowSettings schema
   // - Tested on n8n.estyl.team (cloud) and localhost (self-hosted)
@@ -189,10 +192,19 @@ export function cleanWorkflowForUpdate(workflow: Workflow): Partial<Workflow> {
         filteredSettings[key] = (cleanedWorkflow.settings as any)[key];
       }
     }
-    cleanedWorkflow.settings = filteredSettings;
+
+    // n8n API requires settings to be present but rejects empty settings objects.
+    // If no valid properties remain after filtering, include minimal default settings.
+    if (Object.keys(filteredSettings).length > 0) {
+      cleanedWorkflow.settings = filteredSettings;
+    } else {
+      // Provide minimal valid settings (executionOrder v1 is the modern default)
+      cleanedWorkflow.settings = { executionOrder: 'v1' as const };
+    }
   } else {
-    // No settings provided - use empty object for safety
-    cleanedWorkflow.settings = {};
+    // No settings provided - include minimal default settings
+    // n8n API requires settings in workflow updates (v1 is the modern default)
+    cleanedWorkflow.settings = { executionOrder: 'v1' as const };
   }
 
   return cleanedWorkflow;

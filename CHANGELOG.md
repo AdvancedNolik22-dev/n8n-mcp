@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.22.21] - 2025-11-20
+
+### 🐛 Bug Fixes
+
+**Fix Empty Settings Object Validation Error (#431)**
+
+Fixed critical bug where `n8n_update_partial_workflow` tool failed with "request/body must NOT have additional properties" error when workflows had no settings or only non-whitelisted settings properties.
+
+#### Root Cause
+- `cleanWorkflowForUpdate()` in `src/services/n8n-validation.ts` was sending empty `settings: {}` objects to the n8n API
+- n8n API rejects empty settings objects as "additional properties" violation
+- Issue occurred when:
+  - Workflow had no settings property
+  - Workflow had only non-whitelisted settings (e.g., only `callerPolicy`)
+
+#### Changes
+- **Primary Fix**: Modified `cleanWorkflowForUpdate()` to delete `settings` property when empty after filtering
+  - Instead of sending `settings: {}`, the property is now omitted entirely
+  - Added safeguards in lines 193-199 and 201-204
+- **Secondary Fix**: Enhanced `applyUpdateSettings()` in `workflow-diff-engine.ts` to prevent creating empty settings objects
+  - Only creates/updates settings if operation provides actual properties
+- **Test Updates**: Fixed 3 incorrect tests that expected empty settings objects
+  - Updated to expect settings property to be omitted instead
+  - Added 2 new comprehensive tests for edge cases
+
+#### Testing
+- All 75 unit tests in `n8n-validation.test.ts` passing
+- New tests cover:
+  - Workflows with no settings → omits property
+  - Workflows with only non-whitelisted settings → omits property
+  - Workflows with mixed settings → keeps only whitelisted properties
+
+**Related Issues**: #431, #248 (n8n API design limitation)
+**Related n8n Issue**: n8n-io/n8n#19587 (closed as NOT_PLANNED - MCP server issue)
+
+Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+
 ## [2.22.20] - 2025-11-19
 
 ### 🔄 Dependencies
