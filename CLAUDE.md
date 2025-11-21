@@ -28,8 +28,13 @@ src/
 │   ├── enhanced-config-validator.ts # Operation-aware validation (NEW in v2.4.2)
 │   ├── node-specific-validators.ts  # Node-specific validation logic (NEW in v2.4.2)
 │   ├── property-dependencies.ts # Dependency analysis (NEW in v2.4)
+│   ├── type-structure-service.ts # Type structure validation (NEW in v2.22.21)
 │   ├── expression-validator.ts # n8n expression syntax validation (NEW in v2.5.0)
 │   └── workflow-validator.ts  # Complete workflow validation (NEW in v2.5.0)
+├── types/
+│   └── type-structures.ts      # Type structure definitions (NEW in v2.22.21)
+├── constants/
+│   └── type-structures.ts      # 22 complete type structures (NEW in v2.22.21)
 ├── templates/
 │   ├── template-fetcher.ts    # Fetches templates from n8n.io API (NEW in v2.4.1)
 │   ├── template-repository.ts # Template database operations (NEW in v2.4.1)
@@ -40,6 +45,7 @@ src/
 │   ├── test-nodes.ts          # Critical node tests
 │   ├── test-essentials.ts     # Test new essentials tools (NEW in v2.4)
 │   ├── test-enhanced-validation.ts # Test enhanced validation (NEW in v2.4.2)
+│   ├── test-structure-validation.ts # Test type structure validation (NEW in v2.22.21)
 │   ├── test-workflow-validation.ts # Test workflow validation (NEW in v2.5.0)
 │   ├── test-ai-workflow-validation.ts # Test AI workflow validation (NEW in v2.5.1)
 │   ├── test-mcp-tools.ts      # Test MCP tool enhancements (NEW in v2.5.1)
@@ -76,6 +82,7 @@ npm run test:unit      # Run unit tests only
 npm run test:integration # Run integration tests
 npm run test:coverage  # Run tests with coverage report
 npm run test:watch     # Run tests in watch mode
+npm run test:structure-validation # Test type structure validation (Phase 3)
 
 # Run a single test file
 npm test -- tests/unit/services/property-filter.test.ts
@@ -126,6 +133,7 @@ npm run test:templates   # Test template functionality
 4. **Service Layer** (`services/`)
    - **Property Filter**: Reduces node properties to AI-friendly essentials
    - **Config Validator**: Multi-profile validation system
+   - **Type Structure Service**: Validates complex type structures (filter, resourceMapper, etc.)
    - **Expression Validator**: Validates n8n expression syntax
    - **Workflow Validator**: Complete workflow structure validation
 

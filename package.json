@@ -1,6 +1,6 @@
 {
   "name": "n8n-mcp",
-  "version": "2.22.21",
+  "version": "2.23.0",
   "description": "Integration between n8n workflow automation and Model Context Protocol (MCP)",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -66,6 +66,7 @@
     "test:workflow-diff": "node dist/scripts/test-workflow-diff.js",
     "test:transactional-diff": "node dist/scripts/test-transactional-diff.js",
     "test:tools-documentation": "node dist/scripts/test-tools-documentation.js",
+    "test:structure-validation": "npx tsx scripts/test-structure-validation.ts",
     "test:url-configuration": "npm run build && ts-node scripts/test-url-configuration.ts",
     "test:search-improvements": "node dist/scripts/test-search-improvements.js",
     "test:fts5-search": "node dist/scripts/test-fts5-search.js",
