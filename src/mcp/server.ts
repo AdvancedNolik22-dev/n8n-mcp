@@ -19,6 +19,7 @@ import { TaskTemplates } from '../services/task-templates';
 import { ConfigValidator } from '../services/config-validator';
 import { EnhancedConfigValidator, ValidationMode, ValidationProfile } from '../services/enhanced-config-validator';
 import { PropertyDependencies } from '../services/property-dependencies';
+import { TypeStructureService } from '../services/type-structure-service';
 import { SimpleCache } from '../utils/simple-cache';
 import { TemplateService } from '../templates/template-service';
 import { WorkflowValidator } from '../services/workflow-validator';
@@ -57,6 +58,67 @@ interface NodeRow {
   operations?: string;
   credentials_required?: string;
 }
+
+interface VersionSummary {
+  currentVersion: string;
+  totalVersions: number;
+  hasVersionHistory: boolean;
+}
+
+interface NodeMinimalInfo {
+  nodeType: string;
+  workflowNodeType: string;
+  displayName: string;
+  description: string;
+  category: string;
+  package: string;
+  isAITool: boolean;
+  isTrigger: boolean;
+  isWebhook: boolean;
+}
+
+interface NodeStandardInfo {
+  nodeType: string;
+  displayName: string;
+  description: string;
+  category: string;
+  requiredProperties: any[];
+  commonProperties: any[];
+  operations?: any[];
+  credentials?: any;
+  examples?: any[];
+  versionInfo: VersionSummary;
+}
+
+interface NodeFullInfo {
+  nodeType: string;
+  displayName: string;
+  description: string;
+  category: string;
+  properties: any[];
+  operations?: any[];
+  credentials?: any;
+  documentation?: string;
+  versionInfo: VersionSummary;
+}
+
+interface VersionHistoryInfo {
+  nodeType: string;
+  versions: any[];
+  latestVersion: string;
+  hasBreakingChanges: boolean;
+}
+
+interface VersionComparisonInfo {
+  nodeType: string;
+  fromVersion: string;
+  toVersion: string;
+  changes: any[];
+  breakingChanges?: any[];
+  migrations?: any[];
+}
+
+type NodeInfoResponse = NodeMinimalInfo | NodeStandardInfo | NodeFullInfo | VersionHistoryInfo | VersionComparisonInfo;
 
 export class N8NDocumentationMCPServer {
   private server: Server;
@@ -956,9 +1018,6 @@ export class N8NDocumentationMCPServer {
       case 'list_nodes':
         // No required parameters
         return this.listNodes(args);
-      case 'get_node_info':
-        this.validateToolParams(name, args, ['nodeType']);
-        return this.getNodeInfo(args.nodeType);
       case 'search_nodes':
         this.validateToolParams(name, args, ['query']);
         // Convert limit to number if provided, otherwise use default
@@ -973,9 +1032,17 @@ export class N8NDocumentationMCPServer {
       case 'get_database_statistics':
         // No required parameters
         return this.getDatabaseStatistics();
-      case 'get_node_essentials':
+      case 'get_node':
         this.validateToolParams(name, args, ['nodeType']);
-        return this.getNodeEssentials(args.nodeType, args.includeExamples);
+        return this.getNode(
+          args.nodeType,
+          args.detail,
+          args.mode,
+          args.includeTypeInfo,
+          args.includeExamples,
+          args.fromVersion,
+          args.toVersion
+        );
       case 'search_node_properties':
         this.validateToolParams(name, args, ['nodeType', 'query']);
         const maxResults = args.maxResults !== undefined ? Number(args.maxResults) || 20 : 20;
@@ -2216,6 +2283,393 @@ Full documentation is being prepared. For now, use get_node_essentials for confi
     this.cache.set(cacheKey, result, 3600);
 
     return result;
+  }
+
+  /**
+   * Unified node information retrieval with multiple detail levels and modes.
+   *
+   * @param nodeType - Full node type identifier (e.g., "nodes-base.httpRequest" or "nodes-langchain.agent")
+   * @param detail - Information detail level (minimal, standard, full). Only applies when mode='info'.
+   *   - minimal: ~200 tokens, basic metadata only (no version info)
+   *   - standard: ~1-2K tokens, essential properties and operations (includes version info, AI-friendly default)
+   *   - full: ~3-8K tokens, complete node information with all properties (includes version info)
+   * @param mode - Operation mode determining the type of information returned:
+   *   - info: Node configuration details (respects detail level)
+   *   - versions: Complete version history with breaking changes summary
+   *   - compare: Property-level comparison between two versions (requires fromVersion)
+   *   - breaking: Breaking changes only between versions (requires fromVersion)
+   *   - migrations: Auto-migratable changes between versions (requires both fromVersion and toVersion)
+   * @param includeTypeInfo - Include type structure metadata for properties (only applies to mode='info').
+   *   Adds ~80-120 tokens per property with type category, JS type, and validation rules.
+   * @param includeExamples - Include real-world configuration examples from templates (only applies to mode='info' with detail='standard').
+   *   Adds ~200-400 tokens per example.
+   * @param fromVersion - Source version for comparison modes (required for compare, breaking, migrations).
+   *   Format: "1.0" or "2.1"
+   * @param toVersion - Target version for comparison modes (optional for compare/breaking, required for migrations).
+   *   Defaults to latest version if omitted.
+   * @returns NodeInfoResponse - Union type containing different response structures based on mode and detail parameters
+   */
+  private async getNode(
+    nodeType: string,
+    detail: string = 'standard',
+    mode: string = 'info',
+    includeTypeInfo?: boolean,
+    includeExamples?: boolean,
+    fromVersion?: string,
+    toVersion?: string
+  ): Promise<NodeInfoResponse> {
+    await this.ensureInitialized();
+    if (!this.repository) throw new Error('Repository not initialized');
+
+    // Validate parameters
+    const validDetailLevels = ['minimal', 'standard', 'full'];
+    const validModes = ['info', 'versions', 'compare', 'breaking', 'migrations'];
+
+    if (!validDetailLevels.includes(detail)) {
+      throw new Error(`get_node: Invalid detail level "${detail}". Valid options: ${validDetailLevels.join(', ')}`);
+    }
+
+    if (!validModes.includes(mode)) {
+      throw new Error(`get_node: Invalid mode "${mode}". Valid options: ${validModes.join(', ')}`);
+    }
+
+    const normalizedType = NodeTypeNormalizer.normalizeToFullForm(nodeType);
+
+    // Version modes - detail level ignored
+    if (mode !== 'info') {
+      return this.handleVersionMode(
+        normalizedType,
+        mode,
+        fromVersion,
+        toVersion
+      );
+    }
+
+    // Info mode - respect detail level
+    return this.handleInfoMode(
+      normalizedType,
+      detail,
+      includeTypeInfo,
+      includeExamples
+    );
+  }
+
+  /**
+   * Handle info mode - returns node information at specified detail level
+   */
+  private async handleInfoMode(
+    nodeType: string,
+    detail: string,
+    includeTypeInfo?: boolean,
+    includeExamples?: boolean
+  ): Promise<NodeMinimalInfo | NodeStandardInfo | NodeFullInfo> {
+    switch (detail) {
+      case 'minimal': {
+        // Get basic node metadata only (no version info for minimal mode)
+        let node = this.repository!.getNode(nodeType);
+
+        if (!node) {
+          const alternatives = getNodeTypeAlternatives(nodeType);
+          for (const alt of alternatives) {
+            const found = this.repository!.getNode(alt);
+            if (found) {
+              node = found;
+              break;
+            }
+          }
+        }
+
+        if (!node) {
+          throw new Error(`Node ${nodeType} not found`);
+        }
+
+        return {
+          nodeType: node.nodeType,
+          workflowNodeType: getWorkflowNodeType(node.package ?? 'n8n-nodes-base', node.nodeType),
+          displayName: node.displayName,
+          description: node.description,
+          category: node.category,
+          package: node.package,
+          isAITool: node.isAITool,
+          isTrigger: node.isTrigger,
+          isWebhook: node.isWebhook
+        };
+      }
+
+      case 'standard': {
+        // Use existing getNodeEssentials logic
+        const essentials = await this.getNodeEssentials(nodeType, includeExamples);
+        const versionSummary = this.getVersionSummary(nodeType);
+
+        // Apply type info enrichment if requested
+        if (includeTypeInfo) {
+          essentials.requiredProperties = this.enrichPropertiesWithTypeInfo(essentials.requiredProperties);
+          essentials.commonProperties = this.enrichPropertiesWithTypeInfo(essentials.commonProperties);
+        }
+
+        return {
+          ...essentials,
+          versionInfo: versionSummary
+        };
+      }
+
+      case 'full': {
+        // Use existing getNodeInfo logic
+        const fullInfo = await this.getNodeInfo(nodeType);
+        const versionSummary = this.getVersionSummary(nodeType);
+
+        // Apply type info enrichment if requested
+        if (includeTypeInfo && fullInfo.properties) {
+          fullInfo.properties = this.enrichPropertiesWithTypeInfo(fullInfo.properties);
+        }
+
+        return {
+          ...fullInfo,
+          versionInfo: versionSummary
+        };
+      }
+
+      default:
+        throw new Error(`Unknown detail level: ${detail}`);
+    }
+  }
+
+  /**
+   * Handle version modes - returns version history and comparison data
+   */
+  private async handleVersionMode(
+    nodeType: string,
+    mode: string,
+    fromVersion?: string,
+    toVersion?: string
+  ): Promise<VersionHistoryInfo | VersionComparisonInfo> {
+    switch (mode) {
+      case 'versions':
+        return this.getVersionHistory(nodeType);
+
+      case 'compare':
+        if (!fromVersion) {
+          throw new Error(`get_node: fromVersion is required for compare mode (nodeType: ${nodeType})`);
+        }
+        return this.compareVersions(nodeType, fromVersion, toVersion);
+
+      case 'breaking':
+        if (!fromVersion) {
+          throw new Error(`get_node: fromVersion is required for breaking mode (nodeType: ${nodeType})`);
+        }
+        return this.getBreakingChanges(nodeType, fromVersion, toVersion);
+
+      case 'migrations':
+        if (!fromVersion || !toVersion) {
+          throw new Error(`get_node: Both fromVersion and toVersion are required for migrations mode (nodeType: ${nodeType})`);
+        }
+        return this.getMigrations(nodeType, fromVersion, toVersion);
+
+      default:
+        throw new Error(`get_node: Unknown mode: ${mode} (nodeType: ${nodeType})`);
+    }
+  }
+
+  /**
+   * Get version summary (always included in info mode responses)
+   * Cached for 24 hours to improve performance
+   */
+  private getVersionSummary(nodeType: string): VersionSummary {
+    const cacheKey = `version-summary:${nodeType}`;
+    const cached = this.cache.get(cacheKey) as VersionSummary | null;
+
+    if (cached) {
+      return cached;
+    }
+
+    const versions = this.repository!.getNodeVersions(nodeType);
+    const latest = this.repository!.getLatestNodeVersion(nodeType);
+
+    const summary: VersionSummary = {
+      currentVersion: latest?.version || 'unknown',
+      totalVersions: versions.length,
+      hasVersionHistory: versions.length > 0
+    };
+
+    // Cache for 24 hours (86400000 ms)
+    this.cache.set(cacheKey, summary, 86400000);
+
+    return summary;
+  }
+
+  /**
+   * Get complete version history for a node
+   */
+  private getVersionHistory(nodeType: string): any {
+    const versions = this.repository!.getNodeVersions(nodeType);
+
+    return {
+      nodeType,
+      totalVersions: versions.length,
+      versions: versions.map(v => ({
+        version: v.version,
+        isCurrent: v.isCurrentMax,
+        minimumN8nVersion: v.minimumN8nVersion,
+        releasedAt: v.releasedAt,
+        hasBreakingChanges: (v.breakingChanges || []).length > 0,
+        breakingChangesCount: (v.breakingChanges || []).length,
+        deprecatedProperties: v.deprecatedProperties || [],
+        addedProperties: v.addedProperties || []
+      })),
+      available: versions.length > 0,
+      message: versions.length === 0 ?
+        'No version history available. Version tracking may not be enabled for this node.' :
+        undefined
+    };
+  }
+
+  /**
+   * Compare two versions of a node
+   */
+  private compareVersions(
+    nodeType: string,
+    fromVersion: string,
+    toVersion?: string
+  ): any {
+    const latest = this.repository!.getLatestNodeVersion(nodeType);
+    const targetVersion = toVersion || latest?.version;
+
+    if (!targetVersion) {
+      throw new Error('No target version available');
+    }
+
+    const changes = this.repository!.getPropertyChanges(
+      nodeType,
+      fromVersion,
+      targetVersion
+    );
+
+    return {
+      nodeType,
+      fromVersion,
+      toVersion: targetVersion,
+      totalChanges: changes.length,
+      breakingChanges: changes.filter(c => c.isBreaking).length,
+      changes: changes.map(c => ({
+        property: c.propertyName,
+        changeType: c.changeType,
+        isBreaking: c.isBreaking,
+        severity: c.severity,
+        oldValue: c.oldValue,
+        newValue: c.newValue,
+        migrationHint: c.migrationHint,
+        autoMigratable: c.autoMigratable
+      }))
+    };
+  }
+
+  /**
+   * Get breaking changes between versions
+   */
+  private getBreakingChanges(
+    nodeType: string,
+    fromVersion: string,
+    toVersion?: string
+  ): any {
+    const breakingChanges = this.repository!.getBreakingChanges(
+      nodeType,
+      fromVersion,
+      toVersion
+    );
+
+    return {
+      nodeType,
+      fromVersion,
+      toVersion: toVersion || 'latest',
+      totalBreakingChanges: breakingChanges.length,
+      changes: breakingChanges.map(c => ({
+        fromVersion: c.fromVersion,
+        toVersion: c.toVersion,
+        property: c.propertyName,
+        changeType: c.changeType,
+        severity: c.severity,
+        migrationHint: c.migrationHint,
+        oldValue: c.oldValue,
+        newValue: c.newValue
+      })),
+      upgradeSafe: breakingChanges.length === 0
+    };
+  }
+
+  /**
+   * Get auto-migratable changes between versions
+   */
+  private getMigrations(
+    nodeType: string,
+    fromVersion: string,
+    toVersion: string
+  ): any {
+    const migrations = this.repository!.getAutoMigratableChanges(
+      nodeType,
+      fromVersion,
+      toVersion
+    );
+
+    const allChanges = this.repository!.getPropertyChanges(
+      nodeType,
+      fromVersion,
+      toVersion
+    );
+
+    return {
+      nodeType,
+      fromVersion,
+      toVersion,
+      autoMigratableChanges: migrations.length,
+      totalChanges: allChanges.length,
+      migrations: migrations.map(m => ({
+        property: m.propertyName,
+        changeType: m.changeType,
+        migrationStrategy: m.migrationStrategy,
+        severity: m.severity
+      })),
+      requiresManualMigration: migrations.length < allChanges.length
+    };
+  }
+
+  /**
+   * Enrich property with type structure metadata
+   */
+  private enrichPropertyWithTypeInfo(property: any): any {
+    if (!property || !property.type) return property;
+
+    const structure = TypeStructureService.getStructure(property.type);
+    if (!structure) return property;
+
+    return {
+      ...property,
+      typeInfo: {
+        category: structure.type,
+        jsType: structure.jsType,
+        description: structure.description,
+        isComplex: TypeStructureService.isComplexType(property.type),
+        isPrimitive: TypeStructureService.isPrimitiveType(property.type),
+        allowsExpressions: structure.validation?.allowExpressions ?? true,
+        allowsEmpty: structure.validation?.allowEmpty ?? false,
+        ...(structure.structure && {
+          structureHints: {
+            hasProperties: !!structure.structure.properties,
+            hasItems: !!structure.structure.items,
+            isFlexible: structure.structure.flexible ?? false,
+            requiredFields: structure.structure.required ?? []
+          }
+        }),
+        ...(structure.notes && { notes: structure.notes })
+      }
+    };
+  }
+
+  /**
+   * Enrich an array of properties with type structure metadata
+   */
+  private enrichPropertiesWithTypeInfo(properties: any[]): any[] {
+    if (!properties || !Array.isArray(properties)) return properties;
+    return properties.map((prop: any) => this.enrichPropertyWithTypeInfo(prop));
   }
 
   private async searchNodeProperties(nodeType: string, query: string, maxResults: number = 20): Promise<any> {
