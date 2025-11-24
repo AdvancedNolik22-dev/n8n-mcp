@@ -9,6 +9,7 @@ import { Request, Response } from 'express';
 import { SingleSessionHTTPServer } from './http-server-single-session';
 import { logger } from './utils/logger';
 import { InstanceContext } from './types/instance-context';
+import { SessionState } from './types/session-state';
 
 export interface EngineHealth {
   status: 'healthy' | 'unhealthy';
@@ -97,7 +98,7 @@ export class N8NMCPEngine {
           total: Math.round(memoryUsage.heapTotal / 1024 / 1024),
           unit: 'MB'
         },
-        version: '2.3.2'
+        version: '2.24.1'
       };
     } catch (error) {
       logger.error('Health check failed:', error);
@@ -106,7 +107,7 @@ export class N8NMCPEngine {
         uptime: 0,
         sessionActive: false,
         memoryUsage: { used: 0, total: 0, unit: 'MB' },
-        version: '2.3.2'
+        version: '2.24.1'
       };
     }
   }
@@ -118,10 +119,58 @@ export class N8NMCPEngine {
   getSessionInfo(): { active: boolean; sessionId?: string; age?: number } {
     return this.server.getSessionInfo();
   }
-  
+
+  /**
+   * Export all active session state for persistence
+   *
+   * Used by multi-tenant backends to dump sessions before container restart.
+   * Returns an array of session state objects containing metadata and credentials.
+   *
+   * SECURITY WARNING: Exported data contains plaintext n8n API keys.
+   * Encrypt before persisting to disk.
+   *
+   * @returns Array of session state objects
+   *
+   * @example
+   * // Before shutdown
+   * const sessions = engine.exportSessionState();
+   * await saveToEncryptedStorage(sessions);
+   */
+  exportSessionState(): SessionState[] {
+    if (!this.server) {
+      logger.warn('Cannot export sessions: server not initialized');
+      return [];
+    }
+    return this.server.exportSessionState();
+  }
+
+  /**
+   * Restore session state from previously exported data
+   *
+   * Used by multi-tenant backends to restore sessions after container restart.
+   * Restores session metadata and instance context. Transports/servers are
+   * recreated on first request.
+   *
+   * @param sessions - Array of session state objects from exportSessionState()
+   * @returns Number of sessions successfully restored
+   *
+   * @example
+   * // After startup
+   * const sessions = await loadFromEncryptedStorage();
+   * const count = engine.restoreSessionState(sessions);
+   * console.log(`Restored ${count} sessions`);
+   */
+  restoreSessionState(sessions: SessionState[]): number {
+    if (!this.server) {
+      logger.warn('Cannot restore sessions: server not initialized');
+      return 0;
+    }
+    return this.server.restoreSessionState(sessions);
+  }
+
   /**
    * Graceful shutdown for service lifecycle
-   * 
+   *
    * @example
    * process.on('SIGTERM', async () => {
    *   await engine.shutdown();

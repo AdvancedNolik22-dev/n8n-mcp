@@ -7,6 +7,63 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.24.1] - 2025-01-24
+
+### ✨ Features
+
+**Session Persistence API**
+
+Added export/restore functionality for MCP sessions to enable zero-downtime deployments in container environments (Kubernetes, Docker Swarm, etc.).
+
+#### What's New
+
+**1. Export Session State**
+- `exportSessionState()` method in `SingleSessionHTTPServer` and `N8NMCPEngine`
+- Exports all active sessions with metadata and instance context
+- Automatically filters expired sessions
+- Returns serializable `SessionState[]` array
+
+**2. Restore Session State**
+- `restoreSessionState(sessions)` method for session recovery
+- Validates session structure using existing `validateInstanceContext()`
+- Handles null/invalid sessions gracefully with warnings
+- Enforces MAX_SESSIONS limit (100 concurrent sessions)
+- Skips expired sessions during restore
+
+**3. SessionState Type**
+- New type definition in `src/types/session-state.ts`
+- Fully documented with JSDoc comments
+- Includes metadata (timestamps) and context (credentials)
+- Exported from main package index
+
+**4. Dormant Session Behavior**
+- Restored sessions are "dormant" until first request
+- Transport and server objects recreated on-demand
+- Memory-efficient session recovery
+
+#### Security Considerations
+
+⚠️ **IMPORTANT:** Exported session data contains plaintext n8n API keys. Downstream applications MUST encrypt session data before persisting to disk using AES-256-GCM or equivalent.
+
+#### Use Cases
+- Zero-downtime deployments in container orchestration
+- Session recovery after crashes or restarts
+- Multi-tenant platform session management
+- Rolling updates without user disruption
+
+#### Testing
+- 22 comprehensive unit tests (100% passing)
+- Tests cover export, restore, edge cases, and round-trip cycles
+- Validation of expired session filtering and error handling
+
+#### Implementation Details
+- Only exports sessions with valid `n8nApiUrl` and `n8nApiKey` in context
+- Respects `sessionTimeout` setting (default 30 minutes)
+- Session metadata and context persisted; transport/server recreated on-demand
+- Comprehensive error handling with detailed logging
+
+**Conceived by Romuald Członkowski - [AiAdvisors](https://www.aiadvisors.pl/en)**
+
 ## [2.24.0] - 2025-01-24
 
 ### ✨ Features

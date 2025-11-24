@@ -25,6 +25,7 @@ import {
   STANDARD_PROTOCOL_VERSION
 } from './utils/protocol-version';
 import { InstanceContext, validateInstanceContext } from './types/instance-context';
+import { SessionState } from './types/session-state';
 
 dotenv.config();
 
@@ -687,7 +688,20 @@ export class SingleSessionHTTPServer {
     if (!this.session) return true;
     return Date.now() - this.session.lastAccess.getTime() > this.sessionTimeout;
   }
-  
+
+  /**
+   * Check if a specific session is expired based on sessionId
+   * Used for multi-session expiration checks during export/restore
+   *
+   * @param sessionId - The session ID to check
+   * @returns true if session is expired or doesn't exist
+   */
+  private isSessionExpired(sessionId: string): boolean {
+    const metadata = this.sessionMetadata[sessionId];
+    if (!metadata) return true;
+    return Date.now() - metadata.lastAccess.getTime() > this.sessionTimeout;
+  }
+
   /**
    * Start the HTTP server
    */
@@ -1405,6 +1419,174 @@ export class SingleSessionHTTPServer {
         sessionIds: Object.keys(this.transports)
       }
     };
+  }
+
+  /**
+   * Export all active session state for persistence
+   *
+   * Used by multi-tenant backends to dump sessions before container restart.
+   * This method exports the minimal state needed to restore sessions after
+   * a restart: session metadata (timing) and instance context (credentials).
+   *
+   * Transport and server objects are NOT persisted - they will be recreated
+   * on the first request after restore.
+   *
+   * SECURITY WARNING: The exported data contains plaintext n8n API keys.
+   * The downstream application MUST encrypt this data before persisting to disk.
+   *
+   * @returns Array of session state objects, excluding expired sessions
+   *
+   * @example
+   * // Before shutdown
+   * const sessions = server.exportSessionState();
+   * await saveToEncryptedStorage(sessions);
+   */
+  public exportSessionState(): SessionState[] {
+    const sessions: SessionState[] = [];
+
+    // Iterate over all sessions with metadata (source of truth for active sessions)
+    for (const sessionId of Object.keys(this.sessionMetadata)) {
+      // Skip expired sessions - they're not worth persisting
+      if (this.isSessionExpired(sessionId)) {
+        continue;
+      }
+
+      const metadata = this.sessionMetadata[sessionId];
+      const context = this.sessionContexts[sessionId];
+
+      // Skip sessions without context - these can't be restored meaningfully
+      // (Context is required to reconnect to the correct n8n instance)
+      if (!context || !context.n8nApiUrl || !context.n8nApiKey) {
+        logger.debug(`Skipping session ${sessionId} - missing required context`);
+        continue;
+      }
+
+      sessions.push({
+        sessionId,
+        metadata: {
+          createdAt: metadata.createdAt.toISOString(),
+          lastAccess: metadata.lastAccess.toISOString()
+        },
+        context: {
+          n8nApiUrl: context.n8nApiUrl,
+          n8nApiKey: context.n8nApiKey,
+          instanceId: context.instanceId || sessionId, // Use sessionId as fallback
+          sessionId: context.sessionId,
+          metadata: context.metadata
+        }
+      });
+    }
+
+    logger.info(`Exported ${sessions.length} session(s) for persistence`);
+    return sessions;
+  }
+
+  /**
+   * Restore session state from previously exported data
+   *
+   * Used by multi-tenant backends to restore sessions after container restart.
+   * This method restores only the session metadata and instance context.
+   * Transport and server objects will be recreated on the first request.
+   *
+   * Restored sessions are "dormant" until a client makes a request, at which
+   * point the transport and server will be initialized normally.
+   *
+   * @param sessions - Array of session state objects from exportSessionState()
+   * @returns Number of sessions successfully restored
+   *
+   * @example
+   * // After startup
+   * const sessions = await loadFromEncryptedStorage();
+   * const count = server.restoreSessionState(sessions);
+   * console.log(`Restored ${count} sessions`);
+   */
+  public restoreSessionState(sessions: SessionState[]): number {
+    let restoredCount = 0;
+    const currentSessionCount = Object.keys(this.transports).length;
+
+    for (const sessionState of sessions) {
+      try {
+        // Skip null or invalid session objects
+        if (!sessionState || typeof sessionState !== 'object' || !sessionState.sessionId) {
+          logger.warn('Skipping invalid session state object');
+          continue;
+        }
+
+        // Check if we've hit the MAX_SESSIONS limit
+        if (currentSessionCount + restoredCount >= MAX_SESSIONS) {
+          logger.warn(
+            `Reached MAX_SESSIONS limit (${MAX_SESSIONS}), skipping remaining sessions`
+          );
+          break;
+        }
+
+        // Skip if session already exists (duplicate sessionId)
+        if (this.sessionMetadata[sessionState.sessionId]) {
+          logger.debug(`Skipping session ${sessionState.sessionId} - already exists`);
+          continue;
+        }
+
+        // Validate session isn't expired
+        const lastAccess = new Date(sessionState.metadata.lastAccess);
+        const age = Date.now() - lastAccess.getTime();
+
+        if (age > this.sessionTimeout) {
+          logger.debug(
+            `Skipping session ${sessionState.sessionId} - expired (age: ${Math.round(age / 1000)}s)`
+          );
+          continue;
+        }
+
+        // Validate required context fields
+        if (
+          !sessionState.context ||
+          !sessionState.context.n8nApiUrl ||
+          !sessionState.context.n8nApiKey
+        ) {
+          logger.warn(
+            `Skipping session ${sessionState.sessionId} - missing required context fields`
+          );
+          continue;
+        }
+
+        // Validate context structure using existing validation
+        try {
+          validateInstanceContext(sessionState.context);
+        } catch (error) {
+          logger.warn(
+            `Skipping session ${sessionState.sessionId} - invalid context:`,
+            error
+          );
+          continue;
+        }
+
+        // Restore session metadata
+        this.sessionMetadata[sessionState.sessionId] = {
+          createdAt: new Date(sessionState.metadata.createdAt),
+          lastAccess: new Date(sessionState.metadata.lastAccess)
+        };
+
+        // Restore session context
+        this.sessionContexts[sessionState.sessionId] = {
+          n8nApiUrl: sessionState.context.n8nApiUrl,
+          n8nApiKey: sessionState.context.n8nApiKey,
+          instanceId: sessionState.context.instanceId,
+          sessionId: sessionState.context.sessionId,
+          metadata: sessionState.context.metadata
+        };
+
+        logger.debug(`Restored session ${sessionState.sessionId}`);
+        restoredCount++;
+      } catch (error) {
+        logger.error(`Failed to restore session ${sessionState.sessionId}:`, error);
+        // Continue with next session - don't let one failure break the entire restore
+      }
+    }
+
+    logger.info(
+      `Restored ${restoredCount}/${sessions.length} session(s) from persistence`
+    );
+    return restoredCount;
   }
 }
 
