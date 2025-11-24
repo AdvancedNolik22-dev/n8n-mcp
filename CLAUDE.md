@@ -32,7 +32,9 @@ src/
 │   ├── expression-validator.ts # n8n expression syntax validation (NEW in v2.5.0)
 │   └── workflow-validator.ts  # Complete workflow validation (NEW in v2.5.0)
 ├── types/
-│   └── type-structures.ts      # Type structure definitions (NEW in v2.22.21)
+│   ├── type-structures.ts      # Type structure definitions (NEW in v2.22.21)
+│   ├── instance-context.ts     # Multi-tenant instance configuration
+│   └── session-state.ts        # Session persistence types (NEW in v2.24.1)
 ├── constants/
 │   └── type-structures.ts      # 22 complete type structures (NEW in v2.22.21)
 ├── templates/
@@ -64,7 +66,9 @@ src/
 │   ├── console-manager.ts     # Console output isolation (NEW in v2.3.1)
 │   └── logger.ts              # Logging utility with HTTP awareness
 ├── http-server-single-session.ts  # Single-session HTTP server (NEW in v2.3.1)
+│                                   # Session persistence API (NEW in v2.24.1)
 ├── mcp-engine.ts              # Clean API for service integration (NEW in v2.3.1)
+│                                # Session persistence wrappers (NEW in v2.24.1)
 └── index.ts                   # Library exports
 ```
 
@@ -190,6 +194,35 @@ The MCP server exposes tools in several categories:
 
 ### Development Best Practices
 - Run typecheck and lint after every code change
+
+### Session Persistence Feature (v2.24.1)
+
+**Location:**
+- Types: `src/types/session-state.ts`
+- Implementation: `src/http-server-single-session.ts` (lines 698-702, 1444-1584)
+- Wrapper: `src/mcp-engine.ts` (lines 123-169)
+- Tests: `tests/unit/http-server/session-persistence.test.ts`, `tests/unit/mcp-engine/session-persistence.test.ts`
+
+**Key Features:**
+- **Export/Restore API**: `exportSessionState()` and `restoreSessionState()` methods
+- **Multi-tenant support**: Enables zero-downtime deployments for SaaS platforms
+- **Security-first**: API keys exported as plaintext - downstream MUST encrypt
+- **Dormant sessions**: Restored sessions recreate transports on first request
+- **Automatic expiration**: Respects `sessionTimeout` setting (default 30 min)
+- **MAX_SESSIONS limit**: Caps at 100 concurrent sessions
+
+**Important Implementation Notes:**
+- Only exports sessions with valid n8nApiUrl and n8nApiKey in context
+- Skips expired sessions during both export and restore
+- Uses `validateInstanceContext()` for data integrity checks
+- Handles null/invalid session gracefully with warnings
+- Session metadata (timestamps) and context (credentials) are persisted
+- Transport and server objects are NOT persisted (recreated on-demand)
+
+**Testing:**
+- 22 unit tests covering export, restore, edge cases, and round-trip cycles
+- Tests use current timestamps to avoid expiration issues
+- Integration with multi-tenant backends documented in README.md
 
 # important-instruction-reminders
 Do what has been asked; nothing more, nothing less.
