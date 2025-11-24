@@ -72,6 +72,30 @@ function extractMultiTenantHeaders(req: express.Request): MultiTenantHeaders {
   };
 }
 
+/**
+ * Security logging helper for audit trails
+ * Provides structured logging for security-relevant events
+ */
+function logSecurityEvent(
+  event: 'session_export' | 'session_restore' | 'session_restore_failed' | 'max_sessions_reached',
+  details: {
+    sessionId?: string;
+    reason?: string;
+    count?: number;
+    instanceId?: string;
+  }
+): void {
+  const timestamp = new Date().toISOString();
+  const logEntry = {
+    timestamp,
+    event,
+    ...details
+  };
+
+  // Log to standard logger with [SECURITY] prefix for easy filtering
+  logger.info(`[SECURITY] ${event}`, logEntry);
+}
+
 export class SingleSessionHTTPServer {
   // Map to store transports by session ID (following SDK pattern)
   private transports: { [sessionId: string]: StreamableHTTPServerTransport } = {};
@@ -1443,9 +1467,16 @@ export class SingleSessionHTTPServer {
    */
   public exportSessionState(): SessionState[] {
     const sessions: SessionState[] = [];
+    const seenSessionIds = new Set<string>();
 
     // Iterate over all sessions with metadata (source of truth for active sessions)
     for (const sessionId of Object.keys(this.sessionMetadata)) {
+      // Check for duplicates (defensive programming)
+      if (seenSessionIds.has(sessionId)) {
+        logger.warn(`Duplicate sessionId detected during export: ${sessionId}`);
+        continue;
+      }
+
       // Skip expired sessions - they're not worth persisting
       if (this.isSessionExpired(sessionId)) {
         continue;
@@ -1461,6 +1492,7 @@ export class SingleSessionHTTPServer {
         continue;
       }
 
+      seenSessionIds.add(sessionId);
       sessions.push({
         sessionId,
         metadata: {
@@ -1478,6 +1510,7 @@ export class SingleSessionHTTPServer {
     }
 
     logger.info(`Exported ${sessions.length} session(s) for persistence`);
+    logSecurityEvent('session_export', { count: sessions.length });
     return sessions;
   }
 
@@ -1502,7 +1535,6 @@ export class SingleSessionHTTPServer {
    */
   public restoreSessionState(sessions: SessionState[]): number {
     let restoredCount = 0;
-    const currentSessionCount = Object.keys(this.transports).length;
 
     for (const sessionState of sessions) {
       try {
@@ -1512,11 +1544,12 @@ export class SingleSessionHTTPServer {
           continue;
         }
 
-        // Check if we've hit the MAX_SESSIONS limit
-        if (currentSessionCount + restoredCount >= MAX_SESSIONS) {
+        // Check if we've hit the MAX_SESSIONS limit (check real-time count)
+        if (Object.keys(this.sessionMetadata).length >= MAX_SESSIONS) {
           logger.warn(
             `Reached MAX_SESSIONS limit (${MAX_SESSIONS}), skipping remaining sessions`
           );
+          logSecurityEvent('max_sessions_reached', { count: MAX_SESSIONS });
           break;
         }
 
@@ -1526,10 +1559,19 @@ export class SingleSessionHTTPServer {
           continue;
         }
 
-        // Validate session isn't expired
+        // Parse and validate dates first
+        const createdAt = new Date(sessionState.metadata.createdAt);
         const lastAccess = new Date(sessionState.metadata.lastAccess);
-        const age = Date.now() - lastAccess.getTime();
 
+        if (isNaN(createdAt.getTime()) || isNaN(lastAccess.getTime())) {
+          logger.warn(
+            `Skipping session ${sessionState.sessionId} - invalid date format`
+          );
+          continue;
+        }
+
+        // Validate session isn't expired
+        const age = Date.now() - lastAccess.getTime();
         if (age > this.sessionTimeout) {
           logger.debug(
             `Skipping session ${sessionState.sessionId} - expired (age: ${Math.round(age / 1000)}s)`
@@ -1537,33 +1579,30 @@ export class SingleSessionHTTPServer {
           continue;
         }
 
-        // Validate required context fields
-        if (
-          !sessionState.context ||
-          !sessionState.context.n8nApiUrl ||
-          !sessionState.context.n8nApiKey
-        ) {
-          logger.warn(
-            `Skipping session ${sessionState.sessionId} - missing required context fields`
-          );
+        // Validate context exists (TypeScript null narrowing)
+        if (!sessionState.context) {
+          logger.warn(`Skipping session ${sessionState.sessionId} - missing context`);
           continue;
         }
 
         // Validate context structure using existing validation
-        try {
-          validateInstanceContext(sessionState.context);
-        } catch (error) {
+        const validation = validateInstanceContext(sessionState.context);
+        if (!validation.valid) {
+          const reason = validation.errors?.join(', ') || 'invalid context';
           logger.warn(
-            `Skipping session ${sessionState.sessionId} - invalid context:`,
-            error
+            `Skipping session ${sessionState.sessionId} - invalid context: ${reason}`
           );
+          logSecurityEvent('session_restore_failed', {
+            sessionId: sessionState.sessionId,
+            reason
+          });
           continue;
         }
 
         // Restore session metadata
         this.sessionMetadata[sessionState.sessionId] = {
-          createdAt: new Date(sessionState.metadata.createdAt),
-          lastAccess: new Date(sessionState.metadata.lastAccess)
+          createdAt,
+          lastAccess
         };
 
         // Restore session context
@@ -1576,9 +1615,17 @@ export class SingleSessionHTTPServer {
         };
 
         logger.debug(`Restored session ${sessionState.sessionId}`);
+        logSecurityEvent('session_restore', {
+          sessionId: sessionState.sessionId,
+          instanceId: sessionState.context.instanceId
+        });
         restoredCount++;
       } catch (error) {
         logger.error(`Failed to restore session ${sessionState.sessionId}:`, error);
+        logSecurityEvent('session_restore_failed', {
+          sessionId: sessionState.sessionId,
+          reason: error instanceof Error ? error.message : 'unknown error'
+        });
         // Continue with next session - don't let one failure break the entire restore
       }
     }

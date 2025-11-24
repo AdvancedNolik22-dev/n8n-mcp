@@ -75,7 +75,7 @@ export interface SessionState {
      * Instance identifier (optional)
      * Custom identifier for tracking which n8n instance this session belongs to
      */
-    instanceId: string;
+    instanceId?: string;
 
     /**
      * Session-specific ID (optional)

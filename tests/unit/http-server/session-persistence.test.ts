@@ -429,8 +429,12 @@ describe('SingleSessionHTTPServer - Session Persistence', () => {
     it('should respect MAX_SESSIONS limit during restore', () => {
       // Create 99 existing sessions (MAX_SESSIONS is 100)
       const serverAny = server as any;
+      const now = new Date();
       for (let i = 0; i < 99; i++) {
-        serverAny.transports[`existing-${i}`] = {}; // Mock transport
+        serverAny.sessionMetadata[`existing-${i}`] = {
+          createdAt: now,
+          lastAccess: now
+        };
       }
 
       // Try to restore 3 sessions (should only restore 1 due to limit)
