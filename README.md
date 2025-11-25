@@ -36,11 +36,44 @@ AI results can be unpredictable. Protect your work!
 
 ## 🚀 Quick Start
 
-Get n8n-MCP running in 5 minutes:
+Get n8n-MCP running in minutes:
 
 [![n8n-mcp Video Quickstart Guide](./thumbnail.png)](https://youtu.be/5CccjiLLyaY?si=Z62SBGlw9G34IQnQ&t=343)
 
-### Option 1: npx (Fastest - No Installation!) 🚀
+### Option 1: Hosted Service (Easiest - No Setup!) ☁️
+
+**The fastest way to try n8n-MCP** - no installation, no configuration:
+
+👉 **[dashboard.n8n-mcp.com](https://dashboard.n8n-mcp.com)**
+
+- ✅ **Free tier**: 100 tool calls/day
+- ✅ **Instant access**: Start building workflows immediately
+- ✅ **Always up-to-date**: Latest n8n nodes and templates
+- ✅ **No infrastructure**: We handle everything
+
+Just sign up, get your API key, and add to Claude Desktop:
+
+```json
+{
+  "mcpServers": {
+    "n8n-mcp": {
+      "command": "npx",
+      "args": ["-y", "@anthropic-ai/mcp-remote@latest", "https://mcp.n8n-mcp.com/sse"],
+      "env": {
+        "API_KEY": "your-api-key-from-dashboard"
+      }
+    }
+  }
+}
+```
+
+---
+
+## 🏠 Self-Hosting Options
+
+Prefer to run n8n-MCP yourself? Choose your deployment method:
+
+### Option A: npx (Quick Local Setup) 🚀
 
 **Prerequisites:** [Node.js](https://nodejs.org/) installed on your system
 
@@ -98,7 +131,7 @@ Add to Claude Desktop config:
 
 **Restart Claude Desktop after updating configuration** - That's it! 🎉
 
-### Option 2: Docker (Easy & Isolated) 🐳
+### Option B: Docker (Isolated & Reproducible) 🐳
 
 **Prerequisites:** Docker installed on your system
 
@@ -345,27 +378,6 @@ environment:
   SQLJS_SAVE_INTERVAL_MS: "10000"
 ```
 
-### Memory Leak Fix (v2.20.2)
-
-**Issue #330** identified a critical memory leak in long-running Docker/Kubernetes deployments:
-- **Before:** 100 MB → 2.2 GB over 72 hours (OOM kills)
-- **After:** Stable at 100-200 MB indefinitely
-
-**Fixes Applied:**
-- ✅ Docker images now use better-sqlite3 by default (eliminates leak entirely)
-- ✅ sql.js fallback optimized (98% reduction in save frequency)
-- ✅ Removed unnecessary memory allocations (50% reduction per save)
-- ✅ Configurable save interval via `SQLJS_SAVE_INTERVAL_MS`
-
-For Kubernetes deployments with memory limits:
-```yaml
-resources:
-  requests:
-    memory: 256Mi
-  limits:
-    memory: 512Mi
-```
-
 ## 💖 Support This Project
 
 <div align="center">
@@ -386,7 +398,7 @@ Every sponsorship directly translates to hours invested in making n8n-mcp better
 
 ---
 
-### Option 3: Local Installation (For Development)
+### Option C: Local Installation (For Development)
 
 **Prerequisites:** [Node.js](https://nodejs.org/) installed on your system
 
@@ -444,7 +456,7 @@ Add to Claude Desktop config:
 
 > 💡 Tip: If you’re running n8n locally on the same machine (e.g., via Docker), use http://host.docker.internal:5678 as the N8N_API_URL.
 
-### Option 4: Railway Cloud Deployment (One-Click Deploy) ☁️
+### Option D: Railway Cloud Deployment (One-Click Deploy) ☁️
 
 **Prerequisites:** Railway account (free tier available)
 
@@ -524,7 +536,7 @@ You are an expert in n8n automation software using n8n-MCP tools. Your role is t
 CRITICAL: Execute tools without commentary. Only respond AFTER all tools complete.
 
 ❌ BAD: "Let me search for Slack nodes... Great! Now let me get details..."
-✅ GOOD: [Execute search_nodes and get_node_essentials in parallel, then respond]
+✅ GOOD: [Execute search_nodes and get_node in parallel, then respond]
 
 ### 2. Parallel Execution
 When operations are independent, execute them in parallel for maximum performance.
@@ -536,7 +548,7 @@ When operations are independent, execute them in parallel for maximum performanc
 ALWAYS check templates before building from scratch (2,709 available).
 
 ### 4. Multi-Level Validation
-Use validate_node_minimal → validate_node_operation → validate_workflow pattern.
+Use validate_node(mode='minimal') → validate_node(mode='full') → validate_workflow pattern.
 
 ### 5. Never Trust Defaults
 ⚠️ CRITICAL: Default parameter values are the #1 source of runtime failures.
@@ -547,10 +559,10 @@ ALWAYS explicitly configure ALL parameters that control node behavior.
 1. **Start**: Call `tools_documentation()` for best practices
 
 2. **Template Discovery Phase** (FIRST - parallel when searching multiple)
-   - `search_templates_by_metadata({complexity: "simple"})` - Smart filtering
-   - `get_templates_for_task('webhook_processing')` - Curated by task
-   - `search_templates('slack notification')` - Text search
-   - `list_node_templates(['n8n-nodes-base.slack'])` - By node type
+   - `search_templates({searchMode: 'by_metadata', complexity: 'simple'})` - Smart filtering
+   - `search_templates({searchMode: 'by_task', task: 'webhook_processing'})` - Curated by task
+   - `search_templates({query: 'slack notification'})` - Text search (default searchMode='keyword')
+   - `search_templates({searchMode: 'by_nodes', nodeTypes: ['n8n-nodes-base.slack']})` - By node type
 
    **Filtering strategies**:
    - Beginners: `complexity: "simple"` + `maxSetupMinutes: 30`
@@ -561,20 +573,20 @@ ALWAYS explicitly configure ALL parameters that control node behavior.
 3. **Node Discovery** (if no suitable template - parallel execution)
    - Think deeply about requirements. Ask clarifying questions if unclear.
    - `search_nodes({query: 'keyword', includeExamples: true})` - Parallel for multiple nodes
-   - `list_nodes({category: 'trigger'})` - Browse by category
-   - `list_ai_tools()` - AI-capable nodes
+   - `search_nodes({query: 'trigger'})` - Browse triggers
+   - `search_nodes({query: 'AI agent langchain'})` - AI-capable nodes
 
 4. **Configuration Phase** (parallel for multiple nodes)
-   - `get_node(nodeType, {detail: 'standard', includeExamples: true})` - Essential properties (default)
-   - `get_node(nodeType, {detail: 'minimal'})` - Basic metadata only (~200 tokens)
-   - `get_node(nodeType, {detail: 'full'})` - Complete information (~3000-8000 tokens)
-   - `search_node_properties(nodeType, 'auth')` - Find specific properties
-   - `get_node_documentation(nodeType)` - Human-readable docs
+   - `get_node({nodeType, detail: 'standard', includeExamples: true})` - Essential properties (default)
+   - `get_node({nodeType, detail: 'minimal'})` - Basic metadata only (~200 tokens)
+   - `get_node({nodeType, detail: 'full'})` - Complete information (~3000-8000 tokens)
+   - `get_node({nodeType, mode: 'search_properties', propertyQuery: 'auth'})` - Find specific properties
+   - `get_node({nodeType, mode: 'docs'})` - Human-readable markdown documentation
    - Show workflow architecture to user for approval before proceeding
 
 5. **Validation Phase** (parallel for multiple nodes)
-   - `validate_node_minimal(nodeType, config)` - Quick required fields check
-   - `validate_node_operation(nodeType, config, 'runtime')` - Full validation with fixes
+   - `validate_node({nodeType, config, mode: 'minimal'})` - Quick required fields check
+   - `validate_node({nodeType, config, mode: 'full', profile: 'runtime'})` - Full validation with fixes
    - Fix ALL errors before proceeding
 
 6. **Building Phase**
@@ -614,15 +626,15 @@ Default values cause runtime failures. Example:
 ### ⚠️ Example Availability
 `includeExamples: true` returns real configurations from workflow templates.
 - Coverage varies by node popularity
-- When no examples available, use `get_node` + `validate_node_minimal`
+- When no examples available, use `get_node` + `validate_node({mode: 'minimal'})`
 
 ## Validation Strategy
 
 ### Level 1 - Quick Check (before building)
-`validate_node_minimal(nodeType, config)` - Required fields only (<100ms)
+`validate_node({nodeType, config, mode: 'minimal'})` - Required fields only (<100ms)
 
 ### Level 2 - Comprehensive (before building)
-`validate_node_operation(nodeType, config, 'runtime')` - Full validation with fixes
+`validate_node({nodeType, config, mode: 'full', profile: 'runtime'})` - Full validation with fixes
 
 ### Level 3 - Complete (after building)
 `validate_workflow(workflow)` - Connections, expressions, AI tools
@@ -630,7 +642,7 @@ Default values cause runtime failures. Example:
 ### Level 4 - Post-Deployment
 1. `n8n_validate_workflow({id})` - Validate deployed workflow
 2. `n8n_autofix_workflow({id})` - Auto-fix common errors
-3. `n8n_list_executions()` - Monitor execution status
+3. `n8n_executions({action: 'list'})` - Monitor execution status
 
 ## Response Format
 
@@ -776,12 +788,13 @@ Use the same four-parameter format:
 ```
 // STEP 1: Template Discovery (parallel execution)
 [Silent execution]
-search_templates_by_metadata({
+search_templates({
+  searchMode: 'by_metadata',
   requiredService: 'slack',
   complexity: 'simple',
   targetAudience: 'marketers'
 })
-get_templates_for_task('slack_integration')
+search_templates({searchMode: 'by_task', task: 'slack_integration'})
 
 // STEP 2: Use template
 get_template(templateId, {mode: 'full'})
@@ -800,17 +813,17 @@ Validation: ✅ All checks passed"
 // STEP 1: Discovery (parallel execution)
 [Silent execution]
 search_nodes({query: 'slack', includeExamples: true})
-list_nodes({category: 'communication'})
+search_nodes({query: 'communication trigger'})
 
 // STEP 2: Configuration (parallel execution)
 [Silent execution]
-get_node('n8n-nodes-base.slack', {detail: 'standard', includeExamples: true})
-get_node('n8n-nodes-base.webhook', {detail: 'standard', includeExamples: true})
+get_node({nodeType: 'n8n-nodes-base.slack', detail: 'standard', includeExamples: true})
+get_node({nodeType: 'n8n-nodes-base.webhook', detail: 'standard', includeExamples: true})
 
 // STEP 3: Validation (parallel execution)
 [Silent execution]
-validate_node_minimal('n8n-nodes-base.slack', config)
-validate_node_operation('n8n-nodes-base.slack', fullConfig, 'runtime')
+validate_node({nodeType: 'n8n-nodes-base.slack', config, mode: 'minimal'})
+validate_node({nodeType: 'n8n-nodes-base.slack', config: fullConfig, mode: 'full', profile: 'runtime'})
 
 // STEP 4: Build
 // Construct workflow with validated configs
@@ -936,73 +949,52 @@ When Claude, Anthropic's AI assistant, tested n8n-MCP, the results were transfor
 
 Once connected, Claude can use these powerful tools:
 
-### Core Tools
+### Core Tools (7 tools)
 - **`tools_documentation`** - Get documentation for any MCP tool (START HERE!)
-- **`list_nodes`** - List all n8n nodes with filtering options
-- **`get_node`** - Unified node information tool with multiple detail levels:
-  - `detail: 'minimal'` - Basic metadata only (~200 tokens)
-  - `detail: 'standard'` - Essential properties (default, ~1000-2000 tokens)
-  - `detail: 'full'` - Complete information (~3000-8000 tokens)
-  - `includeExamples: true` - Include real-world configurations from popular templates
-  - `mode: 'versions'` - View version history and breaking changes
-  - `mode: 'compare'` - Compare two versions with property-level changes
-  - `includeTypeInfo: true` - Add type structure metadata (NEW!)
-- **`search_nodes`** - Full-text search across all node documentation. Use `includeExamples: true` to get top 2 real-world configurations per node from templates
-- **`search_node_properties`** - Find specific properties within nodes
-- **`list_ai_tools`** - List all AI-capable nodes (ANY node can be used as AI tool!)
-- **`get_node_as_tool_info`** - Get guidance on using any node as an AI tool
+- **`search_nodes`** - Full-text search across all nodes. Use `includeExamples: true` for real-world configurations
+- **`get_node`** - Unified node information tool with multiple modes (v2.26.0):
+  - **Info mode** (default): `detail: 'minimal'|'standard'|'full'`, `includeExamples: true`
+  - **Docs mode**: `mode: 'docs'` - Human-readable markdown documentation
+  - **Property search**: `mode: 'search_properties'`, `propertyQuery: 'auth'`
+  - **Versions**: `mode: 'versions'|'compare'|'breaking'|'migrations'`
+- **`validate_node`** - Unified node validation (v2.26.0):
+  - `mode: 'minimal'` - Quick required fields check (<100ms)
+  - `mode: 'full'` - Comprehensive validation with profiles (minimal, runtime, ai-friendly, strict)
+- **`validate_workflow`** - Complete workflow validation including AI Agent validation
+- **`search_templates`** - Unified template search (v2.26.0):
+  - `searchMode: 'keyword'` (default) - Text search with `query` parameter
+  - `searchMode: 'by_nodes'` - Find templates using specific `nodeTypes`
+  - `searchMode: 'by_task'` - Curated templates for common `task` types
+  - `searchMode: 'by_metadata'` - Filter by `complexity`, `requiredService`, `targetAudience`
+- **`get_template`** - Get complete workflow JSON (modes: nodes_only, structure, full)
 
-### Template Tools
-- **`list_templates`** - Browse all templates with descriptions and optional metadata (2,709 templates)
-- **`search_templates`** - Text search across template names and descriptions
-- **`search_templates_by_metadata`** - Advanced filtering by complexity, setup time, services, audience
-- **`list_node_templates`** - Find templates using specific nodes
-- **`get_template`** - Get complete workflow JSON for import
-- **`get_templates_for_task`** - Curated templates for common automation tasks
-
-### Validation Tools
-- **`validate_workflow`** - Complete workflow validation including **AI Agent validation** (NEW in v2.17.0!)
-  - Detects missing language model connections
-  - Validates AI tool connections (no false warnings)
-  - Enforces streaming mode constraints
-  - Checks memory and output parser configurations
-- **`validate_workflow_connections`** - Check workflow structure and AI tool connections
-- **`validate_workflow_expressions`** - Validate n8n expressions including $fromAI()
-- **`validate_node_operation`** - Validate node configurations (operation-aware, profiles support)
-- **`validate_node_minimal`** - Quick validation for just required fields
-
-### Advanced Tools
-- **`get_property_dependencies`** - Analyze property visibility conditions
-- **`get_node_documentation`** - Get parsed documentation from n8n-docs
-- **`get_database_statistics`** - View database metrics and coverage
-
-### n8n Management Tools (Optional - Requires API Configuration)
-These powerful tools allow you to manage n8n workflows directly from Claude. They're only available when you provide `N8N_API_URL` and `N8N_API_KEY` in your configuration.
+### n8n Management Tools (12 tools - Requires API Configuration)
+These tools require `N8N_API_URL` and `N8N_API_KEY` in your configuration.
 
 #### Workflow Management
 - **`n8n_create_workflow`** - Create new workflows with nodes and connections
-- **`n8n_get_workflow`** - Get complete workflow by ID
-- **`n8n_get_workflow_details`** - Get workflow with execution statistics
-- **`n8n_get_workflow_structure`** - Get simplified workflow structure
-- **`n8n_get_workflow_minimal`** - Get minimal workflow info (ID, name, active status)
+- **`n8n_get_workflow`** - Unified workflow retrieval (v2.26.0):
+  - `mode: 'full'` (default) - Complete workflow JSON
+  - `mode: 'details'` - Include execution statistics
+  - `mode: 'structure'` - Nodes and connections topology only
+  - `mode: 'minimal'` - Just ID, name, active status
 - **`n8n_update_full_workflow`** - Update entire workflow (complete replacement)
-- **`n8n_update_partial_workflow`** - Update workflow using diff operations (NEW in v2.7.0!)
+- **`n8n_update_partial_workflow`** - Update workflow using diff operations
 - **`n8n_delete_workflow`** - Delete workflows permanently
 - **`n8n_list_workflows`** - List workflows with filtering and pagination
-- **`n8n_validate_workflow`** - Validate workflows already in n8n by ID (NEW in v2.6.3)
-- **`n8n_autofix_workflow`** - Automatically fix common workflow errors (NEW in v2.13.0!)
-- **`n8n_workflow_versions`** - Manage workflow version history and rollback (NEW in v2.22.0!)
+- **`n8n_validate_workflow`** - Validate workflows in n8n by ID
+- **`n8n_autofix_workflow`** - Automatically fix common workflow errors
+- **`n8n_workflow_versions`** - Manage version history and rollback
 
 #### Execution Management
 - **`n8n_trigger_webhook_workflow`** - Trigger workflows via webhook URL
-- **`n8n_get_execution`** - Get execution details by ID
-- **`n8n_list_executions`** - List executions with status filtering
-- **`n8n_delete_execution`** - Delete execution records
+- **`n8n_executions`** - Unified execution management (v2.26.0):
+  - `action: 'list'` - List executions with status filtering
+  - `action: 'get'` - Get execution details by ID
+  - `action: 'delete'` - Delete execution records
 
 #### System Tools
 - **`n8n_health_check`** - Check n8n API connectivity and features
-- **`n8n_diagnostic`** - Troubleshoot management tools visibility and configuration issues
-- **`n8n_list_available_tools`** - List all available management tools
 
 ### Example Usage
 
@@ -1014,17 +1006,17 @@ get_node({
   includeExamples: true      // Include real-world examples from templates
 })
 
-// Minimal info for quick reference
+// Get documentation
 get_node({
   nodeType: "nodes-base.slack",
-  detail: "minimal"           // ~200 tokens: just basic metadata
+  mode: "docs"               // Human-readable markdown documentation
 })
 
-// Full documentation
+// Search for specific properties
 get_node({
-  nodeType: "nodes-base.webhook",
-  detail: "full",             // Complete information
-  includeTypeInfo: true       // Include type structure metadata
+  nodeType: "nodes-base.httpRequest",
+  mode: "search_properties",
+  propertyQuery: "authentication"
 })
 
 // Version history and breaking changes
@@ -1033,31 +1025,31 @@ get_node({
   mode: "versions"            // View all versions with summary
 })
 
-// Compare versions
-get_node({
-  nodeType: "nodes-base.slack",
-  mode: "compare",
-  fromVersion: "2.1",
-  toVersion: "2.2"
-})
-
 // Search nodes with configuration examples
 search_nodes({
   query: "send email gmail",
   includeExamples: true       // Returns top 2 configs per node
 })
 
-// Validate before deployment
-validate_node_operation({
+// Validate node configuration
+validate_node({
   nodeType: "nodes-base.httpRequest",
   config: { method: "POST", url: "..." },
+  mode: "full",
   profile: "runtime"          // or "minimal", "ai-friendly", "strict"
 })
 
 // Quick required field check
-validate_node_minimal({
+validate_node({
   nodeType: "nodes-base.slack",
-  config: { resource: "message", operation: "send" }
+  config: { resource: "message", operation: "send" },
+  mode: "minimal"
+})
+
+// Search templates by task
+search_templates({
+  searchMode: "by_task",
+  task: "webhook_processing"
 })
 ```
 
@@ -1150,43 +1142,7 @@ Current database coverage (n8n v1.117.2):
 
 ## 🔄 Recent Updates
 
-### v2.22.19 - Critical Bug Fix
-**Fixed:** Stack overflow in session removal (Issue #427)
-- Eliminated infinite recursion in HTTP server session cleanup
-- Transport resources now deleted before closing to prevent circular event handler chain
-- Production logs no longer show "RangeError: Maximum call stack size exceeded"
-- All session cleanup operations now complete successfully without crashes
-
-See [CHANGELOG.md](./docs/CHANGELOG.md) for full version history and recent changes.
-
-## ⚠️ Known Issues
-
-### Claude Desktop Container Management
-
-#### Container Accumulation (Fixed in v2.7.20+)
-Previous versions had an issue where containers would not properly clean up when Claude Desktop sessions ended. This has been fixed in v2.7.20+ with proper signal handling.
-
-**For best container lifecycle management:**
-1. **Use the --init flag** (recommended) - Docker's init system ensures proper signal handling:
-```json
-{
-  "mcpServers": {
-    "n8n-mcp": {
-      "command": "docker",
-      "args": [
-        "run", "-i", "--rm", "--init",
-        "ghcr.io/czlonkowski/n8n-mcp:latest"
-      ]
-    }
-  }
-}
-```
-
-2. **Ensure you're using v2.7.20 or later** - Check your version:
-```bash
-docker run --rm ghcr.io/czlonkowski/n8n-mcp:latest --version
-```
-
+See [CHANGELOG.md](./CHANGELOG.md) for complete version history and recent changes.
 
 ## 🧪 Testing
 

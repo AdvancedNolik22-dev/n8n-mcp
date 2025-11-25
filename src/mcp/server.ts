@@ -830,37 +830,31 @@ export class N8NDocumentationMCPServer {
       let validationResult;
       
       switch (toolName) {
-        case 'validate_node_operation':
+        case 'validate_node':
+          // Consolidated tool handles both modes - validate as operation for now
           validationResult = ToolValidation.validateNodeOperation(args);
           break;
-        case 'validate_node_minimal':
-          validationResult = ToolValidation.validateNodeMinimal(args);
-          break;
         case 'validate_workflow':
-        case 'validate_workflow_connections':
-        case 'validate_workflow_expressions':
           validationResult = ToolValidation.validateWorkflow(args);
           break;
       case 'search_nodes':
         validationResult = ToolValidation.validateSearchNodes(args);
         break;
-      case 'list_node_templates':
-        validationResult = ToolValidation.validateListNodeTemplates(args);
-        break;
       case 'n8n_create_workflow':
         validationResult = ToolValidation.validateCreateWorkflow(args);
         break;
       case 'n8n_get_workflow':
-      case 'n8n_get_workflow_details':
-      case 'n8n_get_workflow_structure':
-      case 'n8n_get_workflow_minimal':
       case 'n8n_update_full_workflow':
       case 'n8n_delete_workflow':
       case 'n8n_validate_workflow':
       case 'n8n_autofix_workflow':
-      case 'n8n_get_execution':
-      case 'n8n_delete_execution':
         validationResult = ToolValidation.validateWorkflowId(args);
+        break;
+      case 'n8n_executions':
+        // Requires action parameter, id validation done in handler based on action
+        validationResult = args.action
+          ? { valid: true, errors: [] }
+          : { valid: false, errors: [{ field: 'action', message: 'action is required' }] };
         break;
       default:
         // For tools not yet migrated to schema validation, use basic validation
@@ -1015,25 +1009,24 @@ export class N8NDocumentationMCPServer {
       case 'tools_documentation':
         // No required parameters
         return this.getToolsDocumentation(args.topic, args.depth);
-      case 'list_nodes':
-        // No required parameters
-        return this.listNodes(args);
       case 'search_nodes':
         this.validateToolParams(name, args, ['query']);
         // Convert limit to number if provided, otherwise use default
         const limit = args.limit !== undefined ? Number(args.limit) || 20 : 20;
         return this.searchNodes(args.query, limit, { mode: args.mode, includeExamples: args.includeExamples });
-      case 'list_ai_tools':
-        // No required parameters
-        return this.listAITools();
-      case 'get_node_documentation':
-        this.validateToolParams(name, args, ['nodeType']);
-        return this.getNodeDocumentation(args.nodeType);
-      case 'get_database_statistics':
-        // No required parameters
-        return this.getDatabaseStatistics();
       case 'get_node':
         this.validateToolParams(name, args, ['nodeType']);
+        // Handle consolidated modes: docs, search_properties
+        if (args.mode === 'docs') {
+          return this.getNodeDocumentation(args.nodeType);
+        }
+        if (args.mode === 'search_properties') {
+          if (!args.propertyQuery) {
+            throw new Error('propertyQuery is required for mode=search_properties');
+          }
+          const maxResults = args.maxPropertyResults !== undefined ? Number(args.maxPropertyResults) || 20 : 20;
+          return this.searchNodeProperties(args.nodeType, args.propertyQuery, maxResults);
+        }
         return this.getNode(
           args.nodeType,
           args.detail,
@@ -1043,18 +1036,23 @@ export class N8NDocumentationMCPServer {
           args.fromVersion,
           args.toVersion
         );
-      case 'search_node_properties':
-        this.validateToolParams(name, args, ['nodeType', 'query']);
-        const maxResults = args.maxResults !== undefined ? Number(args.maxResults) || 20 : 20;
-        return this.searchNodeProperties(args.nodeType, args.query, maxResults);
-      case 'list_tasks':
-        // No required parameters
-        return this.listTasks(args.category);
-      case 'validate_node_operation':
+      case 'validate_node':
         this.validateToolParams(name, args, ['nodeType', 'config']);
         // Ensure config is an object
         if (typeof args.config !== 'object' || args.config === null) {
-          logger.warn(`validate_node_operation called with invalid config type: ${typeof args.config}`);
+          logger.warn(`validate_node called with invalid config type: ${typeof args.config}`);
+          const validationMode = args.mode || 'full';
+          if (validationMode === 'minimal') {
+            return {
+              nodeType: args.nodeType || 'unknown',
+              displayName: 'Unknown Node',
+              valid: false,
+              missingRequiredFields: [
+                'Invalid config format - expected object',
+                '🔧 RECOVERY: Use format { "resource": "...", "operation": "..." } or {} for empty config'
+              ]
+            };
+          }
           return {
             nodeType: args.nodeType || 'unknown',
             workflowNodeType: args.nodeType || 'unknown',
@@ -1070,7 +1068,7 @@ export class N8NDocumentationMCPServer {
             suggestions: [
               '🔧 RECOVERY: Invalid config detected. Fix with:',
               '   • Ensure config is an object: { "resource": "...", "operation": "..." }',
-              '   • Use get_node_essentials to see required fields for this node type',
+              '   • Use get_node to see required fields for this node type',
               '   • Check if the node type is correct before configuring it'
             ],
             summary: {
@@ -1081,95 +1079,75 @@ export class N8NDocumentationMCPServer {
             }
           };
         }
-        return this.validateNodeConfig(args.nodeType, args.config, 'operation', args.profile);
-      case 'validate_node_minimal':
-        this.validateToolParams(name, args, ['nodeType', 'config']);
-        // Ensure config is an object
-        if (typeof args.config !== 'object' || args.config === null) {
-          logger.warn(`validate_node_minimal called with invalid config type: ${typeof args.config}`);
-          return {
-            nodeType: args.nodeType || 'unknown',
-            displayName: 'Unknown Node',
-            valid: false,
-            missingRequiredFields: [
-              'Invalid config format - expected object',
-              '🔧 RECOVERY: Use format { "resource": "...", "operation": "..." } or {} for empty config'
-            ]
-          };
+        // Handle mode parameter
+        const validationMode = args.mode || 'full';
+        if (validationMode === 'minimal') {
+          return this.validateNodeMinimal(args.nodeType, args.config);
         }
-        return this.validateNodeMinimal(args.nodeType, args.config);
-      case 'get_property_dependencies':
-        this.validateToolParams(name, args, ['nodeType']);
-        return this.getPropertyDependencies(args.nodeType, args.config);
-      case 'get_node_as_tool_info':
-        this.validateToolParams(name, args, ['nodeType']);
-        return this.getNodeAsToolInfo(args.nodeType);
-      case 'list_templates':
-        // No required params
-        const listLimit = Math.min(Math.max(Number(args.limit) || 10, 1), 100);
-        const listOffset = Math.max(Number(args.offset) || 0, 0);
-        const sortBy = args.sortBy || 'views';
-        const includeMetadata = Boolean(args.includeMetadata);
-        return this.listTemplates(listLimit, listOffset, sortBy, includeMetadata);
-      case 'list_node_templates':
-        this.validateToolParams(name, args, ['nodeTypes']);
-        const templateLimit = Math.min(Math.max(Number(args.limit) || 10, 1), 100);
-        const templateOffset = Math.max(Number(args.offset) || 0, 0);
-        return this.listNodeTemplates(args.nodeTypes, templateLimit, templateOffset);
+        return this.validateNodeConfig(args.nodeType, args.config, 'operation', args.profile);
       case 'get_template':
         this.validateToolParams(name, args, ['templateId']);
         const templateId = Number(args.templateId);
-        const mode = args.mode || 'full';
-        return this.getTemplate(templateId, mode);
-      case 'search_templates':
-        this.validateToolParams(name, args, ['query']);
+        const templateMode = args.mode || 'full';
+        return this.getTemplate(templateId, templateMode);
+      case 'search_templates': {
+        // Consolidated tool with searchMode parameter
+        const searchMode = args.searchMode || 'keyword';
         const searchLimit = Math.min(Math.max(Number(args.limit) || 20, 1), 100);
         const searchOffset = Math.max(Number(args.offset) || 0, 0);
-        const searchFields = args.fields as string[] | undefined;
-        return this.searchTemplates(args.query, searchLimit, searchOffset, searchFields);
-      case 'get_templates_for_task':
-        this.validateToolParams(name, args, ['task']);
-        const taskLimit = Math.min(Math.max(Number(args.limit) || 10, 1), 100);
-        const taskOffset = Math.max(Number(args.offset) || 0, 0);
-        return this.getTemplatesForTask(args.task, taskLimit, taskOffset);
-      case 'search_templates_by_metadata':
-        // No required params - all filters are optional
-        const metadataLimit = Math.min(Math.max(Number(args.limit) || 20, 1), 100);
-        const metadataOffset = Math.max(Number(args.offset) || 0, 0);
-        return this.searchTemplatesByMetadata({
-          category: args.category,
-          complexity: args.complexity,
-          maxSetupMinutes: args.maxSetupMinutes ? Number(args.maxSetupMinutes) : undefined,
-          minSetupMinutes: args.minSetupMinutes ? Number(args.minSetupMinutes) : undefined,
-          requiredService: args.requiredService,
-          targetAudience: args.targetAudience
-        }, metadataLimit, metadataOffset);
+
+        switch (searchMode) {
+          case 'by_nodes':
+            if (!args.nodeTypes || !Array.isArray(args.nodeTypes) || args.nodeTypes.length === 0) {
+              throw new Error('nodeTypes array is required for searchMode=by_nodes');
+            }
+            return this.listNodeTemplates(args.nodeTypes, searchLimit, searchOffset);
+          case 'by_task':
+            if (!args.task) {
+              throw new Error('task is required for searchMode=by_task');
+            }
+            return this.getTemplatesForTask(args.task, searchLimit, searchOffset);
+          case 'by_metadata':
+            return this.searchTemplatesByMetadata({
+              category: args.category,
+              complexity: args.complexity,
+              maxSetupMinutes: args.maxSetupMinutes ? Number(args.maxSetupMinutes) : undefined,
+              minSetupMinutes: args.minSetupMinutes ? Number(args.minSetupMinutes) : undefined,
+              requiredService: args.requiredService,
+              targetAudience: args.targetAudience
+            }, searchLimit, searchOffset);
+          case 'keyword':
+          default:
+            if (!args.query) {
+              throw new Error('query is required for searchMode=keyword');
+            }
+            const searchFields = args.fields as string[] | undefined;
+            return this.searchTemplates(args.query, searchLimit, searchOffset, searchFields);
+        }
+      }
       case 'validate_workflow':
         this.validateToolParams(name, args, ['workflow']);
         return this.validateWorkflow(args.workflow, args.options);
-      case 'validate_workflow_connections':
-        this.validateToolParams(name, args, ['workflow']);
-        return this.validateWorkflowConnections(args.workflow);
-      case 'validate_workflow_expressions':
-        this.validateToolParams(name, args, ['workflow']);
-        return this.validateWorkflowExpressions(args.workflow);
-      
+
       // n8n Management Tools (if API is configured)
       case 'n8n_create_workflow':
         this.validateToolParams(name, args, ['name', 'nodes', 'connections']);
         return n8nHandlers.handleCreateWorkflow(args, this.instanceContext);
-      case 'n8n_get_workflow':
+      case 'n8n_get_workflow': {
         this.validateToolParams(name, args, ['id']);
-        return n8nHandlers.handleGetWorkflow(args, this.instanceContext);
-      case 'n8n_get_workflow_details':
-        this.validateToolParams(name, args, ['id']);
-        return n8nHandlers.handleGetWorkflowDetails(args, this.instanceContext);
-      case 'n8n_get_workflow_structure':
-        this.validateToolParams(name, args, ['id']);
-        return n8nHandlers.handleGetWorkflowStructure(args, this.instanceContext);
-      case 'n8n_get_workflow_minimal':
-        this.validateToolParams(name, args, ['id']);
-        return n8nHandlers.handleGetWorkflowMinimal(args, this.instanceContext);
+        const workflowMode = args.mode || 'full';
+        switch (workflowMode) {
+          case 'details':
+            return n8nHandlers.handleGetWorkflowDetails(args, this.instanceContext);
+          case 'structure':
+            return n8nHandlers.handleGetWorkflowStructure(args, this.instanceContext);
+          case 'minimal':
+            return n8nHandlers.handleGetWorkflowMinimal(args, this.instanceContext);
+          case 'full':
+          default:
+            return n8nHandlers.handleGetWorkflow(args, this.instanceContext);
+        }
+      }
       case 'n8n_update_full_workflow':
         this.validateToolParams(name, args, ['id']);
         return n8nHandlers.handleUpdateWorkflow(args, this.repository!, this.instanceContext);
@@ -1195,24 +1173,32 @@ export class N8NDocumentationMCPServer {
       case 'n8n_trigger_webhook_workflow':
         this.validateToolParams(name, args, ['webhookUrl']);
         return n8nHandlers.handleTriggerWebhookWorkflow(args, this.instanceContext);
-      case 'n8n_get_execution':
-        this.validateToolParams(name, args, ['id']);
-        return n8nHandlers.handleGetExecution(args, this.instanceContext);
-      case 'n8n_list_executions':
-        // No required parameters
-        return n8nHandlers.handleListExecutions(args, this.instanceContext);
-      case 'n8n_delete_execution':
-        this.validateToolParams(name, args, ['id']);
-        return n8nHandlers.handleDeleteExecution(args, this.instanceContext);
+      case 'n8n_executions': {
+        this.validateToolParams(name, args, ['action']);
+        const execAction = args.action;
+        switch (execAction) {
+          case 'get':
+            if (!args.id) {
+              throw new Error('id is required for action=get');
+            }
+            return n8nHandlers.handleGetExecution(args, this.instanceContext);
+          case 'list':
+            return n8nHandlers.handleListExecutions(args, this.instanceContext);
+          case 'delete':
+            if (!args.id) {
+              throw new Error('id is required for action=delete');
+            }
+            return n8nHandlers.handleDeleteExecution(args, this.instanceContext);
+          default:
+            throw new Error(`Unknown action: ${execAction}. Valid actions: get, list, delete`);
+        }
+      }
       case 'n8n_health_check':
-        // No required parameters
+        // No required parameters - supports mode='status' (default) or mode='diagnostic'
+        if (args.mode === 'diagnostic') {
+          return n8nHandlers.handleDiagnostic({ params: { arguments: args } }, this.instanceContext);
+        }
         return n8nHandlers.handleHealthCheck(this.instanceContext);
-      case 'n8n_list_available_tools':
-        // No required parameters
-        return n8nHandlers.handleListAvailableTools(this.instanceContext);
-      case 'n8n_diagnostic':
-        // No required parameters
-        return n8nHandlers.handleDiagnostic({ params: { arguments: args } }, this.instanceContext);
       case 'n8n_workflow_versions':
         this.validateToolParams(name, args, ['mode']);
         return n8nHandlers.handleWorkflowVersions(args, this.repository!, this.instanceContext);

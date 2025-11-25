@@ -7,6 +7,161 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.26.0] - 2025-01-25
+
+### ✨ Features
+
+**Tool Consolidation - Reduced Tool Count by 38%**
+
+Major consolidation of MCP tools from 31 tools to 19 tools, using mode-based parameters for better AI agent ergonomics. This reduces cognitive load for AI agents while maintaining full functionality.
+
+#### Consolidated Tools
+
+**1. Node Tools - `get_node` Enhanced**
+
+The `get_node` tool now supports additional modes:
+- `mode='docs'`: Replaces `get_node_documentation` - returns readable docs with examples
+- `mode='search_properties'`: Replaces `search_node_properties` - search within node properties
+
+```javascript
+// Old: get_node_documentation
+get_node_documentation({nodeType: "nodes-base.slack"})
+// New: mode='docs'
+get_node({nodeType: "nodes-base.slack", mode: "docs"})
+
+// Old: search_node_properties
+search_node_properties({nodeType: "nodes-base.httpRequest", query: "auth"})
+// New: mode='search_properties'
+get_node({nodeType: "nodes-base.httpRequest", mode: "search_properties", propertyQuery: "auth"})
+```
+
+**2. Validation Tools - `validate_node` Unified**
+
+Consolidated `validate_node_operation` and `validate_node_minimal` into single `validate_node`:
+- `mode='full'`: Full validation (replaces `validate_node_operation`)
+- `mode='minimal'`: Quick required fields check (replaces `validate_node_minimal`)
+
+```javascript
+// Old: validate_node_operation
+validate_node_operation({nodeType: "nodes-base.slack", config: {...}})
+// New: mode='full' (default)
+validate_node({nodeType: "nodes-base.slack", config: {...}, mode: "full"})
+
+// Old: validate_node_minimal
+validate_node_minimal({nodeType: "nodes-base.slack", config: {}})
+// New: mode='minimal'
+validate_node({nodeType: "nodes-base.slack", config: {}, mode: "minimal"})
+```
+
+**3. Template Tools - `search_templates` Enhanced**
+
+Consolidated `list_node_templates`, `search_templates_by_metadata`, and `get_templates_for_task`:
+- `searchMode='keyword'`: Search by keywords (default, was `search_templates`)
+- `searchMode='by_nodes'`: Search by node types (was `list_node_templates`)
+- `searchMode='by_metadata'`: Search by AI metadata (was `search_templates_by_metadata`)
+- `searchMode='by_task'`: Search by task type (was `get_templates_for_task`)
+
+```javascript
+// Old: list_node_templates
+list_node_templates({nodeTypes: ["n8n-nodes-base.httpRequest"]})
+// New: searchMode='by_nodes'
+search_templates({searchMode: "by_nodes", nodeTypes: ["n8n-nodes-base.httpRequest"]})
+
+// Old: get_templates_for_task
+get_templates_for_task({task: "webhook_processing"})
+// New: searchMode='by_task'
+search_templates({searchMode: "by_task", task: "webhook_processing"})
+```
+
+**4. Workflow Getters - `n8n_get_workflow` Enhanced**
+
+Consolidated `n8n_get_workflow_details`, `n8n_get_workflow_structure`, `n8n_get_workflow_minimal`:
+- `mode='full'`: Complete workflow data (default)
+- `mode='details'`: Workflow with metadata (was `n8n_get_workflow_details`)
+- `mode='structure'`: Nodes and connections only (was `n8n_get_workflow_structure`)
+- `mode='minimal'`: ID, name, active status (was `n8n_get_workflow_minimal`)
+
+```javascript
+// Old: n8n_get_workflow_details
+n8n_get_workflow_details({id: "123"})
+// New: mode='details'
+n8n_get_workflow({id: "123", mode: "details"})
+
+// Old: n8n_get_workflow_minimal
+n8n_get_workflow_minimal({id: "123"})
+// New: mode='minimal'
+n8n_get_workflow({id: "123", mode: "minimal"})
+```
+
+**5. Execution Tools - `n8n_executions` Unified**
+
+Consolidated `n8n_list_executions`, `n8n_get_execution`, `n8n_delete_execution`:
+- `action='list'`: List executions with filters
+- `action='get'`: Get single execution details
+- `action='delete'`: Delete an execution
+
+```javascript
+// Old: n8n_list_executions
+n8n_list_executions({workflowId: "123", status: "success"})
+// New: action='list'
+n8n_executions({action: "list", workflowId: "123", status: "success"})
+
+// Old: n8n_get_execution
+n8n_get_execution({id: "456"})
+// New: action='get'
+n8n_executions({action: "get", id: "456"})
+
+// Old: n8n_delete_execution
+n8n_delete_execution({id: "456"})
+// New: action='delete'
+n8n_executions({action: "delete", id: "456"})
+```
+
+### 🗑️ Removed Tools
+
+The following tools have been removed (use consolidated equivalents):
+- `get_node_documentation` → `get_node` with `mode='docs'`
+- `search_node_properties` → `get_node` with `mode='search_properties'`
+- `get_property_dependencies` → Removed (use `validate_node` for dependency info)
+- `validate_node_operation` → `validate_node` with `mode='full'`
+- `validate_node_minimal` → `validate_node` with `mode='minimal'`
+- `list_node_templates` → `search_templates` with `searchMode='by_nodes'`
+- `search_templates_by_metadata` → `search_templates` with `searchMode='by_metadata'`
+- `get_templates_for_task` → `search_templates` with `searchMode='by_task'`
+- `n8n_get_workflow_details` → `n8n_get_workflow` with `mode='details'`
+- `n8n_get_workflow_structure` → `n8n_get_workflow` with `mode='structure'`
+- `n8n_get_workflow_minimal` → `n8n_get_workflow` with `mode='minimal'`
+- `n8n_list_executions` → `n8n_executions` with `action='list'`
+- `n8n_get_execution` → `n8n_executions` with `action='get'`
+- `n8n_delete_execution` → `n8n_executions` with `action='delete'`
+
+### 📊 Impact
+
+**Tool Count**: 31 → 19 tools (38% reduction)
+
+**For AI Agents:**
+- Fewer tools to choose from reduces decision complexity
+- Mode-based parameters provide clear action disambiguation
+- Consistent patterns across tool categories
+- Backward-compatible parameter handling
+
+**For Users:**
+- Simpler tool discovery and documentation
+- Consistent API design patterns
+- Reduced token usage in tool descriptions
+
+### 🔧 Technical Details
+
+**Files Modified:**
+- `src/mcp/tools.ts` - Consolidated tool definitions
+- `src/mcp/tools-n8n-manager.ts` - n8n manager tool consolidation
+- `src/mcp/server.ts` - Handler consolidation and mode routing
+- `tests/unit/mcp/parameter-validation.test.ts` - Updated for new tool names
+- `tests/integration/mcp-protocol/tool-invocation.test.ts` - Updated test cases
+- `tests/integration/mcp-protocol/error-handling.test.ts` - Updated error handling tests
+
+**Conceived by Romuald Członkowski - [AiAdvisors](https://www.aiadvisors.pl/en)**
+
 ## [2.24.1] - 2025-01-24
 
 ### ✨ Features

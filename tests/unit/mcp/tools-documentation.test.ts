@@ -49,7 +49,7 @@ vi.mock('@/mcp/tool-docs', () => ({
         performance: 'Instant - uses in-memory index',
         bestPractices: ['Start with single words', 'Use FUZZY for uncertain names'],
         pitfalls: ['Overly specific queries may return no results'],
-        relatedTools: ['list_nodes', 'get_node_info']
+        relatedTools: ['get_node', 'get_node_documentation']
       }
     },
     validate_workflow: {
@@ -81,7 +81,7 @@ vi.mock('@/mcp/tool-docs', () => ({
         performance: 'Depends on workflow complexity',
         bestPractices: ['Validate before saving', 'Fix errors first'],
         pitfalls: ['Large workflows may take time'],
-        relatedTools: ['validate_node_operation']
+        relatedTools: ['validate_node']
       }
     },
     get_node_essentials: {
@@ -172,7 +172,7 @@ describe('tools-documentation', () => {
         expect(doc).toContain('## Common Pitfalls');
         expect(doc).toContain('- Overly specific queries');
         expect(doc).toContain('## Related Tools');
-        expect(doc).toContain('- list_nodes');
+        expect(doc).toContain('- get_node');
       });
     });
 
