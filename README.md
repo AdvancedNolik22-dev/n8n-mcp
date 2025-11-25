@@ -36,10 +36,6 @@ AI results can be unpredictable. Protect your work!
 
 ## 🚀 Quick Start
 
-Get n8n-MCP running in minutes:
-
-[![n8n-mcp Video Quickstart Guide](./thumbnail.png)](https://youtu.be/5CccjiLLyaY?si=Z62SBGlw9G34IQnQ&t=343)
-
 ### Option 1: Hosted Service (Easiest - No Setup!) ☁️
 
 **The fastest way to try n8n-MCP** - no installation, no configuration:
@@ -51,21 +47,7 @@ Get n8n-MCP running in minutes:
 - ✅ **Always up-to-date**: Latest n8n nodes and templates
 - ✅ **No infrastructure**: We handle everything
 
-Just sign up, get your API key, and add to Claude Desktop:
-
-```json
-{
-  "mcpServers": {
-    "n8n-mcp": {
-      "command": "npx",
-      "args": ["-y", "@anthropic-ai/mcp-remote@latest", "https://mcp.n8n-mcp.com/sse"],
-      "env": {
-        "API_KEY": "your-api-key-from-dashboard"
-      }
-    }
-  }
-}
-```
+Just sign up, get your API key, and connect your MCP client. 
 
 ---
 
@@ -74,6 +56,10 @@ Just sign up, get your API key, and add to Claude Desktop:
 Prefer to run n8n-MCP yourself? Choose your deployment method:
 
 ### Option A: npx (Quick Local Setup) 🚀
+
+Get n8n-MCP running in minutes:
+
+[![n8n-mcp Video Quickstart Guide](./thumbnail.png)](https://youtu.be/5CccjiLLyaY?si=Z62SBGlw9G34IQnQ&t=343)
 
 **Prerequisites:** [Node.js](https://nodejs.org/) installed on your system
 
