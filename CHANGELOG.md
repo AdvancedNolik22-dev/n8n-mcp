@@ -7,6 +7,57 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.28.1] - 2025-12-01
+
+### 🐛 Bug Fixes
+
+**Issue #458: AI Connection Type Propagation**
+
+Fixed `addConnection` operation in workflow diff engine defaulting `targetInput` to "main" instead of preserving the source output type. This caused AI tool connections to be created with incorrect type.
+
+- **Root Cause**: `targetInput` defaulted to `'main'` regardless of `sourceOutput` type
+- **Fix**: Changed default to `sourceOutput` to preserve connection type (ai_tool, ai_memory, ai_languageModel)
+- **Files**: `src/services/workflow-diff-engine.ts:760`
+
+**AI Agent Validation False Positive**
+
+Fixed false positive "AI Agent has no tools connected" warning when tools were properly connected.
+
+- **Root Cause**: Validation checked connections FROM agent instead of TO agent
+- **Fix**: Search all connections where target node is the agent
+- **Files**: `src/services/workflow-validator.ts:1148-1163`
+
+### ✨ Enhancements
+
+**get_node: expectedFormat for resourceLocator Properties**
+
+Added `expectedFormat` field to resourceLocator properties in `get_node` output. This helps AI models understand the correct format for these complex property types.
+
+```json
+{
+  "name": "model",
+  "type": "resourceLocator",
+  "expectedFormat": {
+    "structure": { "mode": "string", "value": "string" },
+    "modes": ["list", "id"],
+    "example": { "mode": "id", "value": "gpt-4o-mini" }
+  }
+}
+```
+
+**get_node: versionNotice Field**
+
+Added `versionNotice` field to make typeVersion more prominent in get_node output, reducing the chance of AI models using outdated versions.
+
+```json
+{
+  "version": "1.3",
+  "versionNotice": "⚠️ Use typeVersion: 1.3 when creating this node"
+}
+```
+
+**Conceived by Romuald Członkowski - [AiAdvisors](https://www.aiadvisors.pl/en)**
+
 ## [2.28.0] - 2025-12-01
 
 ### ✨ Features

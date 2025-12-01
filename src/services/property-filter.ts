@@ -16,6 +16,11 @@ export interface SimplifiedProperty {
   placeholder?: string;
   showWhen?: Record<string, any>;
   usageHint?: string;
+  expectedFormat?: {
+    structure: Record<string, string>;
+    modes?: string[];
+    example: Record<string, any>;
+  };
 }
 
 export interface EssentialConfig {
@@ -322,7 +327,18 @@ export class PropertyFilter {
         };
       });
     }
-    
+
+    // Add expectedFormat for resourceLocator types - critical for correct configuration
+    if (prop.type === 'resourceLocator') {
+      const modes = prop.modes?.map((m: any) => m.name || m) || ['list', 'id'];
+      const defaultValue = prop.default?.value || 'your-resource-id';
+      simplified.expectedFormat = {
+        structure: { mode: 'string', value: 'string' },
+        modes,
+        example: { mode: 'id', value: defaultValue }
+      };
+    }
+
     // Include simple display conditions (max 2 conditions)
     if (prop.displayOptions?.show) {
       const conditions = Object.keys(prop.displayOptions.show);

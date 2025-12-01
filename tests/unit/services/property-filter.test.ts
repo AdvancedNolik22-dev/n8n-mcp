@@ -406,5 +406,74 @@ describe('PropertyFilter', () => {
       const complex = result.common.find(p => p.name === 'complex');
       expect(complex?.default).toBeUndefined();
     });
+
+    it('should add expectedFormat for resourceLocator type properties', () => {
+      const properties = [
+        {
+          name: 'channel',
+          type: 'resourceLocator',
+          displayName: 'Channel',
+          description: 'The channel to send message to',
+          modes: [
+            { name: 'list', displayName: 'From List' },
+            { name: 'id', displayName: 'By ID' },
+            { name: 'url', displayName: 'By URL' }
+          ],
+          default: { mode: 'list', value: '' }
+        }
+      ];
+
+      const result = PropertyFilter.getEssentials(properties, 'nodes-base.slack');
+
+      const channelProp = result.common.find(p => p.name === 'channel');
+      expect(channelProp).toBeDefined();
+      expect(channelProp?.expectedFormat).toBeDefined();
+      expect(channelProp?.expectedFormat?.structure).toEqual({
+        mode: 'string',
+        value: 'string'
+      });
+      expect(channelProp?.expectedFormat?.modes).toEqual(['list', 'id', 'url']);
+      expect(channelProp?.expectedFormat?.example).toBeDefined();
+      expect(channelProp?.expectedFormat?.example.mode).toBe('id');
+      expect(channelProp?.expectedFormat?.example.value).toBeDefined();
+    });
+
+    it('should handle resourceLocator without modes array', () => {
+      const properties = [
+        {
+          name: 'resource',
+          type: 'resourceLocator',
+          displayName: 'Resource',
+          default: { mode: 'id', value: 'test-123' }
+        }
+      ];
+
+      const result = PropertyFilter.getEssentials(properties, 'nodes-base.unknownNode');
+
+      const resourceProp = result.common.find(p => p.name === 'resource');
+      expect(resourceProp?.expectedFormat).toBeDefined();
+      // Should default to common modes
+      expect(resourceProp?.expectedFormat?.modes).toEqual(['list', 'id']);
+      expect(resourceProp?.expectedFormat?.example.value).toBe('test-123');
+    });
+
+    it('should handle resourceLocator with no default value', () => {
+      const properties = [
+        {
+          name: 'item',
+          type: 'resourceLocator',
+          displayName: 'Item',
+          modes: [{ name: 'search' }, { name: 'id' }]
+        }
+      ];
+
+      const result = PropertyFilter.getEssentials(properties, 'nodes-base.unknownNode');
+
+      const itemProp = result.common.find(p => p.name === 'item');
+      expect(itemProp?.expectedFormat).toBeDefined();
+      expect(itemProp?.expectedFormat?.modes).toEqual(['search', 'id']);
+      // Should use fallback value
+      expect(itemProp?.expectedFormat?.example.value).toBe('your-resource-id');
+    });
   });
 });

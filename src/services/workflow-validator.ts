@@ -1137,16 +1137,23 @@ export class WorkflowValidator {
     }
 
     // Check for AI Agent workflows
-    const aiAgentNodes = workflow.nodes.filter(n => 
-      n.type.toLowerCase().includes('agent') || 
+    const aiAgentNodes = workflow.nodes.filter(n =>
+      n.type.toLowerCase().includes('agent') ||
       n.type.includes('langchain.agent')
     );
-    
+
     if (aiAgentNodes.length > 0) {
       // Check if AI agents have tools connected
+      // Tools connect TO the agent, so we need to find connections where the target is the agent
       for (const agentNode of aiAgentNodes) {
-        const connections = workflow.connections[agentNode.name];
-        if (!connections?.ai_tool || connections.ai_tool.flat().filter(c => c).length === 0) {
+        // Search all connections to find ones targeting this agent via ai_tool
+        const hasToolConnected = Object.values(workflow.connections).some(sourceOutputs => {
+          const aiToolConnections = sourceOutputs.ai_tool;
+          if (!aiToolConnections) return false;
+          return aiToolConnections.flat().some(conn => conn && conn.node === agentNode.name);
+        });
+
+        if (!hasToolConnected) {
           result.warnings.push({
             type: 'warning',
             nodeId: agentNode.id,

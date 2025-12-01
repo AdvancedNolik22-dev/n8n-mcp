@@ -4665,4 +4665,223 @@ describe('WorkflowDiffEngine', () => {
       expect(result.errors![0].message).toContain('executeWorkflowTrigger cannot activate workflows');
     });
   });
+
+  // Issue #458: AI connection type propagation
+  describe('AI Connection Type Propagation (Issue #458)', () => {
+    it('should propagate ai_tool connection type when targetInput is not specified', async () => {
+      const workflowWithAI = {
+        ...baseWorkflow,
+        nodes: [
+          {
+            id: 'agent1',
+            name: 'AI Agent',
+            type: '@n8n/n8n-nodes-langchain.agent',
+            typeVersion: 2.1,
+            position: [500, 300] as [number, number],
+            parameters: {}
+          },
+          {
+            id: 'tool1',
+            name: 'Calculator',
+            type: '@n8n/n8n-nodes-langchain.toolCalculator',
+            typeVersion: 1,
+            position: [300, 400] as [number, number],
+            parameters: {}
+          }
+        ],
+        connections: {}
+      };
+
+      const operation: AddConnectionOperation = {
+        type: 'addConnection',
+        source: 'Calculator',
+        target: 'AI Agent',
+        sourceOutput: 'ai_tool'
+        // targetInput not specified - should default to sourceOutput ('ai_tool')
+      };
+
+      const request: WorkflowDiffRequest = {
+        id: 'test-workflow',
+        operations: [operation]
+      };
+
+      const result = await diffEngine.applyDiff(workflowWithAI as Workflow, request);
+
+      expect(result.success).toBe(true);
+      expect(result.workflow.connections['Calculator']).toBeDefined();
+      expect(result.workflow.connections['Calculator']['ai_tool']).toBeDefined();
+      // The inner type should be 'ai_tool', NOT 'main'
+      expect(result.workflow.connections['Calculator']['ai_tool'][0][0].type).toBe('ai_tool');
+      expect(result.workflow.connections['Calculator']['ai_tool'][0][0].node).toBe('AI Agent');
+    });
+
+    it('should propagate ai_languageModel connection type', async () => {
+      const workflowWithAI = {
+        ...baseWorkflow,
+        nodes: [
+          {
+            id: 'agent1',
+            name: 'AI Agent',
+            type: '@n8n/n8n-nodes-langchain.agent',
+            typeVersion: 2.1,
+            position: [500, 300] as [number, number],
+            parameters: {}
+          },
+          {
+            id: 'llm1',
+            name: 'OpenAI Chat Model',
+            type: '@n8n/n8n-nodes-langchain.lmChatOpenAi',
+            typeVersion: 1.2,
+            position: [300, 200] as [number, number],
+            parameters: {}
+          }
+        ],
+        connections: {}
+      };
+
+      const operation: AddConnectionOperation = {
+        type: 'addConnection',
+        source: 'OpenAI Chat Model',
+        target: 'AI Agent',
+        sourceOutput: 'ai_languageModel'
+      };
+
+      const request: WorkflowDiffRequest = {
+        id: 'test-workflow',
+        operations: [operation]
+      };
+
+      const result = await diffEngine.applyDiff(workflowWithAI as Workflow, request);
+
+      expect(result.success).toBe(true);
+      expect(result.workflow.connections['OpenAI Chat Model']['ai_languageModel'][0][0].type).toBe('ai_languageModel');
+    });
+
+    it('should propagate ai_memory connection type', async () => {
+      const workflowWithAI = {
+        ...baseWorkflow,
+        nodes: [
+          {
+            id: 'agent1',
+            name: 'AI Agent',
+            type: '@n8n/n8n-nodes-langchain.agent',
+            typeVersion: 2.1,
+            position: [500, 300] as [number, number],
+            parameters: {}
+          },
+          {
+            id: 'memory1',
+            name: 'Window Buffer Memory',
+            type: '@n8n/n8n-nodes-langchain.memoryBufferWindow',
+            typeVersion: 1.3,
+            position: [300, 500] as [number, number],
+            parameters: {}
+          }
+        ],
+        connections: {}
+      };
+
+      const operation: AddConnectionOperation = {
+        type: 'addConnection',
+        source: 'Window Buffer Memory',
+        target: 'AI Agent',
+        sourceOutput: 'ai_memory'
+      };
+
+      const request: WorkflowDiffRequest = {
+        id: 'test-workflow',
+        operations: [operation]
+      };
+
+      const result = await diffEngine.applyDiff(workflowWithAI as Workflow, request);
+
+      expect(result.success).toBe(true);
+      expect(result.workflow.connections['Window Buffer Memory']['ai_memory'][0][0].type).toBe('ai_memory');
+    });
+
+    it('should allow explicit targetInput override for mixed connection types', async () => {
+      const workflowWithNodes = {
+        ...baseWorkflow,
+        nodes: [
+          {
+            id: 'node1',
+            name: 'Source Node',
+            type: 'n8n-nodes-base.set',
+            typeVersion: 3.4,
+            position: [300, 300] as [number, number],
+            parameters: {}
+          },
+          {
+            id: 'node2',
+            name: 'Target Node',
+            type: 'n8n-nodes-base.set',
+            typeVersion: 3.4,
+            position: [500, 300] as [number, number],
+            parameters: {}
+          }
+        ],
+        connections: {}
+      };
+
+      const operation: AddConnectionOperation = {
+        type: 'addConnection',
+        source: 'Source Node',
+        target: 'Target Node',
+        sourceOutput: 'main',
+        targetInput: 'main' // Explicit override
+      };
+
+      const request: WorkflowDiffRequest = {
+        id: 'test-workflow',
+        operations: [operation]
+      };
+
+      const result = await diffEngine.applyDiff(workflowWithNodes as Workflow, request);
+
+      expect(result.success).toBe(true);
+      expect(result.workflow.connections['Source Node']['main'][0][0].type).toBe('main');
+    });
+
+    it('should default to main for regular connections when sourceOutput is not specified', async () => {
+      const workflowWithNodes = {
+        ...baseWorkflow,
+        nodes: [
+          {
+            id: 'node1',
+            name: 'Source Node',
+            type: 'n8n-nodes-base.set',
+            typeVersion: 3.4,
+            position: [300, 300] as [number, number],
+            parameters: {}
+          },
+          {
+            id: 'node2',
+            name: 'Target Node',
+            type: 'n8n-nodes-base.set',
+            typeVersion: 3.4,
+            position: [500, 300] as [number, number],
+            parameters: {}
+          }
+        ],
+        connections: {}
+      };
+
+      const operation: AddConnectionOperation = {
+        type: 'addConnection',
+        source: 'Source Node',
+        target: 'Target Node'
+        // Neither sourceOutput nor targetInput specified - should default to 'main'
+      };
+
+      const request: WorkflowDiffRequest = {
+        id: 'test-workflow',
+        operations: [operation]
+      };
+
+      const result = await diffEngine.applyDiff(workflowWithNodes as Workflow, request);
+
+      expect(result.success).toBe(true);
+      expect(result.workflow.connections['Source Node']['main'][0][0].type).toBe('main');
+    });
+  });
 });

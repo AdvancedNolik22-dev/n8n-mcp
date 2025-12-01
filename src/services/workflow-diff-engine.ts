@@ -757,7 +757,8 @@ export class WorkflowDiffEngine {
     const { sourceOutput, sourceIndex } = this.resolveSmartParameters(workflow, operation);
 
     // Use nullish coalescing to properly handle explicit 0 values
-    const targetInput = operation.targetInput ?? 'main';
+    // Default targetInput to sourceOutput to preserve connection type for AI connections (ai_tool, ai_memory, etc.)
+    const targetInput = operation.targetInput ?? sourceOutput;
     const targetIndex = operation.targetIndex ?? 0;
 
     // Initialize source node connections object
