@@ -147,6 +147,19 @@ class N8NDocumentationMCPServer {
         });
         this.setupHandlers();
     }
+    async close() {
+        try {
+            await this.server.close();
+            this.cache.clear();
+            this.db = null;
+            this.repository = null;
+            this.templateService = null;
+            this.earlyLogger = null;
+        }
+        catch (error) {
+            logger_1.logger.warn('Error closing MCP server', { error: error instanceof Error ? error.message : String(error) });
+        }
+    }
     async initializeDatabase(dbPath) {
         try {
             if (this.earlyLogger) {

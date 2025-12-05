@@ -14,6 +14,7 @@ export declare class N8NDocumentationMCPServer {
     private earlyLogger;
     private disabledToolsCache;
     constructor(instanceContext?: InstanceContext, earlyLogger?: EarlyErrorLogger);
+    close(): Promise<void>;
     private initializeDatabase;
     private initializeInMemorySchema;
     private parseSQLStatements;

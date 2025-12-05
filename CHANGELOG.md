@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.28.7] - 2025-12-05
+
+### Bug Fixes
+
+**Memory Leak: MCP Server Cleanup on Session Removal (#471)**
+
+Fixed memory leak where `N8NDocumentationMCPServer` objects were not properly closed when sessions were removed, causing memory growth over time.
+
+- **Root Cause**: `removeSession()` deleted server from map but didn't call cleanup methods
+- **Evidence**: Production server memory grew from ~10% to ~35% in 43 minutes (~1GB growth with 4GB container)
+
+- **Solution**:
+  - Added `close()` method to `N8NDocumentationMCPServer` that:
+    - Calls `server.close()` (MCP SDK cleanup)
+    - Calls `cache.destroy()` to stop cleanup timer and clear entries
+    - Closes database connection properly
+    - Nullifies service references to help GC
+  - Updated `removeSession()` to call `server.close()` before releasing references
+
+- **Files Changed**:
+  - `src/mcp/server.ts` - Added `close()` method
+  - `src/http-server-single-session.ts` - Call `server.close()` in `removeSession()`
+
+**Conceived by Romuald Członkowski - [AiAdvisors](https://www.aiadvisors.pl/en)**
+
 ## [2.28.6] - 2025-12-05
 
 ### Bug Fixes

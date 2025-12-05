@@ -180,17 +180,29 @@ export class SingleSessionHTTPServer {
    */
   private async removeSession(sessionId: string, reason: string): Promise<void> {
     try {
-      // Store reference to transport before deletion
+      // Store references before deletion
       const transport = this.transports[sessionId];
+      const server = this.servers[sessionId];
 
-      // Delete transport FIRST to prevent onclose handler from triggering recursion
+      // Delete references FIRST to prevent onclose handler from triggering recursion
       // This breaks the circular reference: removeSession -> close -> onclose -> removeSession
       delete this.transports[sessionId];
       delete this.servers[sessionId];
       delete this.sessionMetadata[sessionId];
       delete this.sessionContexts[sessionId];
 
-      // Close transport AFTER deletion
+      // Close server first (may have references to transport)
+      // This fixes memory leak where server resources weren't freed (issue #471)
+      // Handle server close errors separately so transport close still runs
+      if (server && typeof server.close === 'function') {
+        try {
+          await server.close();
+        } catch (serverError) {
+          logger.warn('Error closing server', { sessionId, error: serverError });
+        }
+      }
+
+      // Close transport last
       // When onclose handler fires, it won't find the transport anymore
       if (transport) {
         await transport.close();

@@ -220,7 +220,46 @@ export class N8NDocumentationMCPServer {
 
     this.setupHandlers();
   }
-  
+
+  /**
+   * Close the server and release resources.
+   * Should be called when the session is being removed.
+   *
+   * Order of cleanup:
+   * 1. Close MCP server connection
+   * 2. Destroy cache (clears entries AND stops cleanup timer)
+   * 3. Close database connection
+   * 4. Null out references to help GC
+   */
+  async close(): Promise<void> {
+    try {
+      await this.server.close();
+
+      // Use destroy() not clear() - also stops the cleanup timer
+      this.cache.destroy();
+
+      // Close database connection before nullifying reference
+      if (this.db) {
+        try {
+          this.db.close();
+        } catch (dbError) {
+          logger.warn('Error closing database', {
+            error: dbError instanceof Error ? dbError.message : String(dbError)
+          });
+        }
+      }
+
+      // Null out references to help garbage collection
+      this.db = null;
+      this.repository = null;
+      this.templateService = null;
+      this.earlyLogger = null;
+    } catch (error) {
+      // Log but don't throw - cleanup should be best-effort
+      logger.warn('Error closing MCP server', { error: error instanceof Error ? error.message : String(error) });
+    }
+  }
+
   private async initializeDatabase(dbPath: string): Promise<void> {
     try {
       // Checkpoint: Database connecting (v2.18.3)

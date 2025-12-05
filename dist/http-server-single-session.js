@@ -101,10 +101,14 @@ class SingleSessionHTTPServer {
     async removeSession(sessionId, reason) {
         try {
             const transport = this.transports[sessionId];
+            const server = this.servers[sessionId];
             delete this.transports[sessionId];
             delete this.servers[sessionId];
             delete this.sessionMetadata[sessionId];
             delete this.sessionContexts[sessionId];
+            if (server) {
+                await server.close();
+            }
             if (transport) {
                 await transport.close();
             }
