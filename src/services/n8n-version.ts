@@ -20,8 +20,16 @@ import axios from 'axios';
 import { logger } from '../utils/logger';
 import { N8nVersionInfo, N8nSettingsResponse } from '../types/n8n-api';
 
-// Cache version info per base URL to avoid repeated API calls
-const versionCache = new Map<string, N8nVersionInfo>();
+// Cache version info per base URL with TTL to handle server upgrades
+interface CachedVersion {
+  info: N8nVersionInfo;
+  fetchedAt: number;
+}
+
+// Cache TTL: 5 minutes - allows for server upgrades without requiring restart
+const VERSION_CACHE_TTL_MS = 5 * 60 * 1000;
+
+const versionCache = new Map<string, CachedVersion>();
 
 // Settings properties supported by each n8n version range
 // These are CUMULATIVE - each version adds to the previous
@@ -53,8 +61,9 @@ const SETTINGS_BY_VERSION = {
  * Parse version string into structured version info
  */
 export function parseVersion(versionString: string): N8nVersionInfo | null {
-  // Handle formats like "1.119.0", "1.37.0-beta.1", "0.200.0"
-  const match = versionString.match(/^(\d+)\.(\d+)\.(\d+)/);
+  // Handle formats like "1.119.0", "1.37.0-beta.1", "0.200.0", "v1.2.3"
+  // Support optional 'v' prefix for robustness
+  const match = versionString.match(/^v?(\d+)\.(\d+)\.(\d+)/);
   if (!match) {
     return null;
   }
@@ -111,11 +120,11 @@ export function getSupportedSettingsProperties(version: N8nVersionInfo): Set<str
  * but it's the only reliable way to get version info.
  */
 export async function fetchN8nVersion(baseUrl: string): Promise<N8nVersionInfo | null> {
-  // Check cache first
+  // Check cache first (with TTL)
   const cached = versionCache.get(baseUrl);
-  if (cached) {
-    logger.debug(`Using cached n8n version for ${baseUrl}: ${cached.version}`);
-    return cached;
+  if (cached && Date.now() - cached.fetchedAt < VERSION_CACHE_TTL_MS) {
+    logger.debug(`Using cached n8n version for ${baseUrl}: ${cached.info.version}`);
+    return cached.info;
   }
 
   try {
@@ -138,14 +147,18 @@ export async function fetchN8nVersion(baseUrl: string): Promise<N8nVersionInfo |
         return null;
       }
 
-      // n8n can return version in different fields
-      const versionString = settings.n8nVersion || settings.versionCli;
+      // n8n can return version in different fields - validate type
+      const versionString = typeof settings.n8nVersion === 'string'
+        ? settings.n8nVersion
+        : typeof settings.versionCli === 'string'
+          ? settings.versionCli
+          : null;
 
       if (versionString) {
         const versionInfo = parseVersion(versionString);
         if (versionInfo) {
-          // Cache the result
-          versionCache.set(baseUrl, versionInfo);
+          // Cache the result with timestamp
+          versionCache.set(baseUrl, { info: versionInfo, fetchedAt: Date.now() });
           logger.debug(`Detected n8n version: ${versionInfo.version}`);
           return versionInfo;
         }
@@ -168,17 +181,21 @@ export function clearVersionCache(): void {
 }
 
 /**
- * Get cached version for a base URL (or null if not cached)
+ * Get cached version for a base URL (or null if not cached or expired)
  */
 export function getCachedVersion(baseUrl: string): N8nVersionInfo | null {
-  return versionCache.get(baseUrl) || null;
+  const cached = versionCache.get(baseUrl);
+  if (cached && Date.now() - cached.fetchedAt < VERSION_CACHE_TTL_MS) {
+    return cached.info;
+  }
+  return null;
 }
 
 /**
  * Set cached version (useful for testing or when version is known)
  */
 export function setCachedVersion(baseUrl: string, version: N8nVersionInfo): void {
-  versionCache.set(baseUrl, version);
+  versionCache.set(baseUrl, { info: version, fetchedAt: Date.now() });
 }
 
 /**

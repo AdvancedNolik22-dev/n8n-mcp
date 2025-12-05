@@ -43,7 +43,7 @@ export class N8nApiClient {
   private maxRetries: number;
   private baseUrl: string;
   private versionInfo: N8nVersionInfo | null = null;
-  private versionFetched = false;
+  private versionPromise: Promise<N8nVersionInfo | null> | null = null;
 
   constructor(config: N8nApiClientConfig) {
     const { baseUrl, apiKey, timeout = 30000, maxRetries = 3 } = config;
@@ -95,19 +95,42 @@ export class N8nApiClient {
   }
 
   /**
-   * Get the n8n version, fetching it if not already cached
+   * Get the n8n version, fetching it if not already cached.
+   * Uses promise-based locking to prevent concurrent requests.
    */
   async getVersion(): Promise<N8nVersionInfo | null> {
-    if (!this.versionFetched) {
-      // Check if already cached globally
-      this.versionInfo = getCachedVersion(this.baseUrl);
-      if (!this.versionInfo) {
-        // Fetch from server
-        this.versionInfo = await fetchN8nVersion(this.baseUrl);
-      }
-      this.versionFetched = true;
+    // If we already have version info, return it
+    if (this.versionInfo) {
+      return this.versionInfo;
     }
-    return this.versionInfo;
+
+    // If a fetch is already in progress, wait for it
+    if (this.versionPromise) {
+      return this.versionPromise;
+    }
+
+    // Start a new fetch with promise-based locking
+    this.versionPromise = this.fetchVersionOnce();
+    try {
+      this.versionInfo = await this.versionPromise;
+      return this.versionInfo;
+    } finally {
+      // Clear the promise so future calls can retry if needed
+      this.versionPromise = null;
+    }
+  }
+
+  /**
+   * Internal method to fetch version once
+   */
+  private async fetchVersionOnce(): Promise<N8nVersionInfo | null> {
+    // Check if already cached globally
+    let version = getCachedVersion(this.baseUrl);
+    if (!version) {
+      // Fetch from server
+      version = await fetchN8nVersion(this.baseUrl);
+    }
+    return version;
   }
 
   /**

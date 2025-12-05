@@ -181,9 +181,17 @@ export function cleanWorkflowForUpdate(workflow: Workflow): Partial<Workflow> {
         filteredSettings[key] = value;
       }
     }
-    cleanedWorkflow.settings = filteredSettings;
+    // If no valid properties remain after filtering, use minimal defaults
+    // Issue #431: n8n API rejects empty settings objects
+    if (Object.keys(filteredSettings).length > 0) {
+      cleanedWorkflow.settings = filteredSettings;
+    } else {
+      // Minimal valid settings - executionOrder v1 is the modern default
+      cleanedWorkflow.settings = { executionOrder: 'v1' as const };
+    }
   } else {
-    cleanedWorkflow.settings = {};
+    // No settings provided - use minimal valid defaults
+    cleanedWorkflow.settings = { executionOrder: 'v1' as const };
   }
 
   return cleanedWorkflow;
