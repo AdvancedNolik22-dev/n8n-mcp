@@ -558,7 +558,7 @@ DISABLE_CONSOLE_OUTPUT=false
 
 # Optional: Session configuration
 SESSION_TIMEOUT=1800000  # 30 minutes in milliseconds
-MAX_SESSIONS=100
+N8N_MCP_MAX_SESSIONS=100  # Maximum concurrent sessions (default: 100)
 
 # Optional: Performance
 NODE_ENV=production

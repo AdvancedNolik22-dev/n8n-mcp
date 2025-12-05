@@ -41,7 +41,7 @@ interface MultiTenantHeaders {
 }
 
 // Session management constants
-const MAX_SESSIONS = 100;
+const MAX_SESSIONS = Math.max(1, parseInt(process.env.N8N_MCP_MAX_SESSIONS || '100', 10));
 const SESSION_CLEANUP_INTERVAL = 5 * 60 * 1000; // 5 minutes
 
 interface Session {

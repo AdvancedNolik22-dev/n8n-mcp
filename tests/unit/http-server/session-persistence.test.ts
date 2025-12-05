@@ -427,7 +427,7 @@ describe('SingleSessionHTTPServer - Session Persistence', () => {
     });
 
     it('should respect MAX_SESSIONS limit during restore', () => {
-      // Create 99 existing sessions (MAX_SESSIONS is 100)
+      // Create 99 existing sessions (MAX_SESSIONS defaults to 100, configurable via N8N_MCP_MAX_SESSIONS env var)
       const serverAny = server as any;
       const now = new Date();
       for (let i = 0; i < 99; i++) {

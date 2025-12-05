@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.28.4] - 2025-12-05
+
+### Features
+
+**Configurable MAX_SESSIONS Limit (#468)**
+
+The `MAX_SESSIONS` limit is now configurable via the `N8N_MCP_MAX_SESSIONS` environment variable, addressing scalability issues for multi-tenant SaaS deployments.
+
+- **Problem**: Hardcoded limit of 100 concurrent sessions caused "Session limit reached" errors during peak usage
+- **Solution**: `MAX_SESSIONS` now reads from `N8N_MCP_MAX_SESSIONS` env var (default: 100)
+- **Usage**: Set `N8N_MCP_MAX_SESSIONS=1000` for higher capacity deployments
+- **Safety**: Includes `Math.max(1, ...)` floor to prevent invalid configurations
+- **Files**: `src/http-server-single-session.ts:44`
+
+```bash
+# Example: Allow up to 1000 concurrent sessions
+N8N_MCP_MAX_SESSIONS=1000
+```
+
 ## [2.28.3] - 2025-12-02
 
 ### Changed
@@ -596,7 +615,7 @@ Added export/restore functionality for MCP sessions to enable zero-downtime depl
 - `restoreSessionState(sessions)` method for session recovery
 - Validates session structure using existing `validateInstanceContext()`
 - Handles null/invalid sessions gracefully with warnings
-- Enforces MAX_SESSIONS limit (100 concurrent sessions)
+- Enforces MAX_SESSIONS limit (default 100, configurable via N8N_MCP_MAX_SESSIONS env var)
 - Skips expired sessions during restore
 
 **3. SessionState Type**

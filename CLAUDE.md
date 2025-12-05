@@ -209,7 +209,7 @@ The MCP server exposes tools in several categories:
 - **Security-first**: API keys exported as plaintext - downstream MUST encrypt
 - **Dormant sessions**: Restored sessions recreate transports on first request
 - **Automatic expiration**: Respects `sessionTimeout` setting (default 30 min)
-- **MAX_SESSIONS limit**: Caps at 100 concurrent sessions
+- **MAX_SESSIONS limit**: Caps at 100 concurrent sessions (configurable via N8N_MCP_MAX_SESSIONS env var)
 
 **Important Implementation Notes:**
 - Only exports sessions with valid n8nApiUrl and n8nApiKey in context

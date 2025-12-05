@@ -93,7 +93,7 @@ console.log(`Restored ${count} sessions`);
 - Validates session metadata (timestamps, required fields)
 - Skips expired sessions (age > sessionTimeout)
 - Skips duplicate sessions (idempotent)
-- Respects MAX_SESSIONS limit (100 per container)
+- Respects MAX_SESSIONS limit (default 100, configurable via N8N_MCP_MAX_SESSIONS env var)
 - Recreates transports/servers lazily on first request
 - Logs security events for restore success/failure
 
@@ -595,19 +595,19 @@ console.log(`Export size: ${sizeKB.toFixed(2)} KB`);
 
 ### MAX_SESSIONS Limit
 
-Hard limit: 100 sessions per container
+Default limit: 100 sessions per container (configurable via `N8N_MCP_MAX_SESSIONS` env var)
 
 ```typescript
 // Restore respects limit
 const sessions = createSessions(150); // 150 sessions
 const restored = engine.restoreSessionState(sessions);
-// restored = 100 (only first 100 restored)
+// restored = 100 (only first 100 restored, or N8N_MCP_MAX_SESSIONS value)
 ```
 
-For >100 sessions per tenant:
-- Deploy multiple containers
-- Use session routing/sharding
-- Implement session affinity
+For higher session limits:
+- Set `N8N_MCP_MAX_SESSIONS=1000` (or desired limit)
+- Monitor memory usage as sessions consume resources
+- Alternatively, deploy multiple containers with session routing/sharding
 
 ## Troubleshooting
 
@@ -676,10 +676,11 @@ Reached MAX_SESSIONS limit (100), skipping remaining sessions
 
 **Solutions:**
 
-1. Scale horizontally (more containers)
-2. Implement session sharding
-3. Reduce sessionTimeout
-4. Clean up inactive sessions
+1. Increase limit: Set `N8N_MCP_MAX_SESSIONS=1000` (or desired value)
+2. Scale horizontally (more containers)
+3. Implement session sharding
+4. Reduce sessionTimeout
+5. Clean up inactive sessions
 
 ```typescript
 // Pre-filter by activity
