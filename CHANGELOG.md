@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.28.5] - 2025-12-05
+
+### Bug Fixes
+
+**Version-Aware Settings Filtering for n8n API Compatibility (#464, #465, #466)**
+
+Fixed `"Invalid request: request/body must NOT have additional properties"` errors when using `n8n_update_partial_workflow` with older n8n instances.
+
+- **Root Cause**: n8n Public API uses strict JSON schema validation. Different n8n versions support different workflow settings properties:
+  - All versions: 7 core properties (saveExecutionProgress, saveManualExecutions, saveDataErrorExecution, saveDataSuccessExecution, executionTimeout, errorWorkflow, timezone)
+  - n8n 1.37.0+: adds `executionOrder`
+  - n8n 1.119.0+: adds `callerPolicy`, `callerIds`, `timeSavedPerExecution`, `availableInMCP`
+
+- **Solution**: Auto-detect n8n version via `/rest/settings` endpoint and filter settings accordingly
+
+- **New Features**:
+  - Version detection with 5-minute cache TTL (handles server upgrades without restart)
+  - Type validation for version string responses
+  - Support for `v` prefix in version strings (e.g., `v1.2.3`)
+  - Race condition protection with promise-based locking
+  - Read-only field filtering (`activeVersionId`, `activeVersion`)
+
+- **Files Changed**:
+  - `src/services/n8n-version.ts` (NEW) - Version detection and settings filtering
+  - `src/services/n8n-api-client.ts` - Added `getVersion()` method with locking
+  - `src/services/n8n-validation.ts` - Added read-only field filtering
+  - `src/types/n8n-api.ts` - Added version types
+  - `tests/unit/services/n8n-version.test.ts` (NEW) - 24 unit tests
+
+Thanks to [@thesved](https://github.com/thesved) for this contribution!
+
+**Conceived by Romuald Członkowski - [AiAdvisors](https://www.aiadvisors.pl/en)**
+
 ## [2.28.4] - 2025-12-05
 
 ### Features
