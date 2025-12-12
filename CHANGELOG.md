@@ -7,6 +7,79 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.29.2] - 2025-12-12
+
+### Added
+
+**Tool Variant Validation and Auto-Fix**
+
+Added validation to detect when base nodes are incorrectly used as AI tools when Tool variants should be used instead, with automatic fix capability.
+
+**Key Features:**
+
+- **New Validation**: `validateAIToolSource()` detects base nodes (e.g., `n8n-nodes-base.supabase`) connected via `ai_tool` output when a Tool variant exists
+- **Clear Error Messages**: Returns actionable error with `WRONG_NODE_TYPE_FOR_AI_TOOL` code explaining which Tool variant to use
+- **Auto-Fix Support**: New `tool-variant-correction` fix type in `n8n_autofix_workflow` automatically replaces base nodes with their Tool variants
+- **High Confidence Fixes**: Tool variant corrections are marked as high confidence since the correct type is known
+
+**New Utility Method:**
+
+- `NodeTypeNormalizer.toWorkflowFormat()` - Converts database format (short) back to n8n API format (full)
+
+**Test Coverage:**
+
+- 83 new unit tests covering Tool variant validation, auto-fix, and type normalization
+- Tests for edge cases: langchain tools, unknown nodes, multiple errors, community nodes
+
+**Files Changed:**
+
+- `src/services/workflow-validator.ts` - Added `validateAIToolSource()` method
+- `src/services/workflow-auto-fixer.ts` - Added `tool-variant-correction` fix type
+- `src/utils/node-type-normalizer.ts` - Added `toWorkflowFormat()` method
+- `tests/unit/services/workflow-validator-tool-variants.test.ts` - **NEW** 12 tests
+- `tests/unit/services/workflow-auto-fixer-tool-variants.test.ts` - **NEW** 13 tests
+- `tests/unit/utils/node-type-normalizer.test.ts` - Added 19 tests for `toWorkflowFormat()`
+
+**Conceived by Romuald Członkowski - [AiAdvisors](https://www.aiadvisors.pl/en)**
+
+## [2.29.1] - 2025-12-12
+
+### Added
+
+**Tool Variant Support for AI Agent Integration**
+
+Added comprehensive support for n8n Tool variants - specialized node versions created for AI Agent tool connections (e.g., `nodes-base.supabaseTool` from `nodes-base.supabase`).
+
+**Key Features:**
+
+- **266 Tool Variants Generated**: During database rebuild, Tool variants are automatically created for all nodes with `usableAsTool: true`
+- **Bidirectional Cross-References**:
+  - Base nodes show `toolVariantInfo.hasToolVariant: true` with guidance to use Tool variant
+  - Tool variants show `toolVariantInfo.isToolVariant: true` with reference to base node
+- **Clear AI Guidance**: Contextual messages help AI assistants choose the correct node type:
+  - Base node guidance: "To use this node with AI Agents, use the Tool variant: nodes-base.supabaseTool"
+  - Tool variant guidance: "This is the Tool variant for AI Agent integration"
+- **Tool Description Property**: Tool variants include `toolDescription` property for AI context
+- **ai_tool Output Type**: Tool variants output `ai_tool` instead of `main` for proper Agent connections
+
+**Database Schema Changes:**
+
+- Added `is_tool_variant` column (1 if Tool variant)
+- Added `tool_variant_of` column (base node type reference)
+- Added `has_tool_variant` column (1 if base node has Tool variant)
+- Added indexes for efficient Tool variant queries
+
+**Files Changed:**
+
+- `src/database/schema.sql` - New columns and indexes
+- `src/parsers/node-parser.ts` - Extended ParsedNode interface
+- `src/services/tool-variant-generator.ts` - **NEW** Tool variant generation service
+- `src/database/node-repository.ts` - Store/retrieve Tool variant fields
+- `src/scripts/rebuild.ts` - Generate Tool variants during rebuild
+- `src/mcp/server.ts` - Add `toolVariantInfo` to get_node responses
+
+**Conceived by Romuald Członkowski - [AiAdvisors](https://www.aiadvisors.pl/en)**
+
 ## [2.29.0] - 2025-12-09
 
 ### Performance
