@@ -651,7 +651,7 @@ class WorkflowDiffEngine {
     validateActivateWorkflow(workflow, operation) {
         const activatableTriggers = workflow.nodes.filter(node => !node.disabled && (0, node_type_utils_1.isActivatableTrigger)(node.type));
         if (activatableTriggers.length === 0) {
-            return 'Cannot activate workflow: No activatable trigger nodes found. Workflows must have at least one enabled trigger node (webhook, schedule, email, etc.). Note: executeWorkflowTrigger cannot activate workflows as they can only be invoked by other workflows.';
+            return 'Cannot activate workflow: No activatable trigger nodes found. Workflows must have at least one enabled trigger node (webhook, schedule, executeWorkflowTrigger, etc.).';
         }
         return null;
     }

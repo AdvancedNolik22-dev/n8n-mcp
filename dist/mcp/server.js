@@ -51,6 +51,7 @@ const node_repository_1 = require("../database/node-repository");
 const database_adapter_1 = require("../database/database-adapter");
 const property_filter_1 = require("../services/property-filter");
 const task_templates_1 = require("../services/task-templates");
+const config_validator_1 = require("../services/config-validator");
 const enhanced_config_validator_1 = require("../services/enhanced-config-validator");
 const property_dependencies_1 = require("../services/property-dependencies");
 const type_structure_service_1 = require("../services/type-structure-service");
@@ -2108,7 +2109,11 @@ Full documentation is being prepared. For now, use get_node_essentials for confi
             throw new Error(`Node ${nodeType} not found`);
         }
         const properties = node.properties || [];
-        const validationResult = enhanced_config_validator_1.EnhancedConfigValidator.validateWithMode(node.nodeType, config, properties, mode, profile);
+        const configWithVersion = {
+            '@version': node.version || 1,
+            ...config
+        };
+        const validationResult = enhanced_config_validator_1.EnhancedConfigValidator.validateWithMode(node.nodeType, configWithVersion, properties, mode, profile);
         return {
             nodeType: node.nodeType,
             workflowNodeType: (0, node_utils_1.getWorkflowNodeType)(node.package, node.nodeType),
@@ -2402,40 +2407,16 @@ Full documentation is being prepared. For now, use get_node_essentials for confi
             throw new Error(`Node ${nodeType} not found`);
         }
         const properties = node.properties || [];
-        const operationContext = {
-            resource: config?.resource,
-            operation: config?.operation,
-            action: config?.action,
-            mode: config?.mode
+        const configWithVersion = {
+            '@version': node.version || 1,
+            ...(config || {})
         };
         const missingFields = [];
         for (const prop of properties) {
             if (!prop.required)
                 continue;
-            if (prop.displayOptions) {
-                let isVisible = true;
-                if (prop.displayOptions.show) {
-                    for (const [key, values] of Object.entries(prop.displayOptions.show)) {
-                        const configValue = config?.[key];
-                        const expectedValues = Array.isArray(values) ? values : [values];
-                        if (!expectedValues.includes(configValue)) {
-                            isVisible = false;
-                            break;
-                        }
-                    }
-                }
-                if (isVisible && prop.displayOptions.hide) {
-                    for (const [key, values] of Object.entries(prop.displayOptions.hide)) {
-                        const configValue = config?.[key];
-                        const expectedValues = Array.isArray(values) ? values : [values];
-                        if (expectedValues.includes(configValue)) {
-                            isVisible = false;
-                            break;
-                        }
-                    }
-                }
-                if (!isVisible)
-                    continue;
+            if (prop.displayOptions && !config_validator_1.ConfigValidator.isPropertyVisible(prop, configWithVersion)) {
+                continue;
             }
             if (!config || !(prop.name in config)) {
                 missingFields.push(prop.displayName || prop.name);

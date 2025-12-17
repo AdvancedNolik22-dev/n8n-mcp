@@ -217,12 +217,9 @@ function validateWorkflowStructure(workflow) {
     }
     if (workflow.active === true && workflow.nodes && workflow.nodes.length > 0) {
         const activatableTriggers = workflow.nodes.filter(node => !node.disabled && (0, node_type_utils_1.isActivatableTrigger)(node.type));
-        const executeWorkflowTriggers = workflow.nodes.filter(node => !node.disabled && node.type.toLowerCase().includes('executeworkflow'));
-        if (activatableTriggers.length === 0 && executeWorkflowTriggers.length > 0) {
-            const triggerNames = executeWorkflowTriggers.map(n => n.name).join(', ');
-            errors.push(`Cannot activate workflow with only Execute Workflow Trigger nodes (${triggerNames}). ` +
-                'Execute Workflow Trigger can only be invoked by other workflows, not activated. ' +
-                'Either deactivate the workflow or add a webhook/schedule/polling trigger.');
+        if (activatableTriggers.length === 0) {
+            errors.push('Cannot activate workflow: No activatable trigger nodes found. ' +
+                'Workflows must have at least one enabled trigger node (webhook, schedule, executeWorkflowTrigger, etc.).');
         }
     }
     if (workflow.nodes && workflow.connections) {

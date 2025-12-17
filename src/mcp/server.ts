@@ -2905,12 +2905,18 @@ Full documentation is being prepared. For now, use get_node_essentials for confi
     
     // Get properties
     const properties = node.properties || [];
-    
+
+    // Add @version to config for displayOptions evaluation (supports _cnd operators)
+    const configWithVersion = {
+      '@version': node.version || 1,
+      ...config
+    };
+
     // Use enhanced validator with operation mode by default
     const validationResult = EnhancedConfigValidator.validateWithMode(
-      node.nodeType, 
-      config, 
-      properties, 
+      node.nodeType,
+      configWithVersion,
+      properties,
       mode,
       profile
     );
@@ -3276,57 +3282,27 @@ Full documentation is being prepared. For now, use get_node_essentials for confi
       throw new Error(`Node ${nodeType} not found`);
     }
     
-    // Get properties  
+    // Get properties
     const properties = node.properties || [];
-    
-    // Extract operation context (safely handle undefined config properties)
-    const operationContext = {
-      resource: config?.resource,
-      operation: config?.operation,
-      action: config?.action,
-      mode: config?.mode
+
+    // Add @version to config for displayOptions evaluation (supports _cnd operators)
+    const configWithVersion = {
+      '@version': node.version || 1,
+      ...(config || {})
     };
-    
+
     // Find missing required fields
     const missingFields: string[] = [];
-    
+
     for (const prop of properties) {
       // Skip if not required
       if (!prop.required) continue;
-      
-      // Skip if not visible based on current config
-      if (prop.displayOptions) {
-        let isVisible = true;
-        
-        // Check show conditions
-        if (prop.displayOptions.show) {
-          for (const [key, values] of Object.entries(prop.displayOptions.show)) {
-            const configValue = config?.[key];
-            const expectedValues = Array.isArray(values) ? values : [values];
-            
-            if (!expectedValues.includes(configValue)) {
-              isVisible = false;
-              break;
-            }
-          }
-        }
-        
-        // Check hide conditions
-        if (isVisible && prop.displayOptions.hide) {
-          for (const [key, values] of Object.entries(prop.displayOptions.hide)) {
-            const configValue = config?.[key];
-            const expectedValues = Array.isArray(values) ? values : [values];
-            
-            if (expectedValues.includes(configValue)) {
-              isVisible = false;
-              break;
-            }
-          }
-        }
-        
-        if (!isVisible) continue;
+
+      // Skip if not visible based on current config (uses ConfigValidator for _cnd support)
+      if (prop.displayOptions && !ConfigValidator.isPropertyVisible(prop, configWithVersion)) {
+        continue;
       }
-      
+
       // Check if field is missing (safely handle null/undefined config)
       if (!config || !(prop.name in config)) {
         missingFields.push(prop.displayName || prop.name);

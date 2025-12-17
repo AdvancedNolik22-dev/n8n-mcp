@@ -7,6 +7,65 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.30.1] - 2025-12-17
+
+### Added
+
+**Support for `_cnd` Conditional Operators in displayOptions Validation**
+
+Added comprehensive support for n8n's `_cnd` conditional operators in displayOptions, enabling proper validation of versioned nodes like Execute Workflow Trigger.
+
+**Supported Operators (12 total):**
+
+- `eq` - Equal
+- `not` - Not equal
+- `gte` - Greater than or equal
+- `lte` - Less than or equal
+- `gt` - Greater than
+- `lt` - Less than
+- `between` - Range check (from/to)
+- `startsWith` - String prefix match
+- `endsWith` - String suffix match
+- `includes` - String contains
+- `regex` - Regular expression match
+- `exists` - Field existence check
+
+**Key Features:**
+
+- **Version-Based Visibility**: Properties with `displayOptions: { show: { '@version': [{ _cnd: { gte: 1.1 } }] } }` are now correctly evaluated
+- **No More False Positives**: Eliminates incorrect "not visible with current settings" warnings for versioned nodes
+- **Full Operator Support**: All 12 n8n conditional operators implemented
+- **Backward Compatible**: Plain value matching continues to work unchanged
+- **Hardened Operators**: Regex and between operators include validation for edge cases
+
+**Files Changed:**
+
+- `src/services/config-validator.ts` - Added `evaluateCondition()`, `valueMatches()`, updated `isPropertyVisible()` to public
+- `src/mcp/server.ts` - Pass `@version` to validators in `validateNodeConfig()` and `validateNodeMinimal()`
+- `src/services/workflow-validator.ts` - Pass `@version` in workflow validation
+- `tests/unit/services/config-validator-cnd.test.ts` - **NEW** 47 unit tests for all operators including edge cases
+
+### Fixed
+
+**n8n 2.0+ Execute Workflow Trigger Activation**
+
+Fixed a breaking change introduced in n8n 2.0 where Execute Workflow Trigger workflows must now be activated to work.
+
+**What Changed:**
+
+- `executeWorkflowTrigger` is now recognized as an activatable trigger
+- Removed outdated validation that blocked active workflows with only Execute Workflow Trigger
+- Updated error messages to include executeWorkflowTrigger in the list of valid triggers
+
+**Files Changed:**
+
+- `src/utils/node-type-utils.ts` - Updated `isActivatableTrigger()` to return `true` for executeWorkflowTrigger
+- `src/services/n8n-validation.ts` - Removed specific check blocking Execute Workflow Trigger
+- `src/services/workflow-diff-engine.ts` - Updated error message
+- `tests/unit/utils/node-type-utils.test.ts` - Updated tests for n8n 2.0+ behavior
+
+**Conceived by Romuald Czlonkowski - [AiAdvisors](https://www.aiadvisors.pl/en)**
+
 ## [2.30.0] - 2025-12-15
 
 ### Changed

@@ -30,7 +30,9 @@ export declare class ConfigValidator {
     }>): ValidationResult[];
     private static checkRequiredProperties;
     private static getPropertyVisibility;
-    protected static isPropertyVisible(prop: any, config: Record<string, any>): boolean;
+    private static evaluateCondition;
+    private static valueMatches;
+    static isPropertyVisible(prop: any, config: Record<string, any>): boolean;
     private static validatePropertyTypes;
     private static performNodeSpecificValidation;
     private static validateHttpRequest;

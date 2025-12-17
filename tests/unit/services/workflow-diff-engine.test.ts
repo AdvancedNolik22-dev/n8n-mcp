@@ -4402,7 +4402,6 @@ describe('WorkflowDiffEngine', () => {
       expect(result.success).toBe(false);
       expect(result.errors).toBeDefined();
       expect(result.errors![0].message).toContain('No activatable trigger nodes found');
-      expect(result.errors![0].message).toContain('executeWorkflowTrigger cannot activate workflows');
     });
 
     it('should reject activation if all trigger nodes are disabled', async () => {
@@ -4615,8 +4614,8 @@ describe('WorkflowDiffEngine', () => {
       expect(result.shouldActivate).toBe(true);
     });
 
-    it('should reject activation if workflow has executeWorkflowTrigger only', async () => {
-      // Create workflow with executeWorkflowTrigger (not activatable - Issue #351)
+    it('should allow activation if workflow has executeWorkflowTrigger only (n8n 2.0+)', async () => {
+      // Create workflow with executeWorkflowTrigger (activatable since n8n 2.0+)
       const workflowWithExecuteTrigger = createWorkflow('Test Workflow')
         .addNode({
           id: 'execute-1',
@@ -4659,10 +4658,9 @@ describe('WorkflowDiffEngine', () => {
 
       const result = await diffEngine.applyDiff(workflowWithExecuteTrigger, request);
 
-      expect(result.success).toBe(false);
-      expect(result.errors).toBeDefined();
-      expect(result.errors![0].message).toContain('No activatable trigger nodes found');
-      expect(result.errors![0].message).toContain('executeWorkflowTrigger cannot activate workflows');
+      // executeWorkflowTrigger is now activatable in n8n 2.0+
+      expect(result.success).toBe(true);
+      expect(result.shouldActivate).toBe(true);
     });
   });
 

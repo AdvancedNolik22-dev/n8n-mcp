@@ -310,7 +310,11 @@ class WorkflowValidator {
                 if (normalizedType.startsWith('nodes-langchain.')) {
                     continue;
                 }
-                const nodeValidation = this.nodeValidator.validateWithMode(node.type, node.parameters, nodeInfo.properties || [], 'operation', profile);
+                const paramsWithVersion = {
+                    '@version': node.typeVersion || 1,
+                    ...node.parameters
+                };
+                const nodeValidation = this.nodeValidator.validateWithMode(node.type, paramsWithVersion, nodeInfo.properties || [], 'operation', profile);
                 nodeValidation.errors.forEach((error) => {
                     result.errors.push({
                         type: 'error',

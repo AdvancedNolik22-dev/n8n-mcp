@@ -495,9 +495,14 @@ export class WorkflowValidator {
         }
 
         // Validate node configuration
+        // Add @version to parameters for displayOptions evaluation (supports _cnd operators)
+        const paramsWithVersion = {
+          '@version': node.typeVersion || 1,
+          ...node.parameters
+        };
         const nodeValidation = this.nodeValidator.validateWithMode(
           node.type,
-          node.parameters,
+          paramsWithVersion,
           nodeInfo.properties || [],
           'operation',
           profile as any

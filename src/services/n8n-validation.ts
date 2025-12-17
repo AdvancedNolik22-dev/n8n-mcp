@@ -331,24 +331,16 @@ export function validateWorkflowStructure(workflow: Partial<Workflow>): string[]
   }
 
   // Validate active workflows have activatable triggers
-  // Issue #351: executeWorkflowTrigger cannot activate a workflow
-  // It can only be invoked by other workflows
+  // NOTE: Since n8n 2.0, executeWorkflowTrigger is now activatable and MUST be activated to work
   if ((workflow as any).active === true && workflow.nodes && workflow.nodes.length > 0) {
     const activatableTriggers = workflow.nodes.filter(node =>
       !node.disabled && isActivatableTrigger(node.type)
     );
 
-    const executeWorkflowTriggers = workflow.nodes.filter(node =>
-      !node.disabled && node.type.toLowerCase().includes('executeworkflow')
-    );
-
-    if (activatableTriggers.length === 0 && executeWorkflowTriggers.length > 0) {
-      // Workflow is active but only has executeWorkflowTrigger nodes
-      const triggerNames = executeWorkflowTriggers.map(n => n.name).join(', ');
+    if (activatableTriggers.length === 0) {
       errors.push(
-        `Cannot activate workflow with only Execute Workflow Trigger nodes (${triggerNames}). ` +
-        'Execute Workflow Trigger can only be invoked by other workflows, not activated. ' +
-        'Either deactivate the workflow or add a webhook/schedule/polling trigger.'
+        'Cannot activate workflow: No activatable trigger nodes found. ' +
+        'Workflows must have at least one enabled trigger node (webhook, schedule, executeWorkflowTrigger, etc.).'
       );
     }
   }

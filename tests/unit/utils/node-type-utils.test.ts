@@ -257,9 +257,10 @@ describe('node-type-utils', () => {
   });
 
   describe('isActivatableTrigger', () => {
-    it('executeWorkflowTrigger is NOT activatable', () => {
-      expect(isActivatableTrigger('n8n-nodes-base.executeWorkflowTrigger')).toBe(false);
-      expect(isActivatableTrigger('nodes-base.executeWorkflowTrigger')).toBe(false);
+    it('executeWorkflowTrigger IS activatable (n8n 2.0+ requires activation)', () => {
+      // Since n8n 2.0, executeWorkflowTrigger MUST be activated to work
+      expect(isActivatableTrigger('n8n-nodes-base.executeWorkflowTrigger')).toBe(true);
+      expect(isActivatableTrigger('nodes-base.executeWorkflowTrigger')).toBe(true);
     });
 
     it('webhook triggers ARE activatable', () => {
@@ -346,17 +347,18 @@ describe('node-type-utils', () => {
       }
     });
 
-    it('only executeWorkflowTrigger is non-activatable', () => {
+    it('all triggers are activatable (n8n 2.0+ behavior)', () => {
+      // Since n8n 2.0, all triggers including executeWorkflowTrigger are activatable
       const triggers = [
-        { type: 'n8n-nodes-base.webhook', activatable: true },
-        { type: 'n8n-nodes-base.scheduleTrigger', activatable: true },
-        { type: 'n8n-nodes-base.executeWorkflowTrigger', activatable: false },
-        { type: 'n8n-nodes-base.emailTrigger', activatable: true }
+        'n8n-nodes-base.webhook',
+        'n8n-nodes-base.scheduleTrigger',
+        'n8n-nodes-base.executeWorkflowTrigger',
+        'n8n-nodes-base.emailTrigger'
       ];
 
-      for (const { type, activatable } of triggers) {
+      for (const type of triggers) {
         expect(isTriggerNode(type)).toBe(true); // All are triggers
-        expect(isActivatableTrigger(type)).toBe(activatable); // But only some are activatable
+        expect(isActivatableTrigger(type)).toBe(true); // All are activatable in n8n 2.0+
       }
     });
   });

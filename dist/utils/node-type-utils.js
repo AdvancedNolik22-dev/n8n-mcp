@@ -95,11 +95,6 @@ function isTriggerNode(nodeType) {
     return specificTriggers.includes(normalized);
 }
 function isActivatableTrigger(nodeType) {
-    const normalized = normalizeNodeType(nodeType);
-    const lowerType = normalized.toLowerCase();
-    if (lowerType.includes('executeworkflow')) {
-        return false;
-    }
     return isTriggerNode(nodeType);
 }
 function getTriggerTypeDescription(nodeType) {
