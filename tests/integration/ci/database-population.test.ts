@@ -175,14 +175,18 @@ describe.skipIf(!dbExists)('Database Content Validation', () => {
       ).toBeGreaterThan(100); // Should have ~108 triggers
     });
 
-    it('MUST have templates table (optional but recommended)', () => {
+    it('MUST have templates table populated', () => {
       const templatesCount = db.prepare('SELECT COUNT(*) as count FROM templates').get();
 
-      if (templatesCount.count === 0) {
-        console.warn('WARNING: No workflow templates found. Run: npm run fetch:templates');
-      }
-      // This is not critical, so we don't fail the test
-      expect(templatesCount.count).toBeGreaterThanOrEqual(0);
+      expect(templatesCount.count,
+        'CRITICAL: Templates table is EMPTY! Templates are required for search_templates MCP tool and real-world examples. ' +
+        'Run: npm run fetch:templates OR restore from git history.'
+      ).toBeGreaterThan(0);
+
+      expect(templatesCount.count,
+        `WARNING: Expected at least 2500 templates, got ${templatesCount.count}. ` +
+        'Templates may have been partially lost. Run: npm run fetch:templates'
+      ).toBeGreaterThanOrEqual(2500);
     });
   });
 
