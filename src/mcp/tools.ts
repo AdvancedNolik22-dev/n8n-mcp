@@ -25,6 +25,11 @@ export const n8nDocumentationToolsFinal: ToolDefinition[] = [
         },
       },
     },
+    annotations: {
+      title: 'Tools Documentation',
+      readOnlyHint: true,
+      idempotentHint: true,
+    },
   },
   {
     name: 'search_nodes',
@@ -54,6 +59,11 @@ export const n8nDocumentationToolsFinal: ToolDefinition[] = [
         },
       },
       required: ['query'],
+    },
+    annotations: {
+      title: 'Search Nodes',
+      readOnlyHint: true,
+      idempotentHint: true,
     },
   },
   {
@@ -107,6 +117,11 @@ export const n8nDocumentationToolsFinal: ToolDefinition[] = [
         },
       },
       required: ['nodeType'],
+    },
+    annotations: {
+      title: 'Get Node Info',
+      readOnlyHint: true,
+      idempotentHint: true,
     },
   },
   {
@@ -188,6 +203,11 @@ export const n8nDocumentationToolsFinal: ToolDefinition[] = [
       },
       required: ['nodeType', 'displayName', 'valid']
     },
+    annotations: {
+      title: 'Validate Node Config',
+      readOnlyHint: true,
+      idempotentHint: true,
+    },
   },
   {
     name: 'get_template',
@@ -207,6 +227,11 @@ export const n8nDocumentationToolsFinal: ToolDefinition[] = [
         },
       },
       required: ['templateId'],
+    },
+    annotations: {
+      title: 'Get Template',
+      readOnlyHint: true,
+      idempotentHint: true,
     },
   },
   {
@@ -303,6 +328,11 @@ export const n8nDocumentationToolsFinal: ToolDefinition[] = [
         },
       },
     },
+    annotations: {
+      title: 'Search Templates',
+      readOnlyHint: true,
+      idempotentHint: true,
+    },
   },
   {
     name: 'validate_workflow',
@@ -387,6 +417,11 @@ export const n8nDocumentationToolsFinal: ToolDefinition[] = [
         suggestions: { type: 'array', items: { type: 'string' } }
       },
       required: ['valid', 'summary']
+    },
+    annotations: {
+      title: 'Validate Workflow',
+      readOnlyHint: true,
+      idempotentHint: true,
     },
   },
 ];
