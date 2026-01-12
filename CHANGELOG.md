@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.33.1] - 2026-01-12
+
+### Fixed
+
+- **Docker image version mismatch bug**: Docker images were built with stale `package.runtime.json` (v2.29.5) while npm package was at v2.33.0
+  - Root cause: `build-docker` job in `release.yml` did not sync `package.runtime.json` version before building
+  - The `publish-npm` job synced the version, but both jobs ran in parallel, so Docker got the stale version
+  - Added "Sync runtime version" step to `release.yml` `build-docker` job
+  - Added "Sync runtime version" step to `docker-build.yml` `build` and `build-railway` jobs
+  - All Docker builds now sync `package.runtime.json` version from `package.json` before building
+
 ## [2.33.0] - 2026-01-08
 
 ### Added
