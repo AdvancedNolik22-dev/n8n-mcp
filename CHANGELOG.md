@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.33.4] - 2026-01-21
+
+### Fixed
+
+- **Memory leak in SSE session reset** (Issue #542): Fixed memory leak when SSE sessions are recreated every 5 minutes
+  - Root cause: `resetSessionSSE()` only closed the transport but not the MCP server
+  - This left the SimpleCache cleanup timer (60-second interval) running indefinitely
+  - Database connections and cached data (~50-100MB per session) persisted in memory
+  - Fix: Added `server.close()` call before `transport.close()`, mirroring the existing cleanup pattern in `removeSession()`
+  - Impact: Prevents ~288 leaked server instances per day in long-running HTTP deployments
+
 ## [2.33.3] - 2026-01-21
 
 ### Changed

@@ -677,11 +677,25 @@ export class SingleSessionHTTPServer {
   private async resetSessionSSE(res: express.Response): Promise<void> {
     // Clean up old session if exists
     if (this.session) {
+      const sessionId = this.session.sessionId;
+      logger.info('Closing previous session for SSE', { sessionId });
+
+      // Close server first to free resources (database, cache timer, etc.)
+      // This mirrors the cleanup pattern in removeSession() (issue #542)
+      // Handle server close errors separately so transport close still runs
+      if (this.session.server && typeof this.session.server.close === 'function') {
+        try {
+          await this.session.server.close();
+        } catch (serverError) {
+          logger.warn('Error closing server for SSE session', { sessionId, error: serverError });
+        }
+      }
+
+      // Close transport last - always attempt even if server.close() failed
       try {
-        logger.info('Closing previous session for SSE', { sessionId: this.session.sessionId });
         await this.session.transport.close();
-      } catch (error) {
-        logger.warn('Error closing previous session:', error);
+      } catch (transportError) {
+        logger.warn('Error closing transport for SSE session', { sessionId, error: transportError });
       }
     }
     
