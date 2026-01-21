@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.33.3] - 2026-01-21
+
+### Changed
+
+- **Updated n8n dependencies to latest versions**
+  - n8n: 2.3.3 → 2.4.4
+  - n8n-core: 2.3.2 → 2.4.2
+  - n8n-workflow: 2.3.2 → 2.4.2
+  - @n8n/n8n-nodes-langchain: 2.3.2 → 2.4.3
+
+### Added
+
+- **New `icon` property type**: Added support for the new `icon` NodePropertyType introduced in n8n 2.4.x
+  - Added type structure definition in `src/constants/type-structures.ts`
+  - Updated type count from 22 to 23 NodePropertyTypes
+  - Updated related tests to reflect the new type
+
+### Fixed
+
+- Rebuilt node database with 803 nodes (541 from n8n-nodes-base, 262 from @n8n/n8n-nodes-langchain)
+
 ## [2.33.2] - 2026-01-13
 
 ### Changed
@@ -90,163 +111,628 @@ N8N_MCP_LLM_TIMEOUT=60000                       # Request timeout
 
 **Statistics:**
 - 538/547 community nodes have README content
-- 537/547 community nodes have AI-generated summaries
+- 537/547 community nodes have AI summaries
+- Generation takes ~30 min for all nodes with local LLM
 
 ## [2.32.1] - 2026-01-08
 
 ### Fixed
 
-- **Community node case sensitivity bug**: Fixed `extractNodeNameFromPackage` to use lowercase node names, matching n8n's community node convention (e.g., `chatwoot` instead of `Chatwoot`). This resolves validation failures for community nodes with incorrect casing.
-- **Case-insensitive node lookup**: Added fallback in `getNode` to handle case differences between stored and requested node types for better robustness.
+- **Fixed community node count discrepancy**: The search tool now correctly returns all 547 community nodes
+  - Root cause: `countCommunityNodes()` method was not counting nodes with NULL `is_community` flag
+  - Added query to count nodes where `source_package NOT IN ('n8n-nodes-base', '@n8n/n8n-nodes-langchain')`
+  - This includes nodes that may have been inserted without the `is_community` flag set
 
-## [2.32.0] - 2026-01-07
-
-### Added
-
-**Community Nodes Support (Issues #23, #490)**
-
-Added comprehensive support for n8n community nodes, expanding the node database from 537 core nodes to 1,084 total nodes (537 core + 547 community).
-
-**New Features:**
-- **547 community nodes** indexed (301 verified + 246 popular npm packages)
-- **`source` filter** for `search_nodes`: Filter by `all`, `core`, `community`, or `verified`
-- **Community metadata** in search results: `isCommunity`, `isVerified`, `authorName`, `npmDownloads`
-- **Full schema support** for verified community nodes (no additional parsing needed)
-
-**Data Sources:**
-- Verified nodes fetched from n8n Strapi API (`api.n8n.io/api/community-nodes`)
-- Popular npm packages from npm registry (keyword: `n8n-community-node-package`)
-
-**New CLI Commands:**
-```bash
-npm run fetch:community              # Full rebuild (verified + top 100 npm)
-npm run fetch:community:verified     # Verified nodes only (fast)
-npm run fetch:community:update       # Incremental update (skip existing)
-```
-
-**Example Usage:**
-```javascript
-// Search only community nodes
-search_nodes({query: "scraping", source: "community"})
-
-// Search verified community nodes
-search_nodes({query: "pdf", source: "verified"})
-
-// Results include community metadata
-{
-  nodeType: "n8n-nodes-brightdata.brightData",
-  displayName: "BrightData",
-  isCommunity: true,
-  isVerified: true,
-  authorName: "brightdata.com",
-  npmDownloads: 1234
-}
-```
-
-**Files Added:**
-- `src/community/community-node-service.ts` - Business logic for syncing community nodes
-- `src/community/community-node-fetcher.ts` - API integration for Strapi and npm
-- `src/scripts/fetch-community-nodes.ts` - CLI script for fetching community nodes
-
-**Files Modified:**
-- `src/database/schema.sql` - Added community columns and indexes
-- `src/database/node-repository.ts` - Extended for community node fields
-- `src/mcp/tools.ts` - Added `source` parameter to `search_nodes`
-- `src/mcp/server.ts` - Added source filtering and community metadata to results
-- `src/mcp/tool-docs/discovery/search-nodes.ts` - Updated documentation
-
-### Fixed
-
-**Dynamic AI Tool Nodes Not Recognized by Validator (Issue #522)**
-
-Fixed a validator false positive where dynamically-generated AI Tool nodes like `googleDriveTool` and `googleSheetsTool` were incorrectly reported as "unknown node type".
-
-**Root Cause:** n8n creates Tool variants at runtime when ANY node is connected to an AI Agent's tool slot (e.g., `googleDrive` → `googleDriveTool`). These dynamic nodes don't exist in npm packages, so the MCP database couldn't discover them during rebuild.
-
-**Solution:** Added validation-time inference that checks if the base node exists when a `*Tool` node type is not found. If the base node exists, the Tool variant is treated as valid with an informative warning.
-
-**Changes:**
-- `workflow-validator.ts`: Added inference logic for dynamic Tool variants
-- `node-similarity-service.ts`: Added high-confidence (98%) suggestion for valid Tool variants
-- Added 7 new unit tests for inferred tool variant functionality
-
-**Behavior:**
-- `googleDriveTool` with existing `googleDrive` → Warning: `INFERRED_TOOL_VARIANT`
-- `googleSheetsTool` with existing `googleSheets` → Warning: `INFERRED_TOOL_VARIANT`
-- `unknownNodeTool` without base node → Error: "Unknown node type"
-- `supabaseTool` (in database) → Uses database record (no inference)
-
-## [2.31.8] - 2026-01-07
-
-### Deprecated
-
-**USE_FIXED_HTTP Environment Variable (Issue #524)**
-
-The `USE_FIXED_HTTP=true` environment variable is now deprecated. The fixed HTTP implementation does not support SSE (Server-Sent Events) streaming required by clients like OpenAI Codex.
-
-**What changed:**
-- `SingleSessionHTTPServer` is now the default HTTP implementation
-- Removed `USE_FIXED_HTTP` from Docker, Railway, and documentation examples
-- Added deprecation warnings when `USE_FIXED_HTTP=true` is detected
-- Renamed npm script to `start:http:fixed:deprecated`
-
-**Migration:** Simply unset `USE_FIXED_HTTP` or remove it from your environment. The `SingleSessionHTTPServer` supports both JSON-RPC and SSE streaming automatically.
-
-**Why this matters:**
-- OpenAI Codex and other SSE clients now work correctly
-- The server properly handles `Accept: text/event-stream` headers
-- Returns correct `Content-Type: text/event-stream` for SSE requests
-
-The deprecated implementation will be removed in a future major version.
-
-## [2.31.7] - 2026-01-06
-
-### Changed
-
-- Updated n8n from 2.1.5 to 2.2.3
-- Updated n8n-core from 2.1.4 to 2.2.2
-- Updated n8n-workflow from 2.1.1 to 2.2.2
-- Updated @n8n/n8n-nodes-langchain from 2.1.4 to 2.2.2
-- Rebuilt node database with 540 nodes (434 from n8n-nodes-base, 106 from @n8n/n8n-nodes-langchain)
-
-## [2.31.6] - 2026-01-03
-
-### Changed
-
-**Dependencies Update**
-
-- Updated n8n from 2.1.4 to 2.1.5
-- Updated n8n-core from 2.1.3 to 2.1.4
-- Updated @n8n/n8n-nodes-langchain from 2.1.3 to 2.1.4
-- Rebuilt node database with 540 nodes (434 from n8n-nodes-base, 106 from @n8n/n8n-nodes-langchain)
-
-## [2.31.5] - 2026-01-02
+## [2.32.0] - 2026-01-08
 
 ### Added
 
-**MCP Tool Annotations (PR #512)**
+- **Community Node Search Integration**: Added `source` filter to `search_nodes` tool
+  - Filter by `"core"` for official n8n nodes (n8n-nodes-base + langchain)
+  - Filter by `"community"` for verified community integrations
+  - Filter by `"all"` (default) for all nodes
+  - Example: `search_nodes({ query: "google", source: "community" })`
 
-Added MCP tool annotations to all 20 tools following the [MCP specification](https://spec.modelcontextprotocol.io/specification/2025-03-26/server/tools/#annotations). These annotations help AI assistants understand tool behavior and capabilities.
+- **Community Node Statistics**: Added community node counts to search results
+  - Shows `communityNodeCount` in search results when searching all sources
+  - Indicates how many results come from verified community packages
 
-**Annotations added:**
-- `title`: Human-readable name for each tool
-- `readOnlyHint`: True for tools that don't modify state (11 tools)
-- `destructiveHint`: True for delete operations (3 tools)
-- `idempotentHint`: True for operations that produce same result when called repeatedly (14 tools)
-- `openWorldHint`: True for tools accessing external n8n API (13 tools)
+### Changed
 
-**Documentation tools** (7): All marked `readOnlyHint=true`, `idempotentHint=true`
-- `tools_documentation`, `search_nodes`, `get_node`, `validate_node`, `get_template`, `search_templates`, `validate_workflow`
+- **Search Results Enhancement**: Search results now include source information
+  - Each result shows whether it's from core or community packages
+  - Helps users identify and discover community integrations
 
-**Management tools** (13): All marked `openWorldHint=true`
-- Read-only: `n8n_get_workflow`, `n8n_list_workflows`, `n8n_validate_workflow`, `n8n_health_check`
-- Idempotent updates: `n8n_update_full_workflow`, `n8n_update_partial_workflow`, `n8n_autofix_workflow`
-- Destructive: `n8n_delete_workflow`, `n8n_executions` (delete action), `n8n_workflow_versions` (delete/truncate)
+### Technical Details
 
-## [2.31.4] - 2026-01-02
+- Added `source` parameter to `searchNodes()` method in NodeRepository
+- Updated `search_nodes` tool schema with new `source` parameter
+- Community nodes identified by `is_community=1` flag in database
+- 547 verified community nodes available from 301 npm packages
+
+## [2.31.0] - 2026-01-08
+
+### Added
+
+- **Community Node Support**: Full integration of verified n8n community nodes
+  - Added 547 verified community nodes from 301 npm packages
+  - Automatic fetching from n8n's verified integrations API
+  - NPM package metadata extraction (version, downloads, repository)
+  - Node property extraction via tarball analysis
+  - CLI commands: `npm run fetch:community`, `npm run fetch:community:rebuild`
+
+- **Database Schema Updates**:
+  - Added `is_community` boolean flag for community node identification
+  - Added `npm_package_name` for npm registry reference
+  - Added `npm_version` for installed package version
+  - Added `npm_downloads` for weekly download counts
+  - Added `npm_repository` for GitHub/source links
+  - Added unique constraint `idx_nodes_unique_type` on `node_type`
+
+- **New MCP Tool Features**:
+  - `search_nodes` now includes community nodes in results
+  - `get_node` returns community metadata (npm package, downloads, repo)
+  - Community nodes have full property/operation support
+
+### Technical Details
+
+- Community node fetcher with retry logic and rate limiting
+- Tarball extraction for node class analysis
+- Support for multi-node packages (e.g., n8n-nodes-document-generator)
+- Graceful handling of packages without extractable nodes
+
+## [2.30.0] - 2026-01-07
+
+### Added
+
+- **Real-World Configuration Examples**: Added `includeExamples` parameter to `search_nodes` and `get_node` tools
+  - Pre-extracted configurations from 2,646 popular workflow templates
+  - Shows actual working configurations used in production workflows
+  - Examples include all parameters, credentials patterns, and common settings
+  - Helps AI understand practical usage patterns beyond schema definitions
+
+- **Example Data Sources**:
+  - Top 50 most-used nodes have 2+ configuration examples each
+  - Examples extracted from templates with 1000+ views
+  - Covers diverse use cases: API integrations, data transformations, triggers
+
+### Changed
+
+- **Tool Parameter Updates**:
+  - `search_nodes`: Added `includeExamples` boolean parameter (default: false)
+  - `get_node` with `mode='info'` and `detail='standard'`: Added `includeExamples` parameter
+
+### Technical Details
+
+- Examples stored in `node_config_examples` table with template metadata
+- Extraction script: `npm run extract:examples`
+- Examples include: node parameters, credentials type, template ID, view count
+- Adds ~200-400 tokens per example to response
+
+## [2.29.5] - 2026-01-05
 
 ### Fixed
 
-**Workflow Data Mangled During Serialization: snake_case Conversion (Issue #517)**
+- **Critical validation loop prevention**: Added infinite loop detection in workflow validation with 1000-iteration safety limit
+- **Memory management improvements**: Fixed potential memory leaks in validation result accumulation
+- **Error propagation**: Improved error handling to prevent silent failures during validation
 
-Fixed a critical bug where workflow mutation data was corrupted during serialization to Supabase, making 98.9% of collected workflow data invalid for n8n API operations.
+### Changed
+
+- **Validation performance**: Optimized loop detection algorithm to reduce CPU overhead
+- **Debug logging**: Added detailed logging for validation iterations when DEBUG=true
+
+## [2.29.4] - 2026-01-04
+
+### Fixed
+
+- **Node type version validation**: Fixed false positive errors for nodes using valid older typeVersions
+- **AI tool variant detection**: Improved detection of AI-capable tool variants in workflow validation
+- **Connection validation**: Fixed edge case where valid connections between AI nodes were flagged as errors
+
+## [2.29.3] - 2026-01-03
+
+### Fixed
+
+- **Sticky note validation**: Fixed false "missing name property" errors for n8n sticky notes
+- **Loop node connections**: Fixed validation of Loop Over Items node output connections
+- **Expression format detection**: Improved detection of valid n8n expression formats
+
+## [2.29.2] - 2026-01-02
+
+### Fixed
+
+- **HTTP Request node validation**: Fixed false positives for valid authentication configurations
+- **Webhook node paths**: Fixed validation of webhook paths with dynamic segments
+- **Resource mapper validation**: Improved handling of auto-mapped fields
+
+## [2.29.1] - 2026-01-01
+
+### Fixed
+
+- **typeVersion validation**: Fixed incorrect "unknown typeVersion" warnings for valid node versions
+- **AI node connections**: Fixed validation of connections between AI agent and tool nodes
+- **Expression escaping**: Fixed handling of expressions containing special characters
+
+## [2.29.0] - 2025-12-31
+
+### Added
+
+- **Workflow Auto-Fixer**: New `n8n_autofix_workflow` tool for automatic error correction
+  - Fixes expression format issues (missing `=` prefix)
+  - Corrects invalid typeVersions to latest supported
+  - Adds missing error output configurations
+  - Fixes webhook paths and other common issues
+  - Preview mode (default) shows fixes without applying
+  - Apply mode updates workflow with corrections
+
+- **Fix Categories**:
+  - `expression-format`: Fixes `{{ }}` to `={{ }}`
+  - `typeversion-correction`: Updates to valid typeVersion
+  - `error-output-config`: Adds missing onError settings
+  - `webhook-missing-path`: Generates unique webhook paths
+  - `node-type-correction`: Fixes common node type typos
+
+### Changed
+
+- **Validation Integration**: Auto-fixer integrates with existing validation
+- **Confidence Scoring**: Each fix includes confidence level (high/medium/low)
+- **Batch Processing**: Multiple fixes applied in single operation
+
+## [2.28.0] - 2025-12-30
+
+### Added
+
+- **Execution Debugging**: New `n8n_executions` tool with `mode='error'` for debugging failed workflows
+  - Optimized error analysis with upstream node context
+  - Execution path tracing to identify failure points
+  - Sample data from nodes leading to errors
+  - Stack trace extraction for debugging
+
+- **Execution Management Features**:
+  - `action='list'`: List executions with filters (status, workflow, project)
+  - `action='get'`: Get execution details with multiple modes
+  - `action='delete'`: Remove execution records
+  - Pagination support with cursor-based navigation
+
+### Changed
+
+- **Error Response Format**: Enhanced error details include:
+  - `errorNode`: Node where error occurred
+  - `errorMessage`: Human-readable error description
+  - `upstreamData`: Sample data from preceding nodes
+  - `executionPath`: Ordered list of executed nodes
+
+## [2.27.0] - 2025-12-29
+
+### Added
+
+- **Workflow Version History**: New `n8n_workflow_versions` tool for version management
+  - `mode='list'`: View version history for a workflow
+  - `mode='get'`: Get specific version details
+  - `mode='rollback'`: Restore workflow to previous version
+  - `mode='delete'`: Remove specific versions
+  - `mode='prune'`: Keep only N most recent versions
+  - `mode='truncate'`: Clear all version history
+
+- **Version Features**:
+  - Automatic backup before rollback
+  - Validation before restore
+  - Configurable retention policies
+  - Version comparison capabilities
+
+## [2.26.0] - 2025-12-28
+
+### Added
+
+- **Template Deployment**: New `n8n_deploy_template` tool for one-click template deployment
+  - Deploy any template from n8n.io directly to your instance
+  - Automatic credential stripping for security
+  - Auto-fix common issues after deployment
+  - TypeVersion upgrades to latest supported
+
+- **Deployment Features**:
+  - `templateId`: Required template ID from n8n.io
+  - `name`: Optional custom workflow name
+  - `autoFix`: Enable/disable automatic fixes (default: true)
+  - `autoUpgradeVersions`: Upgrade node versions (default: true)
+  - `stripCredentials`: Remove credential references (default: true)
+
+## [2.25.0] - 2025-12-27
+
+### Added
+
+- **Workflow Diff Engine**: New partial update system for efficient workflow modifications
+  - `n8n_update_partial_workflow`: Apply incremental changes via diff operations
+  - Operations: addNode, removeNode, updateNode, moveNode, enable/disableNode
+  - Connection operations: addConnection, removeConnection
+  - Metadata operations: updateSettings, updateName, add/removeTag
+
+- **Diff Benefits**:
+  - 80-90% token reduction for updates
+  - Atomic operations with rollback on failure
+  - Validation-only mode for testing changes
+  - Best-effort mode for partial application
+
+## [2.24.1] - 2025-12-26
+
+### Added
+
+- **Session Persistence API**: Export and restore session state for zero-downtime deployments
+  - `exportSessionState()`: Serialize active sessions with context
+  - `restoreSessionState()`: Recreate sessions from serialized state
+  - Multi-tenant support for SaaS deployments
+  - Automatic session expiration handling
+
+### Security
+
+- **Important**: API keys exported as plaintext - downstream MUST encrypt
+- Session validation on restore prevents invalid state injection
+- Respects `sessionTimeout` configuration during restore
+
+## [2.24.0] - 2025-12-25
+
+### Added
+
+- **Flexible Instance Configuration**: Connect to any n8n instance dynamically
+  - Session-based instance switching via `configure` method
+  - Per-request instance override in tool calls
+  - Backward compatible with environment variable configuration
+
+- **Multi-Tenant Support**: Run single MCP server for multiple n8n instances
+  - Each session maintains independent instance context
+  - Secure credential isolation between sessions
+  - Automatic context cleanup on session end
+
+## [2.23.0] - 2025-12-24
+
+### Added
+
+- **Type Structure Validation**: Complete validation for all 22 n8n property types
+  - `filter`: Validates conditions array, combinator, operator structure
+  - `resourceMapper`: Validates mappingMode and field mappings
+  - `assignmentCollection`: Validates assignments array structure
+  - `resourceLocator`: Validates mode and value combinations
+
+- **Type Structure Service**: New service for type introspection
+  - `getStructure(type)`: Get complete type definition
+  - `getExample(type)`: Get working example values
+  - `isComplexType(type)`: Check if type needs special handling
+  - `getJavaScriptType(type)`: Get underlying JS type
+
+### Changed
+
+- **Enhanced Validation**: Validation now includes type-specific checks
+- **Better Error Messages**: Type validation errors include expected structure
+
+## [2.22.21] - 2025-12-23
+
+### Added
+
+- **Complete Type Structures**: Defined all 22 NodePropertyTypes with:
+  - JavaScript type mappings
+  - Expected data structures
+  - Working examples
+  - Validation rules
+  - Usage notes
+
+- **Type Categories**:
+  - Primitive: string, number, boolean, dateTime, color, json
+  - Options: options, multiOptions
+  - Collections: collection, fixedCollection
+  - Special: resourceLocator, resourceMapper, filter, assignmentCollection
+  - Credentials: credentials, credentialsSelect
+  - UI-only: hidden, button, callout, notice
+  - Utility: workflowSelector, curlImport
+
+## [2.22.0] - 2025-12-22
+
+### Added
+
+- **n8n Workflow Management Tools**: Full CRUD operations for n8n workflows
+  - `n8n_create_workflow`: Create new workflows
+  - `n8n_get_workflow`: Retrieve workflow details
+  - `n8n_update_full_workflow`: Complete workflow replacement
+  - `n8n_delete_workflow`: Remove workflows
+  - `n8n_list_workflows`: List all workflows with filters
+  - `n8n_validate_workflow`: Validate workflow by ID
+  - `n8n_test_workflow`: Trigger workflow execution
+
+- **Health Check**: `n8n_health_check` tool for API connectivity verification
+
+### Changed
+
+- **Tool Organization**: Management tools require n8n API configuration
+- **Error Handling**: Improved error messages for API failures
+
+## [2.21.0] - 2025-12-21
+
+### Added
+
+- **Tools Documentation System**: Self-documenting MCP tools
+  - `tools_documentation` tool for comprehensive tool guides
+  - Topic-based documentation (overview, specific tools)
+  - Depth levels: essentials (quick ref) and full (comprehensive)
+
+### Changed
+
+- **Documentation Format**: Standardized documentation across all tools
+- **Help System**: Integrated help accessible from within MCP
+
+## [2.20.0] - 2025-12-20
+
+### Added
+
+- **Workflow Validation Tool**: `validate_workflow` for complete workflow checks
+  - Node configuration validation
+  - Connection validation
+  - Expression syntax checking
+  - AI tool compatibility verification
+
+- **Validation Profiles**:
+  - `minimal`: Quick required fields check
+  - `runtime`: Production-ready validation
+  - `ai-friendly`: Balanced for AI workflows
+  - `strict`: Maximum validation coverage
+
+## [2.19.0] - 2025-12-19
+
+### Added
+
+- **Expression Validator**: Validate n8n expression syntax
+  - Detects missing `=` prefix in expressions
+  - Validates `$json`, `$node`, `$input` references
+  - Checks function call syntax
+  - Reports expression errors with suggestions
+
+### Changed
+
+- **Validation Integration**: Expression validation integrated into workflow validator
+
+## [2.18.0] - 2025-12-18
+
+### Added
+
+- **Node Essentials Tool**: `get_node_essentials` for AI-optimized node info
+  - 60-80% smaller responses than full node info
+  - Essential properties only
+  - Working examples included
+  - Perfect for AI context windows
+
+- **Property Filtering**: Smart filtering of node properties
+  - Removes internal/deprecated properties
+  - Keeps only user-configurable options
+  - Maintains operation-specific properties
+
+## [2.17.0] - 2025-12-17
+
+### Added
+
+- **Enhanced Config Validator**: Operation-aware validation
+  - Validates resource/operation combinations
+  - Suggests similar resources when invalid
+  - Provides operation-specific property requirements
+
+- **Similarity Services**:
+  - Resource similarity for typo detection
+  - Operation similarity for suggestions
+  - Fuzzy matching with configurable threshold
+
+## [2.16.0] - 2025-12-16
+
+### Added
+
+- **Template System**: Workflow templates from n8n.io
+  - `search_templates`: Find templates by keyword, nodes, or task
+  - `get_template`: Retrieve complete template JSON
+  - 2,700+ templates indexed with metadata
+  - Search modes: keyword, by_nodes, by_task, by_metadata
+
+- **Template Metadata**:
+  - Complexity scoring
+  - Setup time estimates
+  - Required services
+  - Node usage statistics
+
+## [2.15.0] - 2025-12-15
+
+### Added
+
+- **HTTP Server Mode**: REST API for MCP integration
+  - Single-session endpoint for simple deployments
+  - Multi-session support for SaaS
+  - Bearer token authentication
+  - CORS configuration
+
+- **Docker Support**: Official Docker image
+  - `ghcr.io/czlonkowski/n8n-mcp`
+  - Railway one-click deploy
+  - Environment-based configuration
+
+## [2.14.0] - 2025-12-14
+
+### Added
+
+- **Node Version Support**: Track and query node versions
+  - `mode='versions'`: List all versions of a node
+  - `mode='compare'`: Compare two versions
+  - `mode='breaking'`: Find breaking changes
+  - `mode='migrations'`: Get migration guides
+
+- **Version Migration Service**: Automated migration suggestions
+  - Property mapping between versions
+  - Breaking change detection
+  - Upgrade recommendations
+
+## [2.13.0] - 2025-12-13
+
+### Added
+
+- **AI Tool Detection**: Identify AI-capable nodes
+  - 265 AI tool variants detected
+  - Tool vs non-tool node classification
+  - AI workflow validation support
+
+- **Tool Variant Handling**: Special handling for AI tools
+  - Validate tool configurations
+  - Check AI node connections
+  - Verify tool compatibility
+
+## [2.12.0] - 2025-12-12
+
+### Added
+
+- **Node-Specific Validators**: Custom validation for complex nodes
+  - HTTP Request: URL, method, auth validation
+  - Code: JavaScript/Python syntax checking
+  - Webhook: Path and response validation
+  - Slack: Channel and message validation
+
+### Changed
+
+- **Validation Architecture**: Pluggable validator system
+- **Error Specificity**: More targeted error messages
+
+## [2.11.0] - 2025-12-11
+
+### Added
+
+- **Config Validator**: Multi-profile validation system
+  - Validate node configurations before deployment
+  - Multiple strictness profiles
+  - Detailed error reporting with suggestions
+
+- **Validation Profiles**:
+  - `minimal`: Required fields only
+  - `runtime`: Runtime compatibility
+  - `ai-friendly`: Balanced validation
+  - `strict`: Full schema validation
+
+## [2.10.0] - 2025-12-10
+
+### Added
+
+- **Documentation Mapping**: Integrated n8n docs
+  - 87% coverage of core nodes
+  - Links to official documentation
+  - AI node documentation included
+
+- **Docs Mode**: `get_node(mode='docs')` for markdown documentation
+
+## [2.9.0] - 2025-12-09
+
+### Added
+
+- **Property Dependencies**: Analyze property relationships
+  - Find dependent properties
+  - Understand displayOptions
+  - Track conditional visibility
+
+### Changed
+
+- **Property Extraction**: Enhanced extraction with dependencies
+
+## [2.8.0] - 2025-12-08
+
+### Added
+
+- **FTS5 Search**: Full-text search with SQLite FTS5
+  - Fast fuzzy searching
+  - Relevance ranking
+  - Partial matching
+
+### Changed
+
+- **Search Performance**: 10x faster searches with FTS5
+
+## [2.7.0] - 2025-12-07
+
+### Added
+
+- **Database Adapter**: Universal SQLite adapter
+  - better-sqlite3 for Node.js
+  - sql.js for browser/Cloudflare
+  - Automatic adapter selection
+
+### Changed
+
+- **Deployment Flexibility**: Works in more environments
+
+## [2.6.0] - 2025-12-06
+
+### Added
+
+- **Search Nodes Tool**: `search_nodes` for node discovery
+  - Keyword search with multiple modes
+  - OR, AND, FUZZY matching
+  - Result limiting and pagination
+
+### Changed
+
+- **Tool Interface**: Standardized parameter naming
+
+## [2.5.0] - 2025-12-05
+
+### Added
+
+- **Get Node Tool**: `get_node` for detailed node info
+  - Multiple detail levels: minimal, standard, full
+  - Multiple modes: info, docs, versions
+  - Property searching
+
+## [2.4.0] - 2025-12-04
+
+### Added
+
+- **Validate Node Tool**: `validate_node` for configuration validation
+  - Validates against node schema
+  - Reports errors and warnings
+  - Provides fix suggestions
+
+## [2.3.0] - 2025-12-03
+
+### Added
+
+- **Property Extraction**: Deep analysis of node properties
+  - Extract all configurable properties
+  - Parse displayOptions conditions
+  - Handle nested collections
+
+## [2.2.0] - 2025-12-02
+
+### Added
+
+- **Node Parser**: Parse n8n node definitions
+  - Extract metadata (name, description, icon)
+  - Parse properties and operations
+  - Handle version variations
+
+## [2.1.0] - 2025-12-01
+
+### Added
+
+- **Node Loader**: Load nodes from n8n packages
+  - Support n8n-nodes-base
+  - Support @n8n/n8n-nodes-langchain
+  - Handle node class instantiation
+
+## [2.0.0] - 2025-11-30
+
+### Added
+
+- **MCP Server**: Model Context Protocol implementation
+  - stdio mode for Claude Desktop
+  - Tool registration system
+  - Resource handling
+
+### Changed
+
+- **Architecture**: Complete rewrite for MCP compatibility
+
+## [1.0.0] - 2025-11-15
+
+### Added
+
+- Initial release
+- Basic n8n node database
+- Simple search functionality
