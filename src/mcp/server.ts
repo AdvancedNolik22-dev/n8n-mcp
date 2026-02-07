@@ -1,13 +1,16 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { 
-  CallToolRequestSchema, 
+import {
+  CallToolRequestSchema,
   ListToolsRequestSchema,
   InitializeRequestSchema,
+  ListResourcesRequestSchema,
+  ReadResourceRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import { existsSync, promises as fs } from 'fs';
 import path from 'path';
 import { n8nDocumentationToolsFinal } from './tools';
+import { UIAppRegistry } from './ui';
 import { n8nManagementTools } from './tools-n8n-manager';
 import { makeToolsN8nFriendly } from './tools-n8n-friendly';
 import { getWorkflowExampleString } from './workflow-examples';
@@ -235,10 +238,12 @@ export class N8NDocumentationMCPServer {
       {
         capabilities: {
           tools: {},
+          resources: {},
         },
       }
     );
 
+    UIAppRegistry.load();
     this.setupHandlers();
   }
 
@@ -563,6 +568,7 @@ export class N8NDocumentationMCPServer {
         protocolVersion: negotiationResult.version,
         capabilities: {
           tools: {},
+          resources: {},
         },
         serverInfo: {
           name: 'n8n-documentation-mcp',
@@ -774,7 +780,13 @@ export class N8NDocumentationMCPServer {
         if (name.startsWith('validate_') && structuredContent !== null) {
           mcpResponse.structuredContent = structuredContent;
         }
-        
+
+        // Inject UI app metadata if available
+        const uiApp = UIAppRegistry.getAppForTool(name);
+        if (uiApp && uiApp.html) {
+          mcpResponse._meta = { ui: { app: uiApp.config.uri } };
+        }
+
         return mcpResponse;
       } catch (error) {
         logger.error(`Error executing tool ${name}`, error);
@@ -825,6 +837,46 @@ export class N8NDocumentationMCPServer {
           isError: true,
         };
       }
+    });
+
+    // Handle ListResources for UI apps
+    this.server.setRequestHandler(ListResourcesRequestSchema, async () => {
+      const apps = UIAppRegistry.getAllApps();
+      return {
+        resources: apps
+          .filter(app => app.html !== null)
+          .map(app => ({
+            uri: app.config.uri,
+            name: app.config.displayName,
+            description: app.config.description,
+            mimeType: app.config.mimeType,
+          })),
+      };
+    });
+
+    // Handle ReadResource for UI apps
+    this.server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
+      const uri = request.params.uri;
+      // Parse n8n-mcp://ui/{id} pattern
+      const match = uri.match(/^n8n-mcp:\/\/ui\/(.+)$/);
+      if (!match) {
+        throw new Error(`Unknown resource URI: ${uri}`);
+      }
+
+      const app = UIAppRegistry.getAppById(match[1]);
+      if (!app || !app.html) {
+        throw new Error(`UI app not found or not built: ${match[1]}`);
+      }
+
+      return {
+        contents: [
+          {
+            uri: app.config.uri,
+            mimeType: app.config.mimeType,
+            text: app.html,
+          },
+        ],
+      };
     });
   }
 

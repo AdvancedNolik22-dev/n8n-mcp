@@ -7,6 +7,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.34.0] - 2026-02-07
+
+### Added
+
+- **MCP Apps**: Rich HTML UIs rendered by MCP hosts alongside tool results via `_meta.ui` and the MCP resources protocol
+  - Server-side UI module (`src/mcp/ui/`) with tool-to-UI mapping and `_meta.ui` injection
+  - `UIAppRegistry` static class for loading and serving self-contained HTML apps
+  - `UI_APP_CONFIGS` mapping tools to their corresponding UI apps
+
+- **Operation Result UI**: Visual summary for workflow operation tools
+  - Status badge, operation type, workflow details card
+  - Expandable sections for nodes added, modified, and removed
+  - Mapped to: `n8n_create_workflow`, `n8n_update_full_workflow`, `n8n_update_partial_workflow`, `n8n_delete_workflow`, `n8n_test_workflow`, `n8n_autofix_workflow`, `n8n_deploy_template`
+
+- **Validation Summary UI**: Visual summary for validation tools
+  - Valid/invalid badge with error and warning counts
+  - Expandable error list with type, property, message, and fix
+  - Expandable warning list and suggestions
+  - Mapped to: `validate_node`, `validate_workflow`, `n8n_validate_workflow`
+
+- **React + Vite Build Pipeline** (`ui-apps/`):
+  - React 19, Vite 6, vite-plugin-singlefile for self-contained HTML output
+  - Shared component library: Card, Badge, Expandable
+  - `useToolData` hook for reading data from `window.__MCP_DATA__` or embedded JSON
+  - n8n-branded dark theme with CSS custom properties
+  - Per-app builds via `APP_NAME` environment variable
+
+- **MCP Resources Protocol**: Server now exposes `resources` capability
+  - `ListResources` handler returns available UI apps
+  - `ReadResource` handler serves self-contained HTML via `n8n-mcp://ui/{id}` URIs
+
+- **New Scripts**:
+  - `build:ui`: Build UI apps (`cd ui-apps && npm install && npm run build`)
+  - `build:all`: Build UI apps then server (`npm run build:ui && npm run build`)
+
+### Changed
+
+- **MCP Server**: Added `resources: {}` to server capabilities alongside existing `tools: {}`
+- **Tool Responses**: Tools with matching UI apps now include `_meta.ui.app` URI pointing to their visual representation
+- **Graceful Degradation**: Server starts and operates normally without `ui-apps/dist/`; UI metadata is only injected when HTML is available
+
+Conceived by Romuald Czlonkowski - https://www.aiadvisors.pl/en
+
 ## [2.33.6] - 2026-02-06
 
 ### Changed

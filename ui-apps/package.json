@@ -1,0 +1,25 @@
+{
+  "name": "n8n-mcp-ui-apps",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "APP_NAME=operation-result vite build && APP_NAME=validation-summary vite build",
+    "build:operation-result": "APP_NAME=operation-result vite build",
+    "build:validation-summary": "APP_NAME=validation-summary vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.3.0",
+    "typescript": "^5.8.0",
+    "vite": "^6.0.0",
+    "vite-plugin-singlefile": "^2.0.0"
+  }
+}
