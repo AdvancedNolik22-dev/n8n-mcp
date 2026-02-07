@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.34.4] - 2026-02-07
+
+### Fixed
+
+- **MCP Apps: Fix blank UI rendering in Claude**: Rewrote `useToolData` hook to use the official `useApp` hook from `@modelcontextprotocol/ext-apps/react` instead of manually managing `App` lifecycle
+  - Proper initialization handshake with host via `appInfo` and `capabilities`
+  - Handlers registered via `onAppCreated` callback (before `connect()`) to avoid race conditions
+  - Removed `app.close()` on unmount which caused issues with React Strict Mode
+  - Added visible error and connection states with inline colors for debugging
+
+Conceived by Romuald Czlonkowski - https://www.aiadvisors.pl/en
+
 ## [2.34.3] - 2026-02-07
 
 ### Fixed

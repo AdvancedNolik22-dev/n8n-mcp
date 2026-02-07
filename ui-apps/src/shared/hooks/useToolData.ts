@@ -1,14 +1,17 @@
-import { useState, useEffect } from 'react';
-import { App } from '@modelcontextprotocol/ext-apps';
+import { useState, useCallback } from 'react';
+import { useApp } from '@modelcontextprotocol/ext-apps/react';
 
-export function useToolData<T>(): T | null {
+interface UseToolDataResult<T> {
+  data: T | null;
+  error: string | null;
+  isConnected: boolean;
+}
+
+export function useToolData<T>(): UseToolDataResult<T> {
   const [data, setData] = useState<T | null>(null);
 
-  useEffect(() => {
-    const app = new App();
-
+  const onAppCreated = useCallback((app: any) => {
     app.ontoolresult = (result: any) => {
-      // The host pushes tool result content; parse the first text item as JSON
       if (result?.content) {
         const textItem = Array.isArray(result.content)
           ? result.content.find((c: any) => c.type === 'text')
@@ -17,19 +20,22 @@ export function useToolData<T>(): T | null {
           try {
             setData(JSON.parse(textItem.text) as T);
           } catch {
-            // Not JSON — use raw text as-is
             setData(textItem.text as unknown as T);
           }
         }
       }
     };
-
-    app.connect();
-
-    return () => {
-      app.close();
-    };
   }, []);
 
-  return data;
+  const { isConnected, error } = useApp({
+    appInfo: { name: 'n8n-mcp-ui', version: '1.0.0' },
+    capabilities: {},
+    onAppCreated,
+  });
+
+  return {
+    data,
+    error: error?.message ?? null,
+    isConnected,
+  };
 }

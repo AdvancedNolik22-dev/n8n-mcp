@@ -5,10 +5,18 @@ import { useToolData } from '@shared/hooks/useToolData';
 import type { ValidationSummaryData } from '@shared/types';
 
 export default function App() {
-  const data = useToolData<ValidationSummaryData>();
+  const { data, error, isConnected } = useToolData<ValidationSummaryData>();
+
+  if (error) {
+    return <div style={{ padding: '16px', color: '#ef4444' }}>Error: {error}</div>;
+  }
+
+  if (!isConnected) {
+    return <div style={{ padding: '16px', color: '#9ca3af' }}>Connecting...</div>;
+  }
 
   if (!data) {
-    return <div style={{ padding: '16px', color: 'var(--n8n-text-muted)' }}>Loading...</div>;
+    return <div style={{ padding: '16px', color: '#9ca3af' }}>Waiting for data...</div>;
   }
 
   return (
