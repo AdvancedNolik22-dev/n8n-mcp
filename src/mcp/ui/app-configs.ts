@@ -6,7 +6,7 @@ export const UI_APP_CONFIGS: UIAppConfig[] = [
     displayName: 'Operation Result',
     description: 'Visual summary of workflow operations (create, update, delete, test)',
     uri: 'ui://n8n-mcp/operation-result',
-    mimeType: 'text/html',
+    mimeType: 'text/html;profile=mcp-app',
     toolPatterns: [
       'n8n_create_workflow',
       'n8n_update_full_workflow',
@@ -22,7 +22,7 @@ export const UI_APP_CONFIGS: UIAppConfig[] = [
     displayName: 'Validation Summary',
     description: 'Visual summary of node and workflow validation results',
     uri: 'ui://n8n-mcp/validation-summary',
-    mimeType: 'text/html',
+    mimeType: 'text/html;profile=mcp-app',
     toolPatterns: [
       'validate_node',
       'validate_workflow',

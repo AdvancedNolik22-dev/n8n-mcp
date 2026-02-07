@@ -65,9 +65,9 @@ describe('UI_APP_CONFIGS', () => {
     }
   });
 
-  it('should have consistent mimeType of text/html', () => {
+  it('should have consistent mimeType of text/html;profile=mcp-app', () => {
     for (const config of UI_APP_CONFIGS) {
-      expect(config.mimeType).toBe('text/html');
+      expect(config.mimeType).toBe('text/html;profile=mcp-app');
     }
   });
 
