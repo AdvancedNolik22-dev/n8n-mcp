@@ -11,11 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **MCP Apps: Fix blank UI rendering in Claude**: Rewrote `useToolData` hook to use the official `useApp` hook from `@modelcontextprotocol/ext-apps/react` instead of manually managing `App` lifecycle
-  - Proper initialization handshake with host via `appInfo` and `capabilities`
-  - Handlers registered via `onAppCreated` callback (before `connect()`) to avoid race conditions
-  - Removed `app.close()` on unmount which caused issues with React Strict Mode
-  - Added visible error and connection states with inline colors for debugging
+- **MCP Apps: Fix blank UI and wrong status badge in Claude**: Rewrote `useToolData` hook to use the official `useApp` hook from `@modelcontextprotocol/ext-apps/react` for proper lifecycle management. Updated UI types and components to match actual server response format (`success: boolean` instead of `status: string`, nested `data` object for workflow details). Validation summary now handles both direct and wrapped (`n8n_validate_workflow`) response shapes.
 
 Conceived by Romuald Czlonkowski - https://www.aiadvisors.pl/en
 
