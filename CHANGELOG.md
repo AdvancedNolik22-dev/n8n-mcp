@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.35.0] - 2026-02-09
+
+### Added
+
+- **3 new MCP Apps**: workflow-list (compact table with status/tags), execution-history (status summary bar + execution table), health-dashboard (connection status, versions, performance metrics)
+- **Enhanced operation-result**: operation-aware headers (create/update/delete/test/deploy), detail panels with workflow metadata, copy-to-clipboard for IDs/URLs, autofix diff viewer
+- **CopyButton shared component**: reusable clipboard button with visual feedback
+- **Local preview harness** (`ui-apps/preview.html`): test all 5 apps with mock data, dark/light theme toggle, JSON-RPC protocol simulation
+- **Expanded shared types**: TypeScript types for workflow-list, execution-history, and health-dashboard data
+
+### Fixed
+
+- **React hooks violation**: Fixed `useMemo` called after early returns in `execution-history/App.tsx` and `validation-summary/App.tsx`, causing React error #310 ("Rendered more hooks than during the previous render") and blank iframes
+- **JSON-RPC catch-all handler**: Preview harness responds to unknown SDK requests to prevent hangs
+
+Conceived by Romuald Czlonkowski - https://www.aiadvisors.pl/en
+
 ## [2.34.5] - 2026-02-08
 
 ### Fixed
