@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.35.2] - 2026-02-09
+
+### Changed
+
+- **MCP Apps: Disable non-rendering apps in Claude.ai**: Disabled 3 MCP Apps (workflow-list, execution-history, health-dashboard) that render as collapsed accordions in Claude.ai, and removed `n8n_deploy_template` tool mapping which renders blank content. The server sets `_meta` correctly on the wire but the Claude.ai host ignores it for these tools. The 2 working apps (operation-result for 6 tools, validation-summary for 3 tools) remain active. Disabled apps can be re-enabled once the host-side issue is resolved.
+
+Conceived by Romuald Czlonkowski - https://www.aiadvisors.pl/en
+
 ## [2.35.1] - 2026-02-09
 
 ### Fixed
