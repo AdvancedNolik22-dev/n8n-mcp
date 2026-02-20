@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.35.3] - 2026-02-19
+
+### Changed
+
+- **Updated n8n dependencies**: n8n 2.6.3 → 2.8.3, n8n-core 2.6.1 → 2.8.1, n8n-workflow 2.6.0 → 2.8.0, @n8n/n8n-nodes-langchain 2.6.2 → 2.8.1
+- **Fixed node loader for langchain package**: Adapted node loader to bypass restricted package.json `exports` field in @n8n/n8n-nodes-langchain >=2.9.0, resolving node files via absolute paths instead of `require.resolve()`
+- **Fixed community doc generation for cloud LLMs**: Added `N8N_MCP_LLM_API_KEY`/`OPENAI_API_KEY` env var support, switched to `max_completion_tokens`, and auto-omit `temperature` for cloud API endpoints
+- Rebuilt node database with 1,236 nodes (673 from n8n-nodes-base, 133 from @n8n/n8n-nodes-langchain, 430 community)
+- Refreshed community nodes (361 verified + 69 npm) with 424/430 AI documentation summaries
+
+Conceived by Romuald Czlonkowski - https://www.aiadvisors.pl/en
+
 ## [2.35.2] - 2026-02-09
 
 ### Changed

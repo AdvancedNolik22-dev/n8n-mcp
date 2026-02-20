@@ -57,12 +57,14 @@ export interface DocumentationGeneratorConfig {
   timeout?: number;
   /** Max tokens for response (default: 2000) */
   maxTokens?: number;
+  /** Temperature for generation (default: 0.3, set to undefined to omit) */
+  temperature?: number;
 }
 
 /**
  * Default configuration
  */
-const DEFAULT_CONFIG: Required<Omit<DocumentationGeneratorConfig, 'baseUrl'>> = {
+const DEFAULT_CONFIG: Required<Omit<DocumentationGeneratorConfig, 'baseUrl' | 'temperature'>> = {
   model: 'qwen3-4b-thinking-2507',
   apiKey: 'not-needed',
   timeout: 60000,
@@ -78,6 +80,7 @@ export class DocumentationGenerator {
   private model: string;
   private maxTokens: number;
   private timeout: number;
+  private temperature?: number;
 
   constructor(config: DocumentationGeneratorConfig) {
     const fullConfig = { ...DEFAULT_CONFIG, ...config };
@@ -90,6 +93,7 @@ export class DocumentationGenerator {
     this.model = fullConfig.model;
     this.maxTokens = fullConfig.maxTokens;
     this.timeout = fullConfig.timeout;
+    this.temperature = fullConfig.temperature;
   }
 
   /**
@@ -101,8 +105,8 @@ export class DocumentationGenerator {
 
       const completion = await this.client.chat.completions.create({
         model: this.model,
-        max_tokens: this.maxTokens,
-        temperature: 0.3, // Lower temperature for more consistent output
+        max_completion_tokens: this.maxTokens,
+        ...(this.temperature !== undefined ? { temperature: this.temperature } : {}),
         messages: [
           {
             role: 'system',
@@ -321,7 +325,7 @@ Guidelines:
     try {
       const completion = await this.client.chat.completions.create({
         model: this.model,
-        max_tokens: 10,
+        max_completion_tokens: 200,
         messages: [
           {
             role: 'user',
@@ -353,10 +357,15 @@ export function createDocumentationGenerator(): DocumentationGenerator {
   const baseUrl = process.env.N8N_MCP_LLM_BASE_URL || 'http://localhost:1234/v1';
   const model = process.env.N8N_MCP_LLM_MODEL || 'qwen3-4b-thinking-2507';
   const timeout = parseInt(process.env.N8N_MCP_LLM_TIMEOUT || '60000', 10);
+  const apiKey = process.env.N8N_MCP_LLM_API_KEY || process.env.OPENAI_API_KEY;
+  // Only set temperature for local LLM servers; cloud APIs like OpenAI may not support custom values
+  const isLocalServer = !baseUrl.includes('openai.com') && !baseUrl.includes('anthropic.com');
 
   return new DocumentationGenerator({
     baseUrl,
     model,
     timeout,
+    ...(apiKey ? { apiKey } : {}),
+    ...(isLocalServer ? { temperature: 0.3 } : {}),
   });
 }

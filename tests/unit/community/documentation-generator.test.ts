@@ -41,6 +41,7 @@ describe('DocumentationGenerator', () => {
     apiKey: 'test-key',
     timeout: 30000,
     maxTokens: 1000,
+    temperature: 0.3,
   };
 
   const validSummary = {
@@ -163,7 +164,7 @@ describe('DocumentationGenerator', () => {
 
         expect(mockCreate).toHaveBeenCalledWith({
           model: 'test-model',
-          max_tokens: 1000,
+          max_completion_tokens: 1000,
           temperature: 0.3,
           messages: expect.arrayContaining([
             expect.objectContaining({ role: 'system' }),
@@ -680,7 +681,7 @@ describe('DocumentationGenerator', () => {
 
       expect(mockCreate).toHaveBeenCalledWith(
         expect.objectContaining({
-          max_tokens: 10,
+          max_completion_tokens: 200,
           messages: [
             {
               role: 'user',
