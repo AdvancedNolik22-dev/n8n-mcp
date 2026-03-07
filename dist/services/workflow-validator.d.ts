@@ -21,17 +21,7 @@ interface WorkflowNode {
 }
 interface WorkflowConnection {
     [sourceNode: string]: {
-        main?: Array<Array<{
-            node: string;
-            type: string;
-            index: number;
-        }>>;
-        error?: Array<Array<{
-            node: string;
-            type: string;
-            index: number;
-        }>>;
-        ai_tool?: Array<Array<{
+        [outputType: string]: Array<Array<{
             node: string;
             type: string;
             index: number;
@@ -94,6 +84,10 @@ export declare class WorkflowValidator {
     private validateErrorOutputConfiguration;
     private validateAIToolConnection;
     private validateAIToolSource;
+    private validateOutputIndexBounds;
+    private validateInputIndexBounds;
+    private flagOrphanedNodes;
+    private validateTriggerReachability;
     private hasCycle;
     private validateExpressions;
     private countExpressionsInObject;

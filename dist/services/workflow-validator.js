@@ -16,6 +16,15 @@ const node_type_utils_1 = require("../utils/node-type-utils");
 const node_classification_1 = require("../utils/node-classification");
 const tool_variant_generator_1 = require("./tool-variant-generator");
 const logger = new logger_1.Logger({ prefix: '[WorkflowValidator]' });
+const VALID_CONNECTION_TYPES = new Set([
+    'main',
+    'error',
+    ...ai_node_validator_1.AI_CONNECTION_TYPES,
+    'ai_agent',
+    'ai_chain',
+    'ai_retriever',
+    'ai_reranker',
+]);
 class WorkflowValidator {
     constructor(nodeRepository, nodeValidator) {
         this.nodeRepository = nodeRepository;
@@ -393,51 +402,34 @@ class WorkflowValidator {
                 result.statistics.invalidConnections++;
                 continue;
             }
-            if (outputs.main) {
-                this.validateConnectionOutputs(sourceName, outputs.main, nodeMap, nodeIdMap, result, 'main');
-            }
-            if (outputs.error) {
-                this.validateConnectionOutputs(sourceName, outputs.error, nodeMap, nodeIdMap, result, 'error');
-            }
-            if (outputs.ai_tool) {
-                this.validateAIToolSource(sourceNode, result);
-                this.validateConnectionOutputs(sourceName, outputs.ai_tool, nodeMap, nodeIdMap, result, 'ai_tool');
+            for (const [outputKey, outputConnections] of Object.entries(outputs)) {
+                if (!VALID_CONNECTION_TYPES.has(outputKey)) {
+                    let suggestion = '';
+                    if (/^\d+$/.test(outputKey)) {
+                        suggestion = ` If you meant to use output index ${outputKey}, use main[${outputKey}] instead.`;
+                    }
+                    result.errors.push({
+                        type: 'error',
+                        nodeName: sourceName,
+                        message: `Unknown connection output key "${outputKey}" on node "${sourceName}". Valid keys are: ${[...VALID_CONNECTION_TYPES].join(', ')}.${suggestion}`,
+                        code: 'UNKNOWN_CONNECTION_KEY'
+                    });
+                    result.statistics.invalidConnections++;
+                    continue;
+                }
+                if (!outputConnections || !Array.isArray(outputConnections))
+                    continue;
+                if (outputKey === 'ai_tool') {
+                    this.validateAIToolSource(sourceNode, result);
+                }
+                this.validateConnectionOutputs(sourceName, outputConnections, nodeMap, nodeIdMap, result, outputKey);
             }
         }
-        const connectedNodes = new Set();
-        Object.keys(workflow.connections).forEach(name => connectedNodes.add(name));
-        Object.values(workflow.connections).forEach(outputs => {
-            if (outputs.main) {
-                outputs.main.flat().forEach(conn => {
-                    if (conn)
-                        connectedNodes.add(conn.node);
-                });
-            }
-            if (outputs.error) {
-                outputs.error.flat().forEach(conn => {
-                    if (conn)
-                        connectedNodes.add(conn.node);
-                });
-            }
-            if (outputs.ai_tool) {
-                outputs.ai_tool.flat().forEach(conn => {
-                    if (conn)
-                        connectedNodes.add(conn.node);
-                });
-            }
-        });
-        for (const node of workflow.nodes) {
-            if (node.disabled || (0, node_classification_1.isNonExecutableNode)(node.type))
-                continue;
-            const isNodeTrigger = (0, node_type_utils_1.isTriggerNode)(node.type);
-            if (!connectedNodes.has(node.name) && !isNodeTrigger) {
-                result.warnings.push({
-                    type: 'warning',
-                    nodeId: node.id,
-                    nodeName: node.name,
-                    message: 'Node is not connected to any other nodes'
-                });
-            }
+        if (profile !== 'minimal') {
+            this.validateTriggerReachability(workflow, result);
+        }
+        else {
+            this.flagOrphanedNodes(workflow, result);
         }
         if (profile !== 'minimal' && this.hasCycle(workflow)) {
             result.errors.push({
@@ -450,6 +442,7 @@ class WorkflowValidator {
         const sourceNode = nodeMap.get(sourceName);
         if (outputType === 'main' && sourceNode) {
             this.validateErrorOutputConfiguration(sourceName, sourceNode, outputs, nodeMap, result);
+            this.validateOutputIndexBounds(sourceNode, outputs, result);
         }
         outputs.forEach((outputConnections, outputIndex) => {
             if (!outputConnections)
@@ -459,6 +452,20 @@ class WorkflowValidator {
                     result.errors.push({
                         type: 'error',
                         message: `Invalid connection index ${connection.index} from "${sourceName}". Connection indices must be non-negative.`
+                    });
+                    result.statistics.invalidConnections++;
+                    return;
+                }
+                if (connection.type && !VALID_CONNECTION_TYPES.has(connection.type)) {
+                    let suggestion = '';
+                    if (/^\d+$/.test(connection.type)) {
+                        suggestion = ` Numeric types are not valid - use "main", "error", or an AI connection type.`;
+                    }
+                    result.errors.push({
+                        type: 'error',
+                        nodeName: sourceName,
+                        message: `Invalid connection type "${connection.type}" in connection from "${sourceName}" to "${connection.node}". Expected "main", "error", or an AI connection type (ai_tool, ai_languageModel, etc.).${suggestion}`,
+                        code: 'INVALID_CONNECTION_TYPE'
                     });
                     result.statistics.invalidConnections++;
                     return;
@@ -505,6 +512,9 @@ class WorkflowValidator {
                     result.statistics.validConnections++;
                     if (outputType === 'ai_tool') {
                         this.validateAIToolConnection(sourceName, targetNode, result);
+                    }
+                    if (outputType === 'main') {
+                        this.validateInputIndexBounds(sourceName, targetNode, connection, result);
                     }
                 }
             });
@@ -634,6 +644,171 @@ class WorkflowValidator {
             code: 'INVALID_AI_TOOL_SOURCE'
         });
     }
+    validateOutputIndexBounds(sourceNode, outputs, result) {
+        const normalizedType = node_type_normalizer_1.NodeTypeNormalizer.normalizeToFullForm(sourceNode.type);
+        const nodeInfo = this.nodeRepository.getNode(normalizedType);
+        if (!nodeInfo || !nodeInfo.outputs)
+            return;
+        let mainOutputCount;
+        if (Array.isArray(nodeInfo.outputs)) {
+            mainOutputCount = nodeInfo.outputs.filter((o) => typeof o === 'string' ? o === 'main' : (o.type === 'main' || !o.type)).length;
+        }
+        else {
+            return;
+        }
+        if (mainOutputCount === 0)
+            return;
+        const shortType = normalizedType.replace(/^(n8n-)?nodes-base\./, '');
+        if (shortType === 'switch') {
+            const rules = sourceNode.parameters?.rules?.values || sourceNode.parameters?.rules;
+            if (Array.isArray(rules)) {
+                mainOutputCount = rules.length + 1;
+            }
+            else {
+                return;
+            }
+        }
+        if (shortType === 'if' || shortType === 'filter') {
+            mainOutputCount = 2;
+        }
+        if (sourceNode.onError === 'continueErrorOutput') {
+            mainOutputCount += 1;
+        }
+        const maxOutputIndex = outputs.length - 1;
+        if (maxOutputIndex >= mainOutputCount) {
+            for (let i = mainOutputCount; i < outputs.length; i++) {
+                if (outputs[i] && outputs[i].length > 0) {
+                    result.errors.push({
+                        type: 'error',
+                        nodeId: sourceNode.id,
+                        nodeName: sourceNode.name,
+                        message: `Output index ${i} on node "${sourceNode.name}" exceeds its output count (${mainOutputCount}). ` +
+                            `This node has ${mainOutputCount} main output(s) (indices 0-${mainOutputCount - 1}).`,
+                        code: 'OUTPUT_INDEX_OUT_OF_BOUNDS'
+                    });
+                    result.statistics.invalidConnections++;
+                }
+            }
+        }
+    }
+    validateInputIndexBounds(sourceName, targetNode, connection, result) {
+        const normalizedType = node_type_normalizer_1.NodeTypeNormalizer.normalizeToFullForm(targetNode.type);
+        const nodeInfo = this.nodeRepository.getNode(normalizedType);
+        if (!nodeInfo)
+            return;
+        const shortType = normalizedType.replace(/^(n8n-)?nodes-base\./, '');
+        let mainInputCount = 1;
+        if (shortType === 'merge' || shortType === 'compareDatasets') {
+            mainInputCount = 2;
+        }
+        if (nodeInfo.isTrigger || (0, node_type_utils_1.isTriggerNode)(targetNode.type)) {
+            mainInputCount = 0;
+        }
+        if (mainInputCount > 0 && connection.index >= mainInputCount) {
+            result.errors.push({
+                type: 'error',
+                nodeName: targetNode.name,
+                message: `Input index ${connection.index} on node "${targetNode.name}" exceeds its input count (${mainInputCount}). ` +
+                    `Connection from "${sourceName}" targets input ${connection.index}, but this node has ${mainInputCount} main input(s) (indices 0-${mainInputCount - 1}).`,
+                code: 'INPUT_INDEX_OUT_OF_BOUNDS'
+            });
+            result.statistics.invalidConnections++;
+        }
+    }
+    flagOrphanedNodes(workflow, result) {
+        const connectedNodes = new Set();
+        for (const [sourceName, outputs] of Object.entries(workflow.connections)) {
+            connectedNodes.add(sourceName);
+            for (const outputConns of Object.values(outputs)) {
+                if (!Array.isArray(outputConns))
+                    continue;
+                for (const conns of outputConns) {
+                    if (!conns)
+                        continue;
+                    for (const conn of conns) {
+                        if (conn)
+                            connectedNodes.add(conn.node);
+                    }
+                }
+            }
+        }
+        for (const node of workflow.nodes) {
+            if (node.disabled || (0, node_classification_1.isNonExecutableNode)(node.type))
+                continue;
+            if ((0, node_type_utils_1.isTriggerNode)(node.type))
+                continue;
+            if (!connectedNodes.has(node.name)) {
+                result.warnings.push({
+                    type: 'warning',
+                    nodeId: node.id,
+                    nodeName: node.name,
+                    message: 'Node is not connected to any other nodes'
+                });
+            }
+        }
+    }
+    validateTriggerReachability(workflow, result) {
+        const adjacency = new Map();
+        for (const [sourceName, outputs] of Object.entries(workflow.connections)) {
+            if (!adjacency.has(sourceName))
+                adjacency.set(sourceName, new Set());
+            for (const outputConns of Object.values(outputs)) {
+                if (Array.isArray(outputConns)) {
+                    for (const conns of outputConns) {
+                        if (!conns)
+                            continue;
+                        for (const conn of conns) {
+                            if (conn) {
+                                adjacency.get(sourceName).add(conn.node);
+                                if (!adjacency.has(conn.node))
+                                    adjacency.set(conn.node, new Set());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        const triggerNodes = [];
+        for (const node of workflow.nodes) {
+            if ((0, node_type_utils_1.isTriggerNode)(node.type) && !node.disabled) {
+                triggerNodes.push(node.name);
+            }
+        }
+        if (triggerNodes.length === 0) {
+            this.flagOrphanedNodes(workflow, result);
+            return;
+        }
+        const reachable = new Set();
+        const queue = [...triggerNodes];
+        for (const t of triggerNodes)
+            reachable.add(t);
+        while (queue.length > 0) {
+            const current = queue.shift();
+            const neighbors = adjacency.get(current);
+            if (neighbors) {
+                for (const neighbor of neighbors) {
+                    if (!reachable.has(neighbor)) {
+                        reachable.add(neighbor);
+                        queue.push(neighbor);
+                    }
+                }
+            }
+        }
+        for (const node of workflow.nodes) {
+            if (node.disabled || (0, node_classification_1.isNonExecutableNode)(node.type))
+                continue;
+            if ((0, node_type_utils_1.isTriggerNode)(node.type))
+                continue;
+            if (!reachable.has(node.name)) {
+                result.warnings.push({
+                    type: 'warning',
+                    nodeId: node.id,
+                    nodeName: node.name,
+                    message: 'Node is not reachable from any trigger node'
+                });
+            }
+        }
+    }
     hasCycle(workflow) {
         const visited = new Set();
         const recursionStack = new Set();
@@ -657,23 +832,13 @@ class WorkflowValidator {
             const connections = workflow.connections[nodeName];
             if (connections) {
                 const allTargets = [];
-                if (connections.main) {
-                    connections.main.flat().forEach(conn => {
-                        if (conn)
-                            allTargets.push(conn.node);
-                    });
-                }
-                if (connections.error) {
-                    connections.error.flat().forEach(conn => {
-                        if (conn)
-                            allTargets.push(conn.node);
-                    });
-                }
-                if (connections.ai_tool) {
-                    connections.ai_tool.flat().forEach(conn => {
-                        if (conn)
-                            allTargets.push(conn.node);
-                    });
+                for (const outputConns of Object.values(connections)) {
+                    if (Array.isArray(outputConns)) {
+                        outputConns.flat().forEach(conn => {
+                            if (conn)
+                                allTargets.push(conn.node);
+                        });
+                    }
                 }
                 const currentNodeType = nodeTypeMap.get(nodeName);
                 const isLoopNode = loopNodeTypes.includes(currentNodeType || '');

@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.36.0] - 2026-03-07
+
+### Added
+
+- **Connection validation: detect broken/malformed workflow connections** (Issue #620):
+  - Unknown output keys (`UNKNOWN_CONNECTION_KEY`): Flags invalid connection keys like `"0"`, `"1"`, `"output"` with fix suggestions (e.g., "use main[1] instead" for numeric keys)
+  - Invalid type field (`INVALID_CONNECTION_TYPE`): Detects invalid `type` values in connection targets (e.g., `"0"` instead of `"main"`)
+  - Output index bounds checking (`OUTPUT_INDEX_OUT_OF_BOUNDS`): Catches connections using output indices beyond what a node supports, with awareness of `onError: 'continueErrorOutput'`, Switch rules, and IF/Filter nodes
+  - Input index bounds checking (`INPUT_INDEX_OUT_OF_BOUNDS`): Validates target input indices against known node input counts (Merge=2, triggers=0, others=1)
+  - BFS-based trigger reachability analysis: Replaces simple orphan detection with proper graph traversal from trigger nodes, flagging unreachable subgraphs
+  - Flexible `WorkflowConnection` interface: Changed from explicit `main?/error?/ai_tool?` to `[outputType: string]` for accurate validation of all connection types
+
+Conceived by Romuald Czlonkowski - https://www.aiadvisors.pl/en
+
 ## [2.35.6] - 2026-03-04
 
 ### Changed
