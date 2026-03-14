@@ -134,9 +134,22 @@ export class TestableN8NMCPServer {
       }
     }
     
+    // MCP SDK 1.27+ enforces single-connection per Server instance.
+    // Close existing connections before connecting a new transport.
+    for (const conn of this.connections) {
+      try {
+        if (conn && typeof conn.close === 'function') {
+          await conn.close();
+        }
+      } catch {
+        // Ignore errors during cleanup
+      }
+    }
+    this.connections.clear();
+
     // Track this transport for cleanup
     this.transports.add(transport);
-    
+
     const connection = await this.server.connect(transport);
     this.connections.add(connection);
   }

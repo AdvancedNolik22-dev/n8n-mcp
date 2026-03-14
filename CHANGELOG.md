@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.36.2] - 2026-03-14
+
+### Changed
+
+- **Updated n8n dependencies**: n8n 2.10.3 → 2.11.4, n8n-core 2.10.1 → 2.11.1, n8n-workflow 2.10.1 → 2.11.1, @n8n/n8n-nodes-langchain 2.10.1 → 2.11.2
+- **Updated @modelcontextprotocol/sdk**: 1.20.1 → 1.27.1 (fixes critical cross-client data leak vulnerability CVE GHSA-345p-7cg4-v4c7)
+- Rebuilt node database with 1,239 nodes (809 core + 430 community preserved)
+- Updated README badge with new n8n version and node counts
+
+Conceived by Romuald Czlonkowski - https://www.aiadvisors.pl/en
+
 ## [2.36.1] - 2026-03-08
 
 ### Added
