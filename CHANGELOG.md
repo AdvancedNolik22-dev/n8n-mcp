@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.40.0] - 2026-03-21
+
+### Changed
+
+- **`n8n_manage_datatable` MCP tool** (replaces `n8n_create_data_table`): Full data table management covering all 10 n8n data table API endpoints
+  - **Table operations**: createTable, listTables, getTable, updateTable, deleteTable
+  - **Row operations**: getRows, insertRows, updateRows, upsertRows, deleteRows
+  - Filter system with and/or logic and 8 condition operators (eq, neq, like, ilike, gt, gte, lt, lte)
+  - Dry-run support for updateRows, upsertRows, deleteRows
+  - Pagination, sorting, and full-text search for row listing
+  - Shared error handler and consolidated Zod schemas for consistency
+  - 9 new `N8nApiClient` methods for all data table endpoints
+- **`projectId` parameter for `n8n_create_workflow`**: Create workflows directly in a specific team project (enterprise feature)
+
+### Breaking
+
+- `n8n_create_data_table` tool replaced by `n8n_manage_datatable` with `action: "createTable"`
+
+Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+
 ## [2.38.0] - 2026-03-20
 
 ### Added

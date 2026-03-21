@@ -8,7 +8,7 @@ import {
   WebhookRequest,
   McpToolResponse,
   ExecutionFilterOptions,
-  ExecutionMode
+  ExecutionMode,
 } from '../types/n8n-api';
 import type { TriggerType, TestWorkflowInput } from '../triggers/types';
 import {
@@ -383,6 +383,7 @@ const createWorkflowSchema = z.object({
     executionTimeout: z.number().optional(),
     errorWorkflow: z.string().optional(),
   }).optional(),
+  projectId: z.string().optional(),
 });
 
 const updateWorkflowSchema = z.object({
@@ -1974,7 +1975,7 @@ export async function handleDiagnostic(request: any, context?: InstanceContext):
 
   // Check which tools are available
   const documentationTools = 7; // Base documentation tools (after v2.26.0 consolidation)
-  const managementTools = apiConfigured ? 13 : 0; // Management tools requiring API (includes n8n_deploy_template)
+  const managementTools = apiConfigured ? 14 : 0; // Management tools requiring API (includes n8n_manage_datatable)
   const totalTools = documentationTools + managementTools;
 
   // Check npm version
@@ -2686,5 +2687,245 @@ export async function handleTriggerWebhookWorkflow(args: unknown, context?: Inst
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error occurred'
     };
+  }
+}
+
+// ========================================================================
+// Data Table Handlers
+// ========================================================================
+
+// Shared Zod schemas for data table operations
+const dataTableFilterConditionSchema = z.object({
+  columnName: z.string().min(1),
+  condition: z.enum(['eq', 'neq', 'like', 'ilike', 'gt', 'gte', 'lt', 'lte']),
+  value: z.any(),
+});
+
+const dataTableFilterSchema = z.object({
+  type: z.enum(['and', 'or']).optional().default('and'),
+  filters: z.array(dataTableFilterConditionSchema).min(1, 'At least one filter condition is required'),
+});
+
+// Shared base schema for actions requiring a tableId
+const tableIdSchema = z.object({
+  tableId: z.string().min(1, 'tableId is required'),
+});
+
+// Per-action Zod schemas
+const createTableSchema = z.object({
+  name: z.string().min(1, 'Table name cannot be empty'),
+  columns: z.array(z.object({
+    name: z.string().min(1, 'Column name cannot be empty'),
+    type: z.enum(['string', 'number', 'boolean', 'date', 'json']).optional(),
+  })).optional(),
+});
+
+const listTablesSchema = z.object({
+  limit: z.number().min(1).max(100).optional(),
+  cursor: z.string().optional(),
+});
+
+const updateTableSchema = tableIdSchema.extend({
+  name: z.string().min(1, 'New table name cannot be empty'),
+});
+
+const getRowsSchema = tableIdSchema.extend({
+  limit: z.number().min(1).max(100).optional(),
+  cursor: z.string().optional(),
+  filter: z.union([dataTableFilterSchema, z.string()]).optional(),
+  sortBy: z.string().optional(),
+  search: z.string().optional(),
+});
+
+const insertRowsSchema = tableIdSchema.extend({
+  data: z.array(z.record(z.unknown())).min(1, 'At least one row is required'),
+  returnType: z.enum(['count', 'id', 'all']).optional(),
+});
+
+// Shared schema for update/upsert (identical structure)
+const mutateRowsSchema = tableIdSchema.extend({
+  filter: dataTableFilterSchema,
+  data: z.record(z.unknown()),
+  returnData: z.boolean().optional(),
+  dryRun: z.boolean().optional(),
+});
+
+const deleteRowsSchema = tableIdSchema.extend({
+  filter: dataTableFilterSchema,
+  returnData: z.boolean().optional(),
+  dryRun: z.boolean().optional(),
+});
+
+function handleDataTableError(error: unknown): McpToolResponse {
+  if (error instanceof z.ZodError) {
+    return { success: false, error: 'Invalid input', details: { errors: error.errors } };
+  }
+  if (error instanceof N8nApiError) {
+    return {
+      success: false,
+      error: getUserFriendlyErrorMessage(error),
+      code: error.code,
+      details: error.details as Record<string, unknown> | undefined,
+    };
+  }
+  return { success: false, error: error instanceof Error ? error.message : 'Unknown error occurred' };
+}
+
+export async function handleCreateTable(args: unknown, context?: InstanceContext): Promise<McpToolResponse> {
+  try {
+    const client = ensureApiConfigured(context);
+    const input = createTableSchema.parse(args);
+    const dataTable = await client.createDataTable(input);
+    if (!dataTable || !dataTable.id) {
+      return { success: false, error: 'Data table creation failed: n8n API returned an empty or invalid response' };
+    }
+    return {
+      success: true,
+      data: { id: dataTable.id, name: dataTable.name },
+      message: `Data table "${dataTable.name}" created with ID: ${dataTable.id}`,
+    };
+  } catch (error) {
+    return handleDataTableError(error);
+  }
+}
+
+export async function handleListTables(args: unknown, context?: InstanceContext): Promise<McpToolResponse> {
+  try {
+    const client = ensureApiConfigured(context);
+    const input = listTablesSchema.parse(args || {});
+    const result = await client.listDataTables(input);
+    return {
+      success: true,
+      data: {
+        tables: result.data,
+        count: result.data.length,
+        nextCursor: result.nextCursor || undefined,
+      },
+    };
+  } catch (error) {
+    return handleDataTableError(error);
+  }
+}
+
+export async function handleGetTable(args: unknown, context?: InstanceContext): Promise<McpToolResponse> {
+  try {
+    const client = ensureApiConfigured(context);
+    const { tableId } = tableIdSchema.parse(args);
+    const dataTable = await client.getDataTable(tableId);
+    return { success: true, data: dataTable };
+  } catch (error) {
+    return handleDataTableError(error);
+  }
+}
+
+export async function handleUpdateTable(args: unknown, context?: InstanceContext): Promise<McpToolResponse> {
+  try {
+    const client = ensureApiConfigured(context);
+    const { tableId, name } = updateTableSchema.parse(args);
+    const dataTable = await client.updateDataTable(tableId, { name });
+    return {
+      success: true,
+      data: dataTable,
+      message: `Data table renamed to "${dataTable.name}"`,
+    };
+  } catch (error) {
+    return handleDataTableError(error);
+  }
+}
+
+export async function handleDeleteTable(args: unknown, context?: InstanceContext): Promise<McpToolResponse> {
+  try {
+    const client = ensureApiConfigured(context);
+    const { tableId } = tableIdSchema.parse(args);
+    await client.deleteDataTable(tableId);
+    return { success: true, message: `Data table ${tableId} deleted successfully` };
+  } catch (error) {
+    return handleDataTableError(error);
+  }
+}
+
+export async function handleGetRows(args: unknown, context?: InstanceContext): Promise<McpToolResponse> {
+  try {
+    const client = ensureApiConfigured(context);
+    const { tableId, filter, ...params } = getRowsSchema.parse(args);
+    const queryParams: Record<string, unknown> = { ...params };
+    if (filter) {
+      queryParams.filter = typeof filter === 'string' ? filter : JSON.stringify(filter);
+    }
+    const result = await client.getDataTableRows(tableId, queryParams as any);
+    return {
+      success: true,
+      data: {
+        rows: result.data,
+        count: result.data.length,
+        nextCursor: result.nextCursor || undefined,
+      },
+    };
+  } catch (error) {
+    return handleDataTableError(error);
+  }
+}
+
+export async function handleInsertRows(args: unknown, context?: InstanceContext): Promise<McpToolResponse> {
+  try {
+    const client = ensureApiConfigured(context);
+    const { tableId, ...params } = insertRowsSchema.parse(args);
+    const result = await client.insertDataTableRows(tableId, params);
+    return {
+      success: true,
+      data: result,
+      message: `Rows inserted into data table ${tableId}`,
+    };
+  } catch (error) {
+    return handleDataTableError(error);
+  }
+}
+
+export async function handleUpdateRows(args: unknown, context?: InstanceContext): Promise<McpToolResponse> {
+  try {
+    const client = ensureApiConfigured(context);
+    const { tableId, ...params } = mutateRowsSchema.parse(args);
+    const result = await client.updateDataTableRows(tableId, params);
+    return {
+      success: true,
+      data: result,
+      message: params.dryRun ? 'Dry run: rows matched (no changes applied)' : 'Rows updated successfully',
+    };
+  } catch (error) {
+    return handleDataTableError(error);
+  }
+}
+
+export async function handleUpsertRows(args: unknown, context?: InstanceContext): Promise<McpToolResponse> {
+  try {
+    const client = ensureApiConfigured(context);
+    const { tableId, ...params } = mutateRowsSchema.parse(args);
+    const result = await client.upsertDataTableRow(tableId, params);
+    return {
+      success: true,
+      data: result,
+      message: params.dryRun ? 'Dry run: upsert previewed (no changes applied)' : 'Row upserted successfully',
+    };
+  } catch (error) {
+    return handleDataTableError(error);
+  }
+}
+
+export async function handleDeleteRows(args: unknown, context?: InstanceContext): Promise<McpToolResponse> {
+  try {
+    const client = ensureApiConfigured(context);
+    const { tableId, filter, ...params } = deleteRowsSchema.parse(args);
+    const queryParams = {
+      filter: JSON.stringify(filter),
+      ...params,
+    };
+    const result = await client.deleteDataTableRows(tableId, queryParams as any);
+    return {
+      success: true,
+      data: result,
+      message: params.dryRun ? 'Dry run: rows matched for deletion (no changes applied)' : 'Rows deleted successfully',
+    };
+  } catch (error) {
+    return handleDataTableError(error);
   }
 }
