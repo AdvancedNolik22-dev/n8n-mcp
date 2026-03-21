@@ -42,7 +42,7 @@ export const n8nManageDatatableDoc: ToolDocumentation = {
       action: { type: 'string', required: true, description: 'Operation to perform' },
       tableId: { type: 'string', required: false, description: 'Data table ID (required for all except createTable and listTables)' },
       name: { type: 'string', required: false, description: 'For createTable/updateTable: table name' },
-      columns: { type: 'array', required: false, description: 'For createTable: column definitions [{name, type?}]. Types: string, number, boolean, date, json' },
+      columns: { type: 'array', required: false, description: 'For createTable: column definitions [{name, type?}]. Types: string, number, boolean, date' },
       data: { type: 'array|object', required: false, description: 'For insertRows: array of row objects. For updateRows/upsertRows: object with column values' },
       filter: { type: 'object', required: false, description: 'Filter: {type?: "and"|"or", filters: [{columnName, condition, value}]}' },
       limit: { type: 'number', required: false, description: 'For listTables/getRows: max results (1-100)' },

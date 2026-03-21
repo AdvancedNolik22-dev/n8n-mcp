@@ -100,6 +100,16 @@ describe('handlers-n8n-manager', () => {
       listExecutions: vi.fn(),
       deleteExecution: vi.fn(),
       healthCheck: vi.fn(),
+      createDataTable: vi.fn(),
+      listDataTables: vi.fn(),
+      getDataTable: vi.fn(),
+      updateDataTable: vi.fn(),
+      deleteDataTable: vi.fn(),
+      getDataTableRows: vi.fn(),
+      insertDataTableRows: vi.fn(),
+      updateDataTableRows: vi.fn(),
+      upsertDataTableRow: vi.fn(),
+      deleteDataTableRows: vi.fn(),
     };
 
     // Setup mock repository

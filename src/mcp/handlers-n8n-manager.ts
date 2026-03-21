@@ -2716,7 +2716,7 @@ const createTableSchema = z.object({
   name: z.string().min(1, 'Table name cannot be empty'),
   columns: z.array(z.object({
     name: z.string().min(1, 'Column name cannot be empty'),
-    type: z.enum(['string', 'number', 'boolean', 'date', 'json']).optional(),
+    type: z.enum(['string', 'number', 'boolean', 'date']).optional(),
   })).optional(),
 });
 
@@ -2729,29 +2729,40 @@ const updateTableSchema = tableIdSchema.extend({
   name: z.string().min(1, 'New table name cannot be empty'),
 });
 
+// MCP transports may serialize JSON objects/arrays as strings.
+// Parse them back, but return the original value on failure so Zod reports a proper type error.
+function tryParseJson(val: unknown): unknown {
+  if (typeof val !== 'string') return val;
+  try { return JSON.parse(val); } catch { return val; }
+}
+
+const coerceJsonArray = z.preprocess(tryParseJson, z.array(z.record(z.unknown())));
+const coerceJsonObject = z.preprocess(tryParseJson, z.record(z.unknown()));
+const coerceJsonFilter = z.preprocess(tryParseJson, dataTableFilterSchema);
+
 const getRowsSchema = tableIdSchema.extend({
   limit: z.number().min(1).max(100).optional(),
   cursor: z.string().optional(),
-  filter: z.union([dataTableFilterSchema, z.string()]).optional(),
+  filter: z.union([coerceJsonFilter, z.string()]).optional(),
   sortBy: z.string().optional(),
   search: z.string().optional(),
 });
 
 const insertRowsSchema = tableIdSchema.extend({
-  data: z.array(z.record(z.unknown())).min(1, 'At least one row is required'),
+  data: coerceJsonArray.pipe(z.array(z.record(z.unknown())).min(1, 'At least one row is required')),
   returnType: z.enum(['count', 'id', 'all']).optional(),
 });
 
 // Shared schema for update/upsert (identical structure)
 const mutateRowsSchema = tableIdSchema.extend({
-  filter: dataTableFilterSchema,
-  data: z.record(z.unknown()),
+  filter: coerceJsonFilter,
+  data: coerceJsonObject,
   returnData: z.boolean().optional(),
   dryRun: z.boolean().optional(),
 });
 
 const deleteRowsSchema = tableIdSchema.extend({
-  filter: dataTableFilterSchema,
+  filter: coerceJsonFilter,
   returnData: z.boolean().optional(),
   dryRun: z.boolean().optional(),
 });
@@ -2847,10 +2858,14 @@ export async function handleDeleteTable(args: unknown, context?: InstanceContext
 export async function handleGetRows(args: unknown, context?: InstanceContext): Promise<McpToolResponse> {
   try {
     const client = ensureApiConfigured(context);
-    const { tableId, filter, ...params } = getRowsSchema.parse(args);
+    const { tableId, filter, sortBy, ...params } = getRowsSchema.parse(args);
     const queryParams: Record<string, unknown> = { ...params };
     if (filter) {
-      queryParams.filter = typeof filter === 'string' ? filter : JSON.stringify(filter);
+      const filterStr = typeof filter === 'string' ? filter : JSON.stringify(filter);
+      queryParams.filter = encodeURIComponent(filterStr);
+    }
+    if (sortBy) {
+      queryParams.sortBy = encodeURIComponent(sortBy);
     }
     const result = await client.getDataTableRows(tableId, queryParams as any);
     return {
@@ -2916,7 +2931,7 @@ export async function handleDeleteRows(args: unknown, context?: InstanceContext)
     const client = ensureApiConfigured(context);
     const { tableId, filter, ...params } = deleteRowsSchema.parse(args);
     const queryParams = {
-      filter: JSON.stringify(filter),
+      filter: encodeURIComponent(JSON.stringify(filter)),
       ...params,
     };
     const result = await client.deleteDataTableRows(tableId, queryParams as any);

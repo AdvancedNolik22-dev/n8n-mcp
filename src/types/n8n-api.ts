@@ -459,13 +459,13 @@ export interface ErrorSuggestion {
 // Data Table types
 export interface DataTableColumn {
   name: string;
-  type?: 'string' | 'number' | 'boolean' | 'date' | 'json';
+  type?: 'string' | 'number' | 'boolean' | 'date';
 }
 
 export interface DataTableColumnResponse {
   id: string;
   name: string;
-  type: 'string' | 'number' | 'boolean' | 'date' | 'json';
+  type: 'string' | 'number' | 'boolean' | 'date';
   index: number;
 }
 

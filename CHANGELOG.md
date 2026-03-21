@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.40.1] - 2026-03-21
+
+### Fixed
+
+- **`n8n_manage_datatable` row operations broken by MCP transport serialization**: `data` parameter received as string instead of JSON — added `z.preprocess` coercers for array/object/filter params
+- **`n8n_manage_datatable` filter/sortBy URL encoding**: n8n API requires URL-encoded query params — added `encodeURIComponent()` for filter and sortBy in getRows and deleteRows
+- **`json` column type rejected by n8n API**: Removed `json` from column type enum (n8n only accepts string/number/boolean/date)
+- **Garbled 404 error messages**: Fixed `N8nNotFoundError` constructor — API error messages are now passed through cleanly instead of being wrapped in "Resource with ID ... not found"
+
+Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+
 ## [2.40.0] - 2026-03-21
 
 ### Changed

@@ -627,7 +627,7 @@ export const n8nManagementTools: ToolDefinition[] = [
             type: 'object',
             properties: {
               name: { type: 'string' },
-              type: { type: 'string', enum: ['string', 'number', 'boolean', 'date', 'json'] },
+              type: { type: 'string', enum: ['string', 'number', 'boolean', 'date'] },
             },
             required: ['name'],
           },

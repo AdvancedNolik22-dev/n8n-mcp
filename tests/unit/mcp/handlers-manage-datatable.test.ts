@@ -429,12 +429,12 @@ describe('Data Table Handlers (n8n_manage_datatable)', () => {
 
       expect(mockApiClient.getDataTableRows).toHaveBeenCalledWith('dt-1', {
         limit: 50,
-        sortBy: 'name:asc',
+        sortBy: encodeURIComponent('name:asc'),
         search: 'john',
       });
     });
 
-    it('should serialize object filter to JSON string', async () => {
+    it('should serialize object filter to URL-encoded JSON string', async () => {
       mockApiClient.getDataTableRows.mockResolvedValue({ data: [], nextCursor: null });
 
       const objectFilter = {
@@ -448,20 +448,21 @@ describe('Data Table Handlers (n8n_manage_datatable)', () => {
       });
 
       expect(mockApiClient.getDataTableRows).toHaveBeenCalledWith('dt-1', {
-        filter: JSON.stringify(objectFilter),
+        filter: encodeURIComponent(JSON.stringify(objectFilter)),
       });
     });
 
-    it('should pass through string filter as-is', async () => {
+    it('should URL-encode string filter', async () => {
       mockApiClient.getDataTableRows.mockResolvedValue({ data: [], nextCursor: null });
 
+      const filterStr = '{"type":"and","filters":[]}';
       await handlers.handleGetRows({
         tableId: 'dt-1',
-        filter: '{"type":"and","filters":[]}',
+        filter: filterStr,
       });
 
       expect(mockApiClient.getDataTableRows).toHaveBeenCalledWith('dt-1', {
-        filter: '{"type":"and","filters":[]}',
+        filter: encodeURIComponent(filterStr),
       });
     });
   });
@@ -680,11 +681,11 @@ describe('Data Table Handlers (n8n_manage_datatable)', () => {
         message: 'Rows deleted successfully',
       });
       expect(mockApiClient.deleteDataTableRows).toHaveBeenCalledWith('dt-1', {
-        filter: JSON.stringify({ type: 'and', ...filter }),
+        filter: encodeURIComponent(JSON.stringify({ type: 'and', ...filter })),
       });
     });
 
-    it('should serialize filter object to JSON string for API call', async () => {
+    it('should URL-encode serialized filter for API call', async () => {
       mockApiClient.deleteDataTableRows.mockResolvedValue({ deletedCount: 1 });
 
       const filter = {
@@ -698,7 +699,7 @@ describe('Data Table Handlers (n8n_manage_datatable)', () => {
       await handlers.handleDeleteRows({ tableId: 'dt-1', filter });
 
       expect(mockApiClient.deleteDataTableRows).toHaveBeenCalledWith('dt-1', {
-        filter: JSON.stringify(filter),
+        filter: encodeURIComponent(JSON.stringify(filter)),
       });
     });
 
@@ -719,7 +720,7 @@ describe('Data Table Handlers (n8n_manage_datatable)', () => {
       expect(result.success).toBe(true);
       expect(result.message).toBe('Dry run: rows matched for deletion (no changes applied)');
       expect(mockApiClient.deleteDataTableRows).toHaveBeenCalledWith('dt-1', {
-        filter: JSON.stringify({ type: 'and', ...filter }),
+        filter: encodeURIComponent(JSON.stringify({ type: 'and', ...filter })),
         dryRun: true,
       });
     });

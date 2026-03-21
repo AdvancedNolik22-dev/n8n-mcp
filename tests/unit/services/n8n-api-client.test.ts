@@ -297,7 +297,7 @@ describe('N8nApiClient', () => {
         expect.fail('Should have thrown an error');
       } catch (err) {
         expect(err).toBeInstanceOf(N8nNotFoundError);
-        expect((err as N8nNotFoundError).message).toContain('not found');
+        expect((err as N8nNotFoundError).message.toLowerCase()).toContain('not found');
         expect((err as N8nNotFoundError).statusCode).toBe(404);
       }
     });
@@ -380,7 +380,7 @@ describe('N8nApiClient', () => {
         expect.fail('Should have thrown an error');
       } catch (err) {
         expect(err).toBeInstanceOf(N8nNotFoundError);
-        expect((err as N8nNotFoundError).message).toContain('not found');
+        expect((err as N8nNotFoundError).message.toLowerCase()).toContain('not found');
         expect((err as N8nNotFoundError).statusCode).toBe(404);
       }
     });
@@ -432,7 +432,7 @@ describe('N8nApiClient', () => {
         expect.fail('Should have thrown an error');
       } catch (err) {
         expect(err).toBeInstanceOf(N8nNotFoundError);
-        expect((err as N8nNotFoundError).message).toContain('not found');
+        expect((err as N8nNotFoundError).message.toLowerCase()).toContain('not found');
         expect((err as N8nNotFoundError).statusCode).toBe(404);
       }
     });
@@ -501,7 +501,7 @@ describe('N8nApiClient', () => {
         expect.fail('Should have thrown an error');
       } catch (err) {
         expect(err).toBeInstanceOf(N8nNotFoundError);
-        expect((err as N8nNotFoundError).message).toContain('not found');
+        expect((err as N8nNotFoundError).message.toLowerCase()).toContain('not found');
         expect((err as N8nNotFoundError).statusCode).toBe(404);
       }
     });
@@ -1278,7 +1278,7 @@ describe('N8nApiClient', () => {
         expect.fail('Should have thrown an error');
       } catch (err) {
         expect(err).toBeInstanceOf(N8nNotFoundError);
-        expect((err as N8nNotFoundError).message).toContain('not found');
+        expect((err as N8nNotFoundError).message.toLowerCase()).toContain('not found');
         expect((err as N8nNotFoundError).statusCode).toBe(404);
       }
     });
