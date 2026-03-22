@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.40.3] - 2026-03-22
+
+### Fixed
+
+- **Notification 400 disconnect storms (#654)**: `handleRequest()` now returns 202 Accepted for JSON-RPC notifications with stale/expired session IDs instead of 400. Per JSON-RPC 2.0 spec, notifications don't expect responses — returning 400 caused Claude's proxy to trigger reconnection storms (930 errors/day, 216 users affected)
+- **TOCTOU race in session lookup**: Added null guard after transport assignment to handle sessions removed between the existence check and use
+- **`updateTable` silently ignoring `columns` parameter**: Now returns a warning message when `columns` is passed to `updateTable`, clarifying that table schema is immutable after creation via the public API
+- **Tool schema descriptions clarified**: `name` and `columns` parameter descriptions now explicitly document that `updateTable` is rename-only and columns are for `createTable` only
+
+Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+
 ## [2.40.2] - 2026-03-22
 
 ### Fixed

@@ -619,10 +619,10 @@ export const n8nManagementTools: ToolDefinition[] = [
           description: 'Operation to perform',
         },
         tableId: { type: 'string', description: 'Data table ID (required for all actions except createTable and listTables)' },
-        name: { type: 'string', description: 'For createTable/updateTable: table name' },
+        name: { type: 'string', description: 'For createTable: table name. For updateTable: new name (rename only — schema is immutable after creation)' },
         columns: {
           type: 'array',
-          description: 'For createTable: column definitions',
+          description: 'For createTable only: column definitions (schema is immutable after creation via public API)',
           items: {
             type: 'object',
             properties: {

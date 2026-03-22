@@ -253,6 +253,22 @@ export class SingleSessionHTTPServer {
     // This ensures compatibility with all MCP clients and proxies
     return Boolean(sessionId && sessionId.length > 0);
   }
+
+  /**
+   * Checks if a request body is a JSON-RPC notification (or batch of only notifications).
+   * Per JSON-RPC 2.0 §4.1, a notification is a request without an "id" member.
+   * Note: `!('id' in msg)` is strict — messages with `id: null` are treated as
+   * requests, not notifications. This is spec-compliant.
+   */
+  private isJsonRpcNotification(body: unknown): boolean {
+    if (!body || typeof body !== 'object') return false;
+    const isSingleNotification = (msg: any): boolean =>
+      msg && typeof msg.method === 'string' && !('id' in msg);
+    if (Array.isArray(body)) {
+      return body.length > 0 && body.every(isSingleNotification);
+    }
+    return isSingleNotification(body);
+  }
   
   /**
    * Sanitize error information for client responses
@@ -614,6 +630,22 @@ export class SingleSessionHTTPServer {
           logger.info('handleRequest: Reusing existing transport for session', { sessionId });
           transport = this.transports[sessionId];
 
+          // TOCTOU guard: session may have been removed between the check above and here
+          if (!transport) {
+            if (this.isJsonRpcNotification(req.body)) {
+              logger.info('handleRequest: Session removed during lookup, accepting notification', { sessionId });
+              res.status(202).end();
+              return;
+            }
+            logger.warn('handleRequest: Session removed between check and use (TOCTOU)', { sessionId });
+            res.status(400).json({
+              jsonrpc: '2.0',
+              error: { code: -32000, message: 'Bad Request: Session not found or expired' },
+              id: req.body?.id || null,
+            });
+            return;
+          }
+
           // In multi-tenant shared mode, update instance context if provided
           const isMultiTenantEnabled = process.env.ENABLE_MULTI_TENANT === 'true';
           const sessionStrategy = process.env.MULTI_TENANT_SESSION_STRATEGY || 'instance';
@@ -627,23 +659,33 @@ export class SingleSessionHTTPServer {
           this.updateSessionAccess(sessionId);
           
         } else {
-          // Invalid request - no session ID and not an initialize request
+          // Notifications are fire-and-forget; returning 400 triggers reconnection storms (#654)
+          if (this.isJsonRpcNotification(req.body)) {
+            logger.info('handleRequest: Accepting notification for stale/missing session', {
+              method: req.body?.method,
+              sessionId: sessionId || 'none',
+            });
+            res.status(202).end();
+            return;
+          }
+
+          // Only return 400 for actual requests that need a valid session
           const errorDetails = {
             hasSessionId: !!sessionId,
             isInitialize: isInitialize,
             sessionIdValid: sessionId ? this.isValidSessionId(sessionId) : false,
             sessionExists: sessionId ? !!this.transports[sessionId] : false
           };
-          
+
           logger.warn('handleRequest: Invalid request - no session ID and not initialize', errorDetails);
-          
+
           let errorMessage = 'Bad Request: No valid session ID provided and not an initialize request';
           if (sessionId && !this.isValidSessionId(sessionId)) {
             errorMessage = 'Bad Request: Invalid session ID format';
           } else if (sessionId && !this.transports[sessionId]) {
             errorMessage = 'Bad Request: Session not found or expired';
           }
-          
+
           res.status(400).json({
             jsonrpc: '2.0',
             error: {

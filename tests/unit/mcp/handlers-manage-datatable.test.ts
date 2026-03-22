@@ -363,6 +363,22 @@ describe('Data Table Handlers (n8n_manage_datatable)', () => {
       expect(result.success).toBe(false);
       expect(result.error).toBe('Update failed');
     });
+
+    it('should warn when columns parameter is passed', async () => {
+      const updatedTable = { id: 'dt-1', name: 'Renamed' };
+      mockApiClient.updateDataTable.mockResolvedValue(updatedTable);
+
+      const result = await handlers.handleUpdateTable({
+        tableId: 'dt-1',
+        name: 'Renamed',
+        columns: [{ name: 'phone', type: 'string' }],
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.message).toContain('columns parameter was ignored');
+      expect(result.message).toContain('immutable after creation');
+      expect(mockApiClient.updateDataTable).toHaveBeenCalledWith('dt-1', { name: 'Renamed' });
+    });
   });
 
   // ========================================================================

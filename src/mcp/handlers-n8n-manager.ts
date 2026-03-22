@@ -2834,10 +2834,13 @@ export async function handleUpdateTable(args: unknown, context?: InstanceContext
     const client = ensureApiConfigured(context);
     const { tableId, name } = updateTableSchema.parse(args);
     const dataTable = await client.updateDataTable(tableId, { name });
+    const rawArgs = args as Record<string, unknown>;
+    const hasColumns = rawArgs && typeof rawArgs === 'object' && 'columns' in rawArgs;
     return {
       success: true,
       data: dataTable,
-      message: `Data table renamed to "${dataTable.name}"`,
+      message: `Data table renamed to "${dataTable.name}"` +
+        (hasColumns ? '. Note: columns parameter was ignored — table schema is immutable after creation via the public API' : ''),
     };
   } catch (error) {
     return handleDataTableError(error);
