@@ -34,6 +34,11 @@ export class NodeRepository {
    * Supports both core and community nodes via optional community fields
    */
   saveNode(node: ParsedNode & Partial<CommunityNodeFields>): void {
+    // Preserve existing npm_readme and ai_documentation_summary on upsert
+    const existing = this.db.prepare(
+      'SELECT npm_readme, ai_documentation_summary, ai_summary_generated_at FROM nodes WHERE node_type = ?'
+    ).get(node.nodeType) as { npm_readme?: string; ai_documentation_summary?: string; ai_summary_generated_at?: string } | undefined;
+
     const stmt = this.db.prepare(`
       INSERT OR REPLACE INTO nodes (
         node_type, package_name, display_name, description,
@@ -43,8 +48,9 @@ export class NodeRepository {
         properties_schema, operations, credentials_required,
         outputs, output_names,
         is_community, is_verified, author_name, author_github_url,
-        npm_package_name, npm_version, npm_downloads, community_fetched_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        npm_package_name, npm_version, npm_downloads, community_fetched_at,
+        npm_readme, ai_documentation_summary, ai_summary_generated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     stmt.run(
@@ -76,7 +82,11 @@ export class NodeRepository {
       node.npmPackageName || null,
       node.npmVersion || null,
       node.npmDownloads || 0,
-      node.communityFetchedAt || null
+      node.communityFetchedAt || null,
+      // Preserve existing docs data on upsert
+      existing?.npm_readme || null,
+      existing?.ai_documentation_summary || null,
+      existing?.ai_summary_generated_at || null
     );
   }
   
