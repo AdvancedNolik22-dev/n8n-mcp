@@ -334,14 +334,14 @@ describe('HTTP Server Session Management', () => {
       server = new SingleSessionHTTPServer();
       
       // Mock expired sessions
-      // Note: Default session timeout is 5 minutes (configurable via SESSION_TIMEOUT_MINUTES)
+      // Note: Default session timeout is 30 minutes (configurable via SESSION_TIMEOUT_MINUTES)
       const mockSessionMetadata = {
         'session-1': {
-          lastAccess: new Date(Date.now() - 10 * 60 * 1000), // 10 minutes ago (expired with 5 min timeout)
+          lastAccess: new Date(Date.now() - 45 * 60 * 1000), // 45 minutes ago (expired with 30 min timeout)
           createdAt: new Date(Date.now() - 60 * 60 * 1000)
         },
         'session-2': {
-          lastAccess: new Date(Date.now() - 2 * 60 * 1000), // 2 minutes ago (not expired with 5 min timeout)
+          lastAccess: new Date(Date.now() - 10 * 60 * 1000), // 10 minutes ago (not expired with 30 min timeout)
           createdAt: new Date(Date.now() - 20 * 60 * 1000)
         }
       };
@@ -517,15 +517,15 @@ describe('HTTP Server Session Management', () => {
     it('should get session metrics correctly', async () => {
       server = new SingleSessionHTTPServer();
 
-      // Note: Default session timeout is 5 minutes (configurable via SESSION_TIMEOUT_MINUTES)
+      // Note: Default session timeout is 30 minutes (configurable via SESSION_TIMEOUT_MINUTES)
       const now = Date.now();
       (server as any).sessionMetadata = {
         'active-session': {
-          lastAccess: new Date(now - 2 * 60 * 1000), // 2 minutes ago (not expired with 5 min timeout)
+          lastAccess: new Date(now - 10 * 60 * 1000), // 10 minutes ago (not expired with 30 min timeout)
           createdAt: new Date(now - 20 * 60 * 1000)
         },
         'expired-session': {
-          lastAccess: new Date(now - 10 * 60 * 1000), // 10 minutes ago (expired with 5 min timeout)
+          lastAccess: new Date(now - 45 * 60 * 1000), // 45 minutes ago (expired with 30 min timeout)
           createdAt: new Date(now - 60 * 60 * 1000)
         }
       };

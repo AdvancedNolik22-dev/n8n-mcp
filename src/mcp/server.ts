@@ -748,6 +748,13 @@ export class N8NDocumentationMCPServer {
       // tool's inputSchema as the source of truth.
       processedArgs = this.coerceStringifiedJsonParams(name, processedArgs);
 
+      // Strip undefined values from args (#611) — VS Code extension sends
+      // explicit undefined values which Zod's .optional() rejects.
+      // Removing them makes Zod treat them as missing (which .optional() allows).
+      if (processedArgs) {
+        processedArgs = JSON.parse(JSON.stringify(processedArgs));
+      }
+
       try {
         logger.debug(`Executing tool: ${name}`, { args: processedArgs });
         const startTime = Date.now();

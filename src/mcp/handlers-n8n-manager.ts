@@ -2731,7 +2731,7 @@ const updateTableSchema = tableIdSchema.extend({
 
 // MCP transports may serialize JSON objects/arrays as strings.
 // Parse them back, but return the original value on failure so Zod reports a proper type error.
-function tryParseJson(val: unknown): unknown {
+export function tryParseJson(val: unknown): unknown {
   if (typeof val !== 'string') return val;
   try { return JSON.parse(val); } catch { return val; }
 }

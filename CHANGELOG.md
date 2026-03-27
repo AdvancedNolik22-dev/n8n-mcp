@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.41.3] - 2026-03-27
+
+### Fixed
+
+- **Session timeout default too low** (Issue #626): Raised `SESSION_TIMEOUT_MINUTES` default from 5 to 30 minutes. The 5-minute default caused sessions to expire mid-operation during complex multi-step workflows (validate → get structure → patch → validate), forcing users to retry. Configurable via environment variable.
+
+- **Operations array received as string from VS Code** (Issue #600): Added `z.preprocess` JSON string parsing to the `operations` parameter in `n8n_update_partial_workflow`. The VS Code MCP extension serializes arrays as JSON strings — the Zod schema now transparently parses them before validation.
+
+- **`undefined` values rejected in MCP tool calls from VS Code** (Issue #611): Strip explicit `undefined` values from tool arguments before Zod validation. VS Code sends `undefined` as a value which Zod's `.optional()` rejects (it expects the field to be missing, not present-but-undefined).
+
+Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+
 ## [2.41.2] - 2026-03-27
 
 ### Fixed

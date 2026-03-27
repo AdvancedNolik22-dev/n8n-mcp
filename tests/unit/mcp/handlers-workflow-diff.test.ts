@@ -17,9 +17,13 @@ vi.mock('@/services/workflow-diff-engine');
 vi.mock('@/services/n8n-api-client');
 vi.mock('@/config/n8n-api');
 vi.mock('@/utils/logger');
-vi.mock('@/mcp/handlers-n8n-manager', () => ({
-  getN8nApiClient: vi.fn(),
-}));
+vi.mock('@/mcp/handlers-n8n-manager', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/mcp/handlers-n8n-manager')>();
+  return {
+    ...actual,
+    getN8nApiClient: vi.fn(),
+  };
+});
 
 // Import mocked modules
 import { getN8nApiClient } from '@/mcp/handlers-n8n-manager';

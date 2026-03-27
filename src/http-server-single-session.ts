@@ -107,11 +107,10 @@ export class SingleSessionHTTPServer {
   private session: Session | null = null;  // Keep for SSE compatibility
   private consoleManager = new ConsoleManager();
   private expressServer: any;
-  // Session timeout reduced from 30 minutes to 5 minutes for faster cleanup
-  // Configurable via SESSION_TIMEOUT_MINUTES environment variable
-  // This prevents memory buildup from stale sessions
+  // Session timeout — configurable via SESSION_TIMEOUT_MINUTES environment variable
+  // Default 30 minutes: balances memory cleanup with real editing sessions (#626)
   private sessionTimeout = parseInt(
-    process.env.SESSION_TIMEOUT_MINUTES || '5', 10
+    process.env.SESSION_TIMEOUT_MINUTES || '30', 10
   ) * 60 * 1000;
   private authToken: string | null = null;
   private cleanupTimer: NodeJS.Timeout | null = null;
