@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.42.1] - 2026-03-30
+
+### Fixed
+
+- **Community nodes missing from database after rebuild**: Restored 584 community nodes from the n8n 2.13.3 snapshot and re-extracted operations with resource grouping from `properties_schema`. 366 community nodes now have proper resource-grouped operations.
+
+- **Community node service missing resource extraction**: `extractOperations()` in `community-node-service.ts` was not extracting `resource` from `displayOptions.show.resource`, same issue that was fixed in `property-extractor.ts` in v2.42.0.
+
+Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+
 ## [2.42.0] - 2026-03-30
 
 ### Added
