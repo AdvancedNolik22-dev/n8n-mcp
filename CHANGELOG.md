@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.42.2] - 2026-03-30
+
+### Fixed
+
+- **`workflow-patterns.json` missing from npm package** (Issue #681): Added `data/workflow-patterns.json` to the `files` array in `package.json` so the patterns file is included in the published npm package and works out of the box without manual generation.
+
+Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+
 ## [2.42.1] - 2026-03-30
 
 ### Fixed
