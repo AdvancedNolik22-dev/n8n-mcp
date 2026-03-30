@@ -1,6 +1,6 @@
 {
   "name": "n8n-mcp",
-  "version": "2.41.4",
+  "version": "2.42.0",
   "description": "Integration between n8n workflow automation and Model Context Protocol (MCP)",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -90,6 +90,7 @@
     "test:docker:unit": "./scripts/test-docker-config.sh unit",
     "test:docker:integration": "./scripts/test-docker-config.sh integration",
     "test:docker:security": "./scripts/test-docker-config.sh security",
+    "mine:patterns": "tsx src/scripts/mine-workflow-patterns.ts",
     "sanitize:templates": "node dist/scripts/sanitize-templates.js",
     "db:rebuild": "node dist/scripts/rebuild-database.js",
     "db:init": "node -e \"new (require('./dist/services/sqlite-storage-service').SQLiteStorageService)(); console.log('Database initialized')\"",
