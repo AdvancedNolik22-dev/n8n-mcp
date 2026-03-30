@@ -125,6 +125,7 @@ When working with Code nodes, always start by calling the relevant guide:
   - searchMode='by_nodes': Find templates using specific nodes
   - searchMode='by_task': Curated task-based templates
   - searchMode='by_metadata': Filter by complexity/services
+  - searchMode='patterns': Workflow pattern summaries from 2,700+ templates
 
 **n8n API Tools** (13 tools, requires N8N_API_URL configuration)
 - n8n_create_workflow - Create new workflows

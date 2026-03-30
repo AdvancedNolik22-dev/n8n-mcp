@@ -3909,17 +3909,23 @@ Full documentation is being prepared. For now, use get_node_essentials for confi
     const patterns = this.workflowPatternsCache!;
 
     if (category) {
-      // Return specific category pattern data
+      // Return specific category pattern data (trimmed for token efficiency)
       const categoryData = patterns.categories[category];
       if (!categoryData) {
         const available = Object.keys(patterns.categories);
         return { error: `Unknown category "${category}". Available: ${available.join(', ')}` };
       }
+      const MAX_CHAINS = 5;
       return {
         category,
-        ...categoryData,
-        nodes: categoryData.nodes?.slice(0, limit),
-        commonChains: categoryData.commonChains?.slice(0, limit),
+        templateCount: categoryData.templateCount,
+        pattern: categoryData.pattern,
+        nodes: categoryData.nodes?.slice(0, limit).map(n => ({
+          type: n.type, freq: n.frequency, role: n.role
+        })),
+        chains: categoryData.commonChains?.slice(0, MAX_CHAINS).map(c => ({
+          path: c.chain.map(t => t.split('.').pop() ?? t), count: c.count, freq: c.frequency
+        })),
       };
     }
 
