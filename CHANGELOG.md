@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.44.0] - 2026-04-01
+
+### Added
+
+- **Multi-step workflow generation flow**: `n8n_generate_workflow` now supports a three-step flow where AI agents act as quality gates — get proposals, review, then deploy. New parameters: `deploy_id` (deploy a specific proposal), `confirm_deploy` (deploy a previously generated preview).
+
+- **`GenerateWorkflowProposal` type**: New exported type for workflow proposals with `id`, `name`, `description`, `flow_summary`, and `credentials_needed` fields.
+
+- **`status` field on `GenerateWorkflowResult`**: Indicates the current phase — `proposals`, `preview`, `deployed`, or `error`.
+
+### Changed
+
+- **Tool description updated**: `n8n_generate_workflow` description now explains the multi-step flow instead of auto-deploy behavior.
+
+- **Tool documentation updated**: Essentials and full docs reflect the three-step flow with examples for each step.
+
+Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+
 ## [2.43.0] - 2026-03-31
 
 ### Added

@@ -1561,11 +1561,7 @@ export class N8NDocumentationMCPServer {
           };
 
           try {
-            const result = await this.generateWorkflowHandler(
-              { description: args.description, skip_cache: args.skip_cache },
-              ctx,
-              helpers
-            );
+            const result = await this.generateWorkflowHandler(args, ctx, helpers);
             return result ?? { success: false, error: 'Handler returned no result' };
           } catch (err: any) {
             const message = err instanceof Error ? err.message : String(err);

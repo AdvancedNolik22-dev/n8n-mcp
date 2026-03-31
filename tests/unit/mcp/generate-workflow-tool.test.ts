@@ -4,6 +4,7 @@ import type {
   GenerateWorkflowHandler,
   GenerateWorkflowArgs,
   GenerateWorkflowResult,
+  GenerateWorkflowProposal,
   GenerateWorkflowHelpers,
 } from '@/types/generate-workflow';
 
@@ -18,6 +19,8 @@ describe('n8n_generate_workflow', () => {
     it('has correct input schema', () => {
       expect(tool!.inputSchema.properties).toHaveProperty('description');
       expect(tool!.inputSchema.properties).toHaveProperty('skip_cache');
+      expect(tool!.inputSchema.properties).toHaveProperty('deploy_id');
+      expect(tool!.inputSchema.properties).toHaveProperty('confirm_deploy');
       expect(tool!.inputSchema.required).toEqual(['description']);
     });
 
@@ -78,13 +81,69 @@ describe('n8n_generate_workflow', () => {
       expect(failure.success).toBe(false);
     });
 
-    it('GenerateWorkflowArgs has description and optional skip_cache', () => {
+    it('GenerateWorkflowResult supports proposal status', () => {
+      const proposals: GenerateWorkflowResult = {
+        success: true,
+        status: 'proposals',
+        proposals: [
+          {
+            id: 'uuid-1',
+            name: 'Slack Reminder',
+            description: 'Send scheduled Slack messages',
+            flow_summary: 'Schedule Trigger → Set → Slack',
+            credentials_needed: ['slackApi'],
+          },
+        ],
+      };
+      expect(proposals.status).toBe('proposals');
+      expect(proposals.proposals).toHaveLength(1);
+      expect(proposals.proposals![0].id).toBe('uuid-1');
+    });
+
+    it('GenerateWorkflowResult supports preview and deployed status', () => {
+      const preview: GenerateWorkflowResult = {
+        success: true,
+        status: 'preview',
+        node_summary: 'Webhook → HTTP Request → Slack',
+      };
+      expect(preview.status).toBe('preview');
+
+      const deployed: GenerateWorkflowResult = {
+        success: true,
+        status: 'deployed',
+        workflow_id: '123',
+        workflow_name: 'My Workflow',
+      };
+      expect(deployed.status).toBe('deployed');
+    });
+
+    it('GenerateWorkflowProposal has required fields', () => {
+      const proposal: GenerateWorkflowProposal = {
+        id: 'uuid-123',
+        name: 'Test Workflow',
+        description: 'A test workflow',
+        flow_summary: 'Trigger → Action',
+        credentials_needed: ['slackApi', 'gmailOAuth2'],
+      };
+      expect(proposal.id).toBe('uuid-123');
+      expect(proposal.credentials_needed).toHaveLength(2);
+    });
+
+    it('GenerateWorkflowArgs has description and optional fields', () => {
       const minimal: GenerateWorkflowArgs = { description: 'test' };
       expect(minimal.description).toBe('test');
       expect(minimal.skip_cache).toBeUndefined();
+      expect(minimal.deploy_id).toBeUndefined();
+      expect(minimal.confirm_deploy).toBeUndefined();
 
       const withSkip: GenerateWorkflowArgs = { description: 'test', skip_cache: true };
       expect(withSkip.skip_cache).toBe(true);
+
+      const withDeploy: GenerateWorkflowArgs = { description: 'test', deploy_id: 'uuid-1' };
+      expect(withDeploy.deploy_id).toBe('uuid-1');
+
+      const withConfirm: GenerateWorkflowArgs = { description: 'test', confirm_deploy: true };
+      expect(withConfirm.confirm_deploy).toBe(true);
     });
   });
 });

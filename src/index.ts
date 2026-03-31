@@ -24,6 +24,7 @@ export type {
 export type {
   GenerateWorkflowArgs,
   GenerateWorkflowResult,
+  GenerateWorkflowProposal,
   GenerateWorkflowHandler,
   GenerateWorkflowHelpers
 } from './types/generate-workflow';

@@ -3,11 +3,23 @@ import { InstanceContext } from './instance-context';
 export interface GenerateWorkflowArgs {
   description: string;
   skip_cache?: boolean;
+  deploy_id?: string;
+  confirm_deploy?: boolean;
+}
+
+export interface GenerateWorkflowProposal {
+  id: string;
+  name: string;
+  description: string;
+  flow_summary: string;
+  credentials_needed: string[];
 }
 
 export interface GenerateWorkflowResult {
   success: boolean;
   source?: 'cache' | 'generated';
+  status?: 'proposals' | 'preview' | 'deployed' | 'error';
+  proposals?: GenerateWorkflowProposal[];
   workflow_id?: string;
   workflow_name?: string;
   workflow_url?: string;
