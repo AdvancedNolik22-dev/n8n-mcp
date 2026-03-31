@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.42.3] - 2026-03-30
+
+### Improved
+
+- **Patterns response trimmed for token efficiency** (Issue #683): Task-specific patterns response reduced ~64% — dropped redundant `displayName`, shortened field names (`frequency` → `freq`), capped chains at 5, and shortened chain node types to last segment.
+
+- **`patterns` mode added to `tools_documentation`**: Was missing from both essentials and full docs. AI agents can now discover patterns mode through the standard documentation flow.
+
+- **`includeOperations` omission behavior documented**: Added note that trigger nodes and freeform nodes (Code, HTTP Request) omit the `operationsTree` field.
+
+- **`search_nodes` examples trimmed**: Reduced from 11 to 6 examples in full docs, removing near-duplicates.
+
+Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+
 ## [2.42.2] - 2026-03-30
 
 ### Fixed
