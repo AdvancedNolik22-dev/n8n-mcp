@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.43.0] - 2026-03-31
+
+### Added
+
+- **`n8n_generate_workflow` tool**: New MCP tool that enables AI-powered workflow generation from natural language descriptions. Available on the hosted service with handler delegation pattern for extensibility.
+
+- **Handler injection API**: `EngineOptions.generateWorkflowHandler` allows hosting environments to provide custom workflow generation backends. Handler receives helpers for `createWorkflow`, `validateWorkflow`, `autofixWorkflow`, and `getWorkflow`.
+
+- **Tool documentation**: Full essentials and deep documentation for `n8n_generate_workflow` via `tools_documentation`.
+
+### Fixed
+
+- **Tools documentation count**: Corrected n8n API tools count and added missing `n8n_manage_datatable` entry to tools overview.
+
+Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+
 ## [2.42.3] - 2026-03-30
 
 ### Improved

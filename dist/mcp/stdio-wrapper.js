@@ -29,6 +29,16 @@ console.table = () => { };
 console.clear = () => { };
 console.count = () => { };
 console.countReset = () => { };
+const originalStdoutWrite = process.stdout.write.bind(process.stdout);
+const stderrWrite = process.stderr.write.bind(process.stderr);
+process.stdout.write = function (chunk, encodingOrCallback, callback) {
+    const str = typeof chunk === 'string' ? chunk : chunk.toString();
+    const trimmed = str.trimStart();
+    if (trimmed.startsWith('{') && trimmed.includes('"jsonrpc"')) {
+        return originalStdoutWrite(chunk, encodingOrCallback, callback);
+    }
+    return stderrWrite(chunk, encodingOrCallback, callback);
+};
 const server_1 = require("./server");
 let server = null;
 async function main() {

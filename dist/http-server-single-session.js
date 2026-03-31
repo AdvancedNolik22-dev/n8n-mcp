@@ -45,7 +45,7 @@ function logSecurityEvent(event, details) {
     logger_1.logger.info(`[SECURITY] ${event}`, logEntry);
 }
 class SingleSessionHTTPServer {
-    constructor() {
+    constructor(options) {
         this.transports = {};
         this.servers = {};
         this.sessionMetadata = {};
@@ -53,9 +53,10 @@ class SingleSessionHTTPServer {
         this.contextSwitchLocks = new Map();
         this.session = null;
         this.consoleManager = new console_manager_1.ConsoleManager();
-        this.sessionTimeout = parseInt(process.env.SESSION_TIMEOUT_MINUTES || '5', 10) * 60 * 1000;
+        this.sessionTimeout = parseInt(process.env.SESSION_TIMEOUT_MINUTES || '30', 10) * 60 * 1000;
         this.authToken = null;
         this.cleanupTimer = null;
+        this.generateWorkflowHandler = options?.generateWorkflowHandler;
         this.validateEnvironment();
         this.startSessionCleanup();
     }
@@ -340,7 +341,9 @@ class SingleSessionHTTPServer {
                     else {
                         sessionIdToUse = sessionId || (0, uuid_1.v4)();
                     }
-                    const server = new server_1.N8NDocumentationMCPServer(instanceContext);
+                    const server = new server_1.N8NDocumentationMCPServer(instanceContext, undefined, {
+                        generateWorkflowHandler: this.generateWorkflowHandler,
+                    });
                     transport = new streamableHttp_js_1.StreamableHTTPServerTransport({
                         sessionIdGenerator: () => sessionIdToUse,
                         onsessioninitialized: (initializedSessionId) => {
@@ -504,7 +507,9 @@ class SingleSessionHTTPServer {
         }
         try {
             logger_1.logger.info('Creating new N8NDocumentationMCPServer for SSE...');
-            const server = new server_1.N8NDocumentationMCPServer();
+            const server = new server_1.N8NDocumentationMCPServer(undefined, undefined, {
+                generateWorkflowHandler: this.generateWorkflowHandler,
+            });
             const sessionId = (0, uuid_1.v4)();
             logger_1.logger.info('Creating SSEServerTransport...');
             const transport = new sse_js_1.SSEServerTransport('/mcp', res);

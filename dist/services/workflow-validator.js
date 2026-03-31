@@ -14,6 +14,7 @@ const ai_node_validator_1 = require("./ai-node-validator");
 const ai_tool_validators_1 = require("./ai-tool-validators");
 const node_type_utils_1 = require("../utils/node-type-utils");
 const node_classification_1 = require("../utils/node-classification");
+const n8n_validation_1 = require("./n8n-validation");
 const tool_variant_generator_1 = require("./tool-variant-generator");
 const logger = new logger_1.Logger({ prefix: '[WorkflowValidator]' });
 exports.VALID_CONNECTION_TYPES = new Set([
@@ -367,6 +368,17 @@ class WorkflowValidator {
                         message: typeof warning === 'string' ? warning : warning.message || String(warning)
                     });
                 });
+                if (node.type === 'n8n-nodes-base.if' || node.type === 'n8n-nodes-base.switch') {
+                    const conditionErrors = (0, n8n_validation_1.validateConditionNodeStructure)(node);
+                    for (const err of conditionErrors) {
+                        result.errors.push({
+                            type: 'error',
+                            nodeId: node.id,
+                            nodeName: node.name,
+                            message: err
+                        });
+                    }
+                }
             }
             catch (error) {
                 result.errors.push({

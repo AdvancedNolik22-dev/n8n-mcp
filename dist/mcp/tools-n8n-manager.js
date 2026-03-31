@@ -635,5 +635,35 @@ exports.n8nManagementTools = [
             openWorldHint: true,
         },
     },
+    {
+        name: 'n8n_generate_workflow',
+        description: 'Generate an n8n workflow from a natural language description using AI. ' +
+            'Describe what the workflow should do (trigger type, services, logic) and this tool ' +
+            'will create and deploy a ready-to-use workflow to your n8n instance. ' +
+            'Set skip_cache=true to force fresh generation instead of using pre-built templates.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                description: {
+                    type: 'string',
+                    description: 'Clear description of what the workflow should do. Include: trigger type ' +
+                        '(webhook, schedule, manual), services to integrate (Slack, Gmail, etc.), and the logic/flow.'
+                },
+                skip_cache: {
+                    type: 'boolean',
+                    description: 'Set to true to bypass the workflow cache and force fresh AI generation. ' +
+                        'Default: false (uses cached workflows when a good match exists).'
+                }
+            },
+            required: ['description'],
+        },
+        annotations: {
+            title: 'Generate Workflow',
+            readOnlyHint: false,
+            destructiveHint: false,
+            idempotentHint: false,
+            openWorldHint: true,
+        },
+    },
 ];
 //# sourceMappingURL=tools-n8n-manager.js.map

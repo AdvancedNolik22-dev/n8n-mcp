@@ -30,6 +30,7 @@ exports.toolsDocumentation = {
     n8n_executions: workflow_management_1.n8nExecutionsDoc,
     n8n_workflow_versions: workflow_management_1.n8nWorkflowVersionsDoc,
     n8n_deploy_template: workflow_management_1.n8nDeployTemplateDoc,
-    n8n_manage_datatable: workflow_management_1.n8nManageDatatableDoc
+    n8n_manage_datatable: workflow_management_1.n8nManageDatatableDoc,
+    n8n_generate_workflow: workflow_management_1.n8nGenerateWorkflowDoc
 };
 //# sourceMappingURL=index.js.map

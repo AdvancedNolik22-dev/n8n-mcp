@@ -26,6 +26,7 @@ import {
 } from './utils/protocol-version';
 import { InstanceContext, validateInstanceContext } from './types/instance-context';
 import { SessionState } from './types/session-state';
+import { GenerateWorkflowHandler } from './types/generate-workflow';
 import { closeSharedDatabase } from './database/shared-database';
 
 dotenv.config();
@@ -97,6 +98,10 @@ function logSecurityEvent(
   logger.info(`[SECURITY] ${event}`, logEntry);
 }
 
+export interface SingleSessionHTTPServerOptions {
+  generateWorkflowHandler?: GenerateWorkflowHandler;
+}
+
 export class SingleSessionHTTPServer {
   // Map to store transports by session ID (following SDK pattern)
   private transports: { [sessionId: string]: StreamableHTTPServerTransport } = {};
@@ -114,8 +119,10 @@ export class SingleSessionHTTPServer {
   ) * 60 * 1000;
   private authToken: string | null = null;
   private cleanupTimer: NodeJS.Timeout | null = null;
-  
-  constructor() {
+  private generateWorkflowHandler?: GenerateWorkflowHandler;
+
+  constructor(options?: SingleSessionHTTPServerOptions) {
+    this.generateWorkflowHandler = options?.generateWorkflowHandler;
     // Validate environment on construction
     this.validateEnvironment();
     // No longer pre-create session - will be created per initialize request following SDK pattern
@@ -565,8 +572,10 @@ export class SingleSessionHTTPServer {
             sessionIdToUse = sessionId || uuidv4();
           }
 
-          const server = new N8NDocumentationMCPServer(instanceContext);
-          
+          const server = new N8NDocumentationMCPServer(instanceContext, undefined, {
+            generateWorkflowHandler: this.generateWorkflowHandler,
+          });
+
           transport = new StreamableHTTPServerTransport({
             sessionIdGenerator: () => sessionIdToUse,
             onsessioninitialized: (initializedSessionId: string) => {
@@ -772,7 +781,9 @@ export class SingleSessionHTTPServer {
     try {
       // Create new session
       logger.info('Creating new N8NDocumentationMCPServer for SSE...');
-      const server = new N8NDocumentationMCPServer();
+      const server = new N8NDocumentationMCPServer(undefined, undefined, {
+        generateWorkflowHandler: this.generateWorkflowHandler,
+      });
       
       // Generate cryptographically secure session ID
       const sessionId = uuidv4();
