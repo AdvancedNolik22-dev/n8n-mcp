@@ -30,10 +30,10 @@ export declare const workflowNodeSchema: z.ZodObject<{
     maxTries?: number | undefined;
     waitBetweenTries?: number | undefined;
     alwaysOutputData?: boolean | undefined;
-    executeOnce?: boolean | undefined;
     disabled?: boolean | undefined;
     notes?: string | undefined;
     notesInFlow?: boolean | undefined;
+    executeOnce?: boolean | undefined;
 }, {
     type: string;
     id: string;
@@ -47,10 +47,10 @@ export declare const workflowNodeSchema: z.ZodObject<{
     maxTries?: number | undefined;
     waitBetweenTries?: number | undefined;
     alwaysOutputData?: boolean | undefined;
-    executeOnce?: boolean | undefined;
     disabled?: boolean | undefined;
     notes?: string | undefined;
     notesInFlow?: boolean | undefined;
+    executeOnce?: boolean | undefined;
 }>;
 export declare const workflowConnectionSchema: z.ZodRecord<z.ZodString, z.ZodObject<{
     main: z.ZodOptional<z.ZodArray<z.ZodArray<z.ZodObject<{
@@ -413,6 +413,7 @@ export declare function cleanWorkflowForCreate(workflow: Partial<Workflow>): Par
 export declare function cleanWorkflowForUpdate(workflow: Workflow): Partial<Workflow>;
 export declare function validateWorkflowStructure(workflow: Partial<Workflow>): string[];
 export declare function hasWebhookTrigger(workflow: Workflow): boolean;
+export declare function validateConditionNodeStructure(node: WorkflowNode): string[];
 export declare function validateFilterBasedNodeMetadata(node: WorkflowNode): string[];
 export declare function validateOperatorStructure(operator: any, path: string): string[];
 export declare function getWebhookUrl(workflow: Workflow): string | null;

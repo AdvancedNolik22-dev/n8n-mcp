@@ -55,7 +55,7 @@ const NODE_TARGETING_OPERATIONS = new Set([
 ]);
 const workflowDiffSchema = zod_1.z.object({
     id: zod_1.z.string(),
-    operations: zod_1.z.array(zod_1.z.object({
+    operations: zod_1.z.preprocess(handlers_n8n_manager_1.tryParseJson, zod_1.z.array(zod_1.z.object({
         type: zod_1.z.string(),
         description: zod_1.z.string().optional(),
         node: zod_1.z.any().optional(),
@@ -93,7 +93,7 @@ const workflowDiffSchema = zod_1.z.object({
             }
         }
         return op;
-    })),
+    }))),
     validateOnly: zod_1.z.boolean().optional(),
     continueOnError: zod_1.z.boolean().optional(),
     createBackup: zod_1.z.boolean().optional(),

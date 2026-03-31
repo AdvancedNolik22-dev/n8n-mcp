@@ -134,6 +134,20 @@ class ExpressionValidator {
         combinedResult.valid = combinedResult.errors.length === 0;
         return combinedResult;
     }
+    static checkBareExpression(value, path, result) {
+        if (value.includes('{{') || value.startsWith('=')) {
+            return;
+        }
+        const trimmed = value.trim();
+        for (const { pattern, name } of this.BARE_EXPRESSION_PATTERNS) {
+            if (pattern.test(trimmed)) {
+                result.warnings.push((path ? `${path}: ` : '') +
+                    `Possible unwrapped expression: "${trimmed}" looks like an n8n ${name} reference. ` +
+                    `Use "={{ ${trimmed} }}" to evaluate it as an expression.`);
+                return;
+            }
+        }
+    }
     static validateParametersRecursive(obj, context, result, path = '', visited = new WeakSet()) {
         if (obj && typeof obj === 'object') {
             if (visited.has(obj)) {
@@ -142,6 +156,7 @@ class ExpressionValidator {
             visited.add(obj);
         }
         if (typeof obj === 'string') {
+            this.checkBareExpression(obj, path, result);
             if (obj.includes('{{')) {
                 const validation = this.validateExpression(obj, context);
                 validation.errors.forEach(error => {
@@ -168,6 +183,16 @@ class ExpressionValidator {
     }
 }
 exports.ExpressionValidator = ExpressionValidator;
+ExpressionValidator.BARE_EXPRESSION_PATTERNS = [
+    { pattern: /^\$json[.\[]/, name: '$json' },
+    { pattern: /^\$node\[/, name: '$node' },
+    { pattern: /^\$input\./, name: '$input' },
+    { pattern: /^\$execution\./, name: '$execution' },
+    { pattern: /^\$workflow\./, name: '$workflow' },
+    { pattern: /^\$prevNode\./, name: '$prevNode' },
+    { pattern: /^\$env\./, name: '$env' },
+    { pattern: /^\$(now|today|itemIndex|runIndex)$/, name: 'built-in variable' },
+];
 ExpressionValidator.EXPRESSION_PATTERN = /\{\{([\s\S]+?)\}\}/g;
 ExpressionValidator.VARIABLE_PATTERNS = {
     json: /\$json(\.[a-zA-Z_][\w]*|\["[^"]+"\]|\['[^']+'\]|\[\d+\])*/g,

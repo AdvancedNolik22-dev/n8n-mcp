@@ -23,7 +23,8 @@ import {
   n8nExecutionsDoc,
   n8nWorkflowVersionsDoc,
   n8nDeployTemplateDoc,
-  n8nManageDatatableDoc
+  n8nManageDatatableDoc,
+  n8nGenerateWorkflowDoc
 } from './workflow_management';
 
 // Combine all tool documentations into a single object
@@ -62,7 +63,8 @@ export const toolsDocumentation: Record<string, ToolDocumentation> = {
   n8n_executions: n8nExecutionsDoc,
   n8n_workflow_versions: n8nWorkflowVersionsDoc,
   n8n_deploy_template: n8nDeployTemplateDoc,
-  n8n_manage_datatable: n8nManageDatatableDoc
+  n8n_manage_datatable: n8nManageDatatableDoc,
+  n8n_generate_workflow: n8nGenerateWorkflowDoc
 };
 
 // Re-export types

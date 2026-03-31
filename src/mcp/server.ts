@@ -41,6 +41,7 @@ import {
   STANDARD_PROTOCOL_VERSION
 } from '../utils/protocol-version';
 import { InstanceContext } from '../types/instance-context';
+import { GenerateWorkflowHandler, GenerateWorkflowHelpers } from '../types/generate-workflow';
 import { telemetry } from '../telemetry';
 import { EarlyErrorLogger } from '../telemetry/early-error-logger';
 import { STARTUP_CHECKPOINTS } from '../telemetry/startup-checkpoints';
@@ -141,6 +142,10 @@ interface VersionComparisonInfo {
 
 type NodeInfoResponse = NodeMinimalInfo | NodeStandardInfo | NodeFullInfo | VersionHistoryInfo | VersionComparisonInfo;
 
+interface MCPServerOptions {
+  generateWorkflowHandler?: GenerateWorkflowHandler;
+}
+
 export class N8NDocumentationMCPServer {
   private server: Server;
   private db: DatabaseAdapter | null = null;
@@ -157,10 +162,12 @@ export class N8NDocumentationMCPServer {
   private useSharedDatabase: boolean = false;  // Track if using shared DB for cleanup
   private sharedDbState: SharedDatabaseState | null = null;  // Reference to shared DB state for release
   private isShutdown: boolean = false;  // Prevent double-shutdown
+  private generateWorkflowHandler?: GenerateWorkflowHandler;
 
-  constructor(instanceContext?: InstanceContext, earlyLogger?: EarlyErrorLogger) {
+  constructor(instanceContext?: InstanceContext, earlyLogger?: EarlyErrorLogger, options?: MCPServerOptions) {
     this.instanceContext = instanceContext;
     this.earlyLogger = earlyLogger || null;
+    this.generateWorkflowHandler = options?.generateWorkflowHandler;
     // Check for test environment first
     const envDbPath = process.env.NODE_DB_PATH;
     let dbPath: string | null = null;
@@ -1529,6 +1536,57 @@ export class N8NDocumentationMCPServer {
           default:
             throw new Error(`Unknown action: ${dtAction}. Valid actions: createTable, listTables, getTable, updateTable, deleteTable, getRows, insertRows, updateRows, upsertRows, deleteRows`);
         }
+      }
+
+      case 'n8n_generate_workflow': {
+        this.validateToolParams(name, args, ['description']);
+
+        if (this.generateWorkflowHandler && this.instanceContext) {
+          await this.ensureInitialized();
+          if (!this.repository) {
+            throw new Error('Repository not initialized');
+          }
+
+          const repo = this.repository;
+          const ctx = this.instanceContext;
+          const helpers: GenerateWorkflowHelpers = {
+            createWorkflow: (wfArgs) =>
+              n8nHandlers.handleCreateWorkflow(wfArgs, ctx),
+            validateWorkflow: (id) =>
+              n8nHandlers.handleValidateWorkflow({ id }, repo, ctx),
+            autofixWorkflow: (id) =>
+              n8nHandlers.handleAutofixWorkflow({ id }, repo, ctx),
+            getWorkflow: (id) =>
+              n8nHandlers.handleGetWorkflow({ id }, ctx),
+          };
+
+          try {
+            const result = await this.generateWorkflowHandler(
+              { description: args.description, skip_cache: args.skip_cache },
+              ctx,
+              helpers
+            );
+            return result ?? { success: false, error: 'Handler returned no result' };
+          } catch (err: any) {
+            const message = err instanceof Error ? err.message : String(err);
+            return { success: false, error: message };
+          }
+        }
+
+        // No handler and/or no instanceContext — self-hosted deployment
+        return {
+          hosted_only: true,
+          message: 'The n8n_generate_workflow tool is available exclusively on the hosted version of n8n-mcp. ' +
+            'It uses AI to generate complete, validated n8n workflows from natural language descriptions.\n\n' +
+            'To access this feature:\n' +
+            '1. Register for free at https://dashboard.n8n-mcp.com\n' +
+            '2. Connect your n8n instance\n' +
+            '3. Use your hosted API key in your MCP client\n\n' +
+            'The hosted service includes:\n' +
+            '- 73,000+ pre-built workflow templates with instant deployment\n' +
+            '- AI-powered fresh generation for custom workflows\n' +
+            '- Automatic validation and error correction'
+        };
       }
 
       default:

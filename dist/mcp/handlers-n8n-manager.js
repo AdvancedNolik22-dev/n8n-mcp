@@ -56,6 +56,7 @@ exports.handleDiagnostic = handleDiagnostic;
 exports.handleWorkflowVersions = handleWorkflowVersions;
 exports.handleDeployTemplate = handleDeployTemplate;
 exports.handleTriggerWebhookWorkflow = handleTriggerWebhookWorkflow;
+exports.tryParseJson = tryParseJson;
 exports.handleCreateTable = handleCreateTable;
 exports.handleListTables = handleListTables;
 exports.handleGetTable = handleGetTable;
