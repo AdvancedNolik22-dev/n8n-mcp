@@ -184,4 +184,66 @@ export class SSRFProtection {
       return { valid: false, reason: 'Invalid URL format' };
     }
   }
+
+  /**
+   * Synchronous URL validation with no DNS resolution.
+   *
+   * Suitable for sync callers that cannot await DNS lookups. Pair with
+   * {@link validateWebhookUrl} at async boundaries for full protection.
+   *
+   * @param urlString - URL to validate (raw input, not parsed)
+   * @returns Validation result with optional reason on failure
+   *
+   * @security See GHSA-4ggg-h7ph-26qr.
+   */
+  static validateUrlSync(urlString: string): { valid: boolean; reason?: string } {
+    if (typeof urlString !== 'string' || urlString.includes('#')) {
+      return { valid: false, reason: 'URL fragments are not allowed' };
+    }
+
+    let url: URL;
+    try {
+      url = new URL(urlString);
+    } catch {
+      return { valid: false, reason: 'Invalid URL format' };
+    }
+
+    if (!['http:', 'https:'].includes(url.protocol)) {
+      return { valid: false, reason: 'Invalid protocol. Only HTTP/HTTPS allowed.' };
+    }
+
+    if (url.username !== '' || url.password !== '') {
+      return { valid: false, reason: 'Userinfo in URL is not allowed' };
+    }
+
+    let hostname = url.hostname.toLowerCase();
+    if (hostname.startsWith('[') && hostname.endsWith(']')) {
+      hostname = hostname.slice(1, -1);
+    }
+
+    if (CLOUD_METADATA.has(hostname)) {
+      return { valid: false, reason: 'Cloud metadata endpoint blocked' };
+    }
+
+    const mode: SecurityMode = (process.env.WEBHOOK_SECURITY_MODE || 'strict') as SecurityMode;
+
+    if (mode === 'permissive') {
+      return { valid: true };
+    }
+
+    if (mode === 'strict' && LOCALHOST_PATTERNS.has(hostname)) {
+      return { valid: false, reason: 'Localhost access is blocked in strict mode' };
+    }
+
+    if (PRIVATE_IP_RANGES.some(regex => regex.test(hostname))) {
+      return {
+        valid: false,
+        reason: mode === 'strict'
+          ? 'Private IP addresses not allowed'
+          : 'Private IP addresses not allowed (use WEBHOOK_SECURITY_MODE=permissive if needed)'
+      };
+    }
+
+    return { valid: true };
+  }
 }

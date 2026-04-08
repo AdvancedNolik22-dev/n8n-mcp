@@ -1724,4 +1724,68 @@ describe('N8nApiClient', () => {
       expect(result.message).toBe('Bad request');
     });
   });
+
+  // GHSA-4ggg-h7ph-26qr — defense-in-depth URL normalization in the constructor.
+  describe('constructor URL normalization', () => {
+    const getLastAxiosBaseURL = (): string => {
+      const calls = vi.mocked(axios.create).mock.calls;
+      return (calls[calls.length - 1][0] as any).baseURL;
+    };
+
+    it('should strip a trailing fragment', () => {
+      const c = new N8nApiClient({
+        baseUrl: 'http://169.254.169.254#',
+        apiKey: 'k'
+      });
+      expect((c as any).baseUrl).toBe('http://169.254.169.254');
+      const baseURL = getLastAxiosBaseURL();
+      expect(baseURL).not.toContain('#');
+      expect(baseURL).toBe('http://169.254.169.254/api/v1');
+    });
+
+    it('should strip a fragment with content after the hash', () => {
+      const c = new N8nApiClient({
+        baseUrl: 'https://n8n.example.com#trailing',
+        apiKey: 'k'
+      });
+      expect((c as any).baseUrl).not.toContain('#');
+      expect(getLastAxiosBaseURL()).not.toContain('#');
+    });
+
+    it('should strip userinfo from baseUrl', () => {
+      const c = new N8nApiClient({
+        baseUrl: 'https://user:pw@n8n.example.com',
+        apiKey: 'k'
+      });
+      expect((c as any).baseUrl).not.toContain('@');
+      expect((c as any).baseUrl).not.toContain('user');
+      expect((c as any).baseUrl).not.toContain('pw');
+      expect(getLastAxiosBaseURL()).not.toContain('@');
+    });
+
+    it('should collapse trailing slash', () => {
+      const c = new N8nApiClient({
+        baseUrl: 'https://n8n.example.com/',
+        apiKey: 'k'
+      });
+      expect((c as any).baseUrl).toBe('https://n8n.example.com');
+      expect(getLastAxiosBaseURL()).toBe('https://n8n.example.com/api/v1');
+    });
+
+    it('should be idempotent when baseUrl already ends with /api/v1', () => {
+      const c = new N8nApiClient({
+        baseUrl: 'https://n8n.example.com/api/v1',
+        apiKey: 'k'
+      });
+      expect(getLastAxiosBaseURL()).toBe('https://n8n.example.com/api/v1');
+      // Must not double-suffix to /api/v1/api/v1
+      expect(getLastAxiosBaseURL()).not.toContain('/api/v1/api/v1');
+    });
+
+    it('should fall through to raw input for unparseable URLs without throwing', () => {
+      expect(() => {
+        new N8nApiClient({ baseUrl: 'not-a-url', apiKey: 'k' });
+      }).not.toThrow();
+    });
+  });
 });

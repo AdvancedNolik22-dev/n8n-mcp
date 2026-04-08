@@ -58,12 +58,28 @@ export class N8nApiClient {
     const { baseUrl, apiKey, timeout = 30000, maxRetries = 3 } = config;
 
     this.maxRetries = maxRetries;
-    this.baseUrl = baseUrl;
+
+    // SECURITY (GHSA-4ggg-h7ph-26qr): defense-in-depth baseUrl normalization.
+    let normalizedBase: string;
+    try {
+      const parsed = new URL(baseUrl);
+      parsed.hash = '';
+      parsed.username = '';
+      parsed.password = '';
+      normalizedBase = parsed.toString().replace(/\/$/, '');
+    } catch {
+      // Unparseable input falls through to raw; downstream axios call will
+      // fail cleanly. Preserves backward compat for tests that pass
+      // placeholder strings.
+      normalizedBase = baseUrl;
+    }
+
+    this.baseUrl = normalizedBase;
 
     // Ensure baseUrl ends with /api/v1
-    const apiUrl = baseUrl.endsWith('/api/v1')
-      ? baseUrl
-      : `${baseUrl.replace(/\/$/, '')}/api/v1`;
+    const apiUrl = normalizedBase.endsWith('/api/v1')
+      ? normalizedBase
+      : `${normalizedBase}/api/v1`;
 
     this.client = axios.create({
       baseURL: apiUrl,

@@ -1,5 +1,38 @@
 #!/usr/bin/env node
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -303,6 +336,27 @@ class SingleSessionHTTPServer {
         const startTime = Date.now();
         return this.consoleManager.wrapOperation(async () => {
             try {
+                if (instanceContext?.n8nApiUrl) {
+                    const { SSRFProtection } = await Promise.resolve().then(() => __importStar(require('./utils/ssrf-protection')));
+                    const ssrfResult = await SSRFProtection.validateWebhookUrl(instanceContext.n8nApiUrl);
+                    if (!ssrfResult.valid) {
+                        logger_1.logger.warn('SSRF protection blocked instance context URL', {
+                            reason: ssrfResult.reason,
+                            instanceId: instanceContext.instanceId
+                        });
+                        if (!res.headersSent) {
+                            res.status(400).json({
+                                jsonrpc: '2.0',
+                                error: {
+                                    code: -32602,
+                                    message: 'Invalid instance configuration'
+                                },
+                                id: req.body?.id ?? null
+                            });
+                        }
+                        return;
+                    }
+                }
                 const sessionId = req.headers['mcp-session-id'];
                 const isInitialize = req.body ? (0, types_js_1.isInitializeRequest)(req.body) : false;
                 logger_1.logger.info('handleRequest: Processing MCP request - SDK PATTERN', {
@@ -954,35 +1008,44 @@ class SingleSessionHTTPServer {
             logger_1.logger.info('Authentication successful - proceeding to handleRequest', {
                 activeSessions: this.getActiveSessionCount()
             });
-            const instanceContext = (() => {
+            let instanceContext;
+            {
                 const headers = extractMultiTenantHeaders(req);
                 const hasUrl = headers['x-n8n-url'];
                 const hasKey = headers['x-n8n-key'];
-                if (!hasUrl && !hasKey)
-                    return undefined;
-                const context = {
-                    n8nApiUrl: hasUrl || undefined,
-                    n8nApiKey: hasKey || undefined,
-                    instanceId: headers['x-instance-id'] || undefined,
-                    sessionId: headers['x-session-id'] || undefined
-                };
-                if (req.headers['user-agent'] || req.ip) {
-                    context.metadata = {
-                        userAgent: req.headers['user-agent'],
-                        ip: req.ip
+                if (hasUrl || hasKey) {
+                    const candidate = {
+                        n8nApiUrl: hasUrl || undefined,
+                        n8nApiKey: hasKey || undefined,
+                        instanceId: headers['x-instance-id'] || undefined,
+                        sessionId: headers['x-session-id'] || undefined
                     };
+                    if (req.headers['user-agent'] || req.ip) {
+                        candidate.metadata = {
+                            userAgent: req.headers['user-agent'],
+                            ip: req.ip
+                        };
+                    }
+                    const validation = (0, instance_context_1.validateInstanceContext)(candidate);
+                    if (!validation.valid) {
+                        logger_1.logger.warn('Invalid instance context from headers', {
+                            errors: validation.errors,
+                            hasUrl: !!hasUrl,
+                            hasKey: !!hasKey
+                        });
+                        res.status(400).json({
+                            jsonrpc: '2.0',
+                            error: {
+                                code: -32602,
+                                message: 'Invalid instance configuration'
+                            },
+                            id: req.body?.id ?? null
+                        });
+                        return;
+                    }
+                    instanceContext = candidate;
                 }
-                const validation = (0, instance_context_1.validateInstanceContext)(context);
-                if (!validation.valid) {
-                    logger_1.logger.warn('Invalid instance context from headers', {
-                        errors: validation.errors,
-                        hasUrl: !!hasUrl,
-                        hasKey: !!hasKey
-                    });
-                    return undefined;
-                }
-                return context;
-            })();
+            }
             if (instanceContext) {
                 logger_1.logger.debug('Instance context extracted from headers', {
                     hasUrl: !!instanceContext.n8nApiUrl,

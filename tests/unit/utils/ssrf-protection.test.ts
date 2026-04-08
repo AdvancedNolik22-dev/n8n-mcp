@@ -394,4 +394,173 @@ describe('SSRFProtection', () => {
       expect(result.valid).toBe(true);
     });
   });
+
+  /**
+   * Sync URL validation — verifies the sync guard that runs inside
+   * validateInstanceContext and must not make any DNS calls.
+   */
+  describe('validateUrlSync', () => {
+    beforeEach(() => {
+      delete process.env.WEBHOOK_SECURITY_MODE;
+    });
+
+    it('should reject URL with trailing fragment', () => {
+      const result = SSRFProtection.validateUrlSync('http://169.254.169.254#');
+      expect(result.valid).toBe(false);
+      expect(result.reason).toBe('URL fragments are not allowed');
+    });
+
+    it('should reject HTTPS variant with trailing fragment', () => {
+      const result = SSRFProtection.validateUrlSync('https://169.254.169.254#');
+      expect(result.valid).toBe(false);
+      expect(result.reason).toBe('URL fragments are not allowed');
+    });
+
+    it('should reject fragment with content after the hash', () => {
+      const result = SSRFProtection.validateUrlSync('http://n8n.example.com#trailing');
+      expect(result.valid).toBe(false);
+      expect(result.reason).toBe('URL fragments are not allowed');
+    });
+
+    it('should reject URLs with userinfo', () => {
+      const result = SSRFProtection.validateUrlSync('http://user:pass@n8n.example.com');
+      expect(result.valid).toBe(false);
+      expect(result.reason).toBe('Userinfo in URL is not allowed');
+    });
+
+    it('should reject URLs with username only', () => {
+      const result = SSRFProtection.validateUrlSync('http://user@n8n.example.com');
+      expect(result.valid).toBe(false);
+      expect(result.reason).toBe('Userinfo in URL is not allowed');
+    });
+
+    it('should reject AWS/Azure metadata endpoint in all modes', () => {
+      for (const mode of ['strict', 'moderate', 'permissive']) {
+        process.env.WEBHOOK_SECURITY_MODE = mode;
+        const result = SSRFProtection.validateUrlSync('http://169.254.169.254');
+        expect(result.valid, `mode=${mode}`).toBe(false);
+        expect(result.reason).toBe('Cloud metadata endpoint blocked');
+      }
+    });
+
+    it('should reject all cloud metadata endpoints in all modes', () => {
+      const metadataUrls = [
+        'http://169.254.170.2',         // AWS ECS
+        'http://metadata.google.internal', // GCP
+        'http://metadata',                 // GCP short
+        'http://100.100.100.200',          // Alibaba
+        'http://192.0.0.192',              // Oracle
+      ];
+      for (const mode of ['strict', 'moderate', 'permissive']) {
+        process.env.WEBHOOK_SECURITY_MODE = mode;
+        for (const url of metadataUrls) {
+          const result = SSRFProtection.validateUrlSync(url);
+          expect(result.valid, `url=${url} mode=${mode}`).toBe(false);
+          expect(result.reason).toBe('Cloud metadata endpoint blocked');
+        }
+      }
+    });
+
+    it('should reject private IPv4 literals in strict mode', () => {
+      delete process.env.WEBHOOK_SECURITY_MODE; // strict default
+      const privateUrls = [
+        'http://10.0.0.1',
+        'http://192.168.1.1',
+        'http://172.16.0.1',
+        'http://172.31.255.255',
+      ];
+      for (const url of privateUrls) {
+        const result = SSRFProtection.validateUrlSync(url);
+        expect(result.valid, `url=${url}`).toBe(false);
+        expect(result.reason).toContain('Private IP');
+      }
+    });
+
+    it('should reject private IPv4 literals in moderate mode', () => {
+      process.env.WEBHOOK_SECURITY_MODE = 'moderate';
+      const result = SSRFProtection.validateUrlSync('http://10.0.0.1');
+      expect(result.valid).toBe(false);
+      expect(result.reason).toContain('Private IP');
+    });
+
+    it('should allow private IPv4 literals in permissive mode', () => {
+      process.env.WEBHOOK_SECURITY_MODE = 'permissive';
+      const result = SSRFProtection.validateUrlSync('http://10.0.0.1');
+      expect(result.valid).toBe(true);
+    });
+
+    it('should reject localhost literals in strict mode', () => {
+      delete process.env.WEBHOOK_SECURITY_MODE;
+      const localhostUrls = [
+        'http://localhost',
+        'http://127.0.0.1',
+        'http://0.0.0.0',
+      ];
+      for (const url of localhostUrls) {
+        const result = SSRFProtection.validateUrlSync(url);
+        expect(result.valid, `url=${url}`).toBe(false);
+      }
+    });
+
+    it('should allow localhost literals in moderate and permissive modes', () => {
+      for (const mode of ['moderate', 'permissive']) {
+        process.env.WEBHOOK_SECURITY_MODE = mode;
+        const result = SSRFProtection.validateUrlSync('http://localhost:5678');
+        expect(result.valid, `mode=${mode}`).toBe(true);
+      }
+    });
+
+    it('should reject non-http(s) protocols', () => {
+      const badProtocols = [
+        'file:///etc/passwd',
+        'gopher://example.com',
+        'ftp://example.com',
+        'data:text/plain;base64,aGVsbG8=',
+      ];
+      for (const url of badProtocols) {
+        const result = SSRFProtection.validateUrlSync(url);
+        expect(result.valid, `url=${url}`).toBe(false);
+        expect(result.reason).toContain('protocol');
+      }
+    });
+
+    it('should reject malformed URLs', () => {
+      const malformed = ['not-a-url', 'http://', '://missing-protocol.com', ''];
+      for (const url of malformed) {
+        const result = SSRFProtection.validateUrlSync(url);
+        expect(result.valid, `url=${url}`).toBe(false);
+      }
+    });
+
+    it('should accept valid public URLs', () => {
+      const validUrls = [
+        'https://n8n.example.com',
+        'https://n8n.example.com/api/v1',
+        'https://n8n.example.com:8443',
+        'http://n8n.example.com/path?query=1',
+      ];
+      for (const url of validUrls) {
+        const result = SSRFProtection.validateUrlSync(url);
+        expect(result.valid, `url=${url}`).toBe(true);
+        expect(result.reason).toBeUndefined();
+      }
+    });
+
+    it('should not perform DNS resolution', () => {
+      // Spin through a representative set; dns.lookup must never be called.
+      SSRFProtection.validateUrlSync('https://n8n.example.com');
+      SSRFProtection.validateUrlSync('http://169.254.169.254');
+      SSRFProtection.validateUrlSync('http://10.0.0.1');
+      SSRFProtection.validateUrlSync('http://localhost');
+      SSRFProtection.validateUrlSync('http://evil.example.com#');
+      expect(vi.mocked(dns.lookup)).toHaveBeenCalledTimes(0);
+    });
+
+    it('should reject non-string input safely', () => {
+      // @ts-expect-error testing runtime guard
+      const result = SSRFProtection.validateUrlSync(null);
+      expect(result.valid).toBe(false);
+      expect(result.reason).toBe('URL fragments are not allowed');
+    });
+  });
 });

@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.47.4] - 2026-04-08
+
+### Security
+
+- Fix authenticated SSRF in multi-tenant header handling (GHSA-4ggg-h7ph-26qr). Reported by Eresus Security Research Team.
+
+Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+
 ## [2.47.3] - 2026-04-08
 
 ### Security

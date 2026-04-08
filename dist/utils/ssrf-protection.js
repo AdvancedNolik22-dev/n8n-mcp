@@ -113,6 +113,47 @@ class SSRFProtection {
             return { valid: false, reason: 'Invalid URL format' };
         }
     }
+    static validateUrlSync(urlString) {
+        if (typeof urlString !== 'string' || urlString.includes('#')) {
+            return { valid: false, reason: 'URL fragments are not allowed' };
+        }
+        let url;
+        try {
+            url = new url_1.URL(urlString);
+        }
+        catch {
+            return { valid: false, reason: 'Invalid URL format' };
+        }
+        if (!['http:', 'https:'].includes(url.protocol)) {
+            return { valid: false, reason: 'Invalid protocol. Only HTTP/HTTPS allowed.' };
+        }
+        if (url.username !== '' || url.password !== '') {
+            return { valid: false, reason: 'Userinfo in URL is not allowed' };
+        }
+        let hostname = url.hostname.toLowerCase();
+        if (hostname.startsWith('[') && hostname.endsWith(']')) {
+            hostname = hostname.slice(1, -1);
+        }
+        if (CLOUD_METADATA.has(hostname)) {
+            return { valid: false, reason: 'Cloud metadata endpoint blocked' };
+        }
+        const mode = (process.env.WEBHOOK_SECURITY_MODE || 'strict');
+        if (mode === 'permissive') {
+            return { valid: true };
+        }
+        if (mode === 'strict' && LOCALHOST_PATTERNS.has(hostname)) {
+            return { valid: false, reason: 'Localhost access is blocked in strict mode' };
+        }
+        if (PRIVATE_IP_RANGES.some(regex => regex.test(hostname))) {
+            return {
+                valid: false,
+                reason: mode === 'strict'
+                    ? 'Private IP addresses not allowed'
+                    : 'Private IP addresses not allowed (use WEBHOOK_SECURITY_MODE=permissive if needed)'
+            };
+        }
+        return { valid: true };
+    }
 }
 exports.SSRFProtection = SSRFProtection;
 //# sourceMappingURL=ssrf-protection.js.map

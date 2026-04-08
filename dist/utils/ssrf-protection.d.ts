@@ -3,5 +3,9 @@ export declare class SSRFProtection {
         valid: boolean;
         reason?: string;
     }>;
+    static validateUrlSync(urlString: string): {
+        valid: boolean;
+        reason?: string;
+    };
 }
 //# sourceMappingURL=ssrf-protection.d.ts.map

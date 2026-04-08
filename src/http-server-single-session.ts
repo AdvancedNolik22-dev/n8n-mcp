@@ -531,9 +531,32 @@ export class SingleSessionHTTPServer {
     // Wrap all operations to prevent console interference
     return this.consoleManager.wrapOperation(async () => {
       try {
+        // SECURITY (GHSA-4ggg-h7ph-26qr): validate instance-supplied URL.
+        if (instanceContext?.n8nApiUrl) {
+          const { SSRFProtection } = await import('./utils/ssrf-protection');
+          const ssrfResult = await SSRFProtection.validateWebhookUrl(instanceContext.n8nApiUrl);
+          if (!ssrfResult.valid) {
+            logger.warn('SSRF protection blocked instance context URL', {
+              reason: ssrfResult.reason,
+              instanceId: instanceContext.instanceId
+            });
+            if (!res.headersSent) {
+              res.status(400).json({
+                jsonrpc: '2.0',
+                error: {
+                  code: -32602,
+                  message: 'Invalid instance configuration'
+                },
+                id: req.body?.id ?? null
+              });
+            }
+            return;
+          }
+        }
+
         const sessionId = req.headers['mcp-session-id'] as string | undefined;
         const isInitialize = req.body ? isInitializeRequest(req.body) : false;
-        
+
         // Log comprehensive incoming request details for debugging
         logger.info('handleRequest: Processing MCP request - SDK PATTERN', {
           requestId: req.get('x-request-id') || 'unknown',
@@ -1354,43 +1377,52 @@ export class SingleSessionHTTPServer {
       });
 
       // Extract instance context from headers if present (for multi-tenant support)
-      const instanceContext: InstanceContext | undefined = (() => {
+      let instanceContext: InstanceContext | undefined;
+      {
         // Use type-safe header extraction
         const headers = extractMultiTenantHeaders(req);
         const hasUrl = headers['x-n8n-url'];
         const hasKey = headers['x-n8n-key'];
 
-        if (!hasUrl && !hasKey) return undefined;
-
-        // Create context with proper type handling
-        const context: InstanceContext = {
-          n8nApiUrl: hasUrl || undefined,
-          n8nApiKey: hasKey || undefined,
-          instanceId: headers['x-instance-id'] || undefined,
-          sessionId: headers['x-session-id'] || undefined
-        };
-
-        // Add metadata if available
-        if (req.headers['user-agent'] || req.ip) {
-          context.metadata = {
-            userAgent: req.headers['user-agent'] as string | undefined,
-            ip: req.ip
+        if (hasUrl || hasKey) {
+          // Create context with proper type handling
+          const candidate: InstanceContext = {
+            n8nApiUrl: hasUrl || undefined,
+            n8nApiKey: hasKey || undefined,
+            instanceId: headers['x-instance-id'] || undefined,
+            sessionId: headers['x-session-id'] || undefined
           };
-        }
 
-        // Validate the context
-        const validation = validateInstanceContext(context);
-        if (!validation.valid) {
-          logger.warn('Invalid instance context from headers', {
-            errors: validation.errors,
-            hasUrl: !!hasUrl,
-            hasKey: !!hasKey
-          });
-          return undefined;
-        }
+          // Add metadata if available
+          if (req.headers['user-agent'] || req.ip) {
+            candidate.metadata = {
+              userAgent: req.headers['user-agent'] as string | undefined,
+              ip: req.ip
+            };
+          }
 
-        return context;
-      })();
+          // SECURITY (GHSA-4ggg-h7ph-26qr): fail closed on invalid context.
+          const validation = validateInstanceContext(candidate);
+          if (!validation.valid) {
+            logger.warn('Invalid instance context from headers', {
+              errors: validation.errors,
+              hasUrl: !!hasUrl,
+              hasKey: !!hasKey
+            });
+            res.status(400).json({
+              jsonrpc: '2.0',
+              error: {
+                code: -32602,
+                message: 'Invalid instance configuration'
+              },
+              id: req.body?.id ?? null
+            });
+            return;
+          }
+
+          instanceContext = candidate;
+        }
+      }
 
       // Log context extraction for debugging (only if context exists)
       if (instanceContext) {
@@ -1660,6 +1692,10 @@ export class SingleSessionHTTPServer {
    *
    * Restored sessions are "dormant" until a client makes a request, at which
    * point the transport and server will be initialized normally.
+   *
+   * @security Restored contexts are validated synchronously via
+   * validateInstanceContext. Embedders are responsible for not persisting
+   * hostnames they do not trust. See GHSA-4ggg-h7ph-26qr.
    *
    * @param sessions - Array of session state objects from exportSessionState()
    * @returns Number of sessions successfully restored
