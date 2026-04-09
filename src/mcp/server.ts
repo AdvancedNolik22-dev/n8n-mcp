@@ -881,33 +881,9 @@ export class N8NDocumentationMCPServer {
               message: `Tool '${name}' is not available in this deployment. It has been disabled via DISABLED_TOOLS environment variable.`,
               tool: name
             }, null, 2)
-          }]
+          }],
+          isError: true
         };
-      }
-
-      // Check if the requested operation is disabled via DISABLED_TOOL_OPERATIONS
-      const disabledToolOps = this.getDisabledToolOperations();
-      const disabledOpsForTool = disabledToolOps.get(name);
-      if (disabledOpsForTool && disabledOpsForTool.size > 0) {
-        const paramName = TOOL_OPERATION_PARAM[name];
-        if (paramName) {
-          const requestedOp = args?.[paramName];
-          if (requestedOp && disabledOpsForTool.has(String(requestedOp).toLowerCase())) {
-            logger.warn(`Attempted to call disabled operation: ${name}.${requestedOp}`);
-            return {
-              content: [{
-                type: 'text',
-                text: JSON.stringify({
-                  error: 'OPERATION_DISABLED',
-                  message: `Operation '${requestedOp}' on tool '${name}' is disabled by server policy.`,
-                  tool: name,
-                  operation: requestedOp,
-                  disabledOperations: [...disabledOpsForTool]
-                }, null, 2)
-              }]
-            };
-          }
-        }
       }
 
       // Safeguard: if the entire args object arrives as a JSON string, parse it.
@@ -971,6 +947,34 @@ export class N8NDocumentationMCPServer {
       // Removing them makes Zod treat them as missing (which .optional() allows).
       if (processedArgs) {
         processedArgs = JSON.parse(JSON.stringify(processedArgs));
+      }
+
+      // Check if the requested operation is disabled via DISABLED_TOOL_OPERATIONS.
+      // Runs after argument normalization so clients that send args as a JSON string
+      // are handled correctly regardless of serialization quirks.
+      const disabledToolOps = this.getDisabledToolOperations();
+      const disabledOpsForTool = disabledToolOps.get(name);
+      if (disabledOpsForTool && disabledOpsForTool.size > 0) {
+        const paramName = TOOL_OPERATION_PARAM[name];
+        if (paramName) {
+          const requestedOp = processedArgs?.[paramName];
+          if (requestedOp && disabledOpsForTool.has(String(requestedOp).toLowerCase())) {
+            logger.warn(`Attempted to call disabled operation: ${name}.${requestedOp}`);
+            return {
+              content: [{
+                type: 'text',
+                text: JSON.stringify({
+                  error: 'OPERATION_DISABLED',
+                  message: `Operation '${requestedOp}' on tool '${name}' is disabled by server policy.`,
+                  tool: name,
+                  operation: requestedOp,
+                  disabledOperations: [...disabledOpsForTool]
+                }, null, 2)
+              }],
+              isError: true
+            };
+          }
+        }
       }
 
       const isAdditionalTool = this.additionalToolsByName.has(name);

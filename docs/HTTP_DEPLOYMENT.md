@@ -895,7 +895,7 @@ Two tools bundle read and write operations under a single name. Use `DISABLED_TO
 DISABLED_TOOL_OPERATIONS=n8n_workflow_versions:delete,rollback,prune,truncate;n8n_executions:delete
 ```
 
-The tool schema presented to the LLM is updated to exclude disabled operations, so the model never attempts them.
+The operation parameter enum in the tool schema is updated to exclude disabled values, reducing the likelihood the model attempts them. Any attempt that does reach the server is rejected at dispatch before the handler runs.
 
 **Layer 2 — n8n API key RBAC:**
 
