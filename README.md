@@ -389,6 +389,22 @@ These tools require `N8N_API_URL` and `N8N_API_KEY` in your configuration.
 #### System Tools
 - **`n8n_health_check`** - Check n8n API connectivity and features
 
+### Read-Only Deployment
+
+For governance-sensitive environments, use both env vars together. Fully disable purely write/destructive tools:
+
+```bash
+DISABLED_TOOLS=n8n_create_workflow,n8n_update_full_workflow,n8n_update_partial_workflow,n8n_delete_workflow,n8n_autofix_workflow,n8n_deploy_template,n8n_test_workflow,n8n_generate_workflow,n8n_manage_credentials,n8n_manage_datatable
+```
+
+For tools that bundle read and write operations under one name, block only the destructive operations while keeping `list` and `get`:
+
+```bash
+DISABLED_TOOL_OPERATIONS=n8n_workflow_versions:delete,rollback,prune;n8n_executions:delete
+```
+
+Combine with a read-only n8n API key (Settings → API in your n8n instance) for defence in depth. See [Read-Only Deployment Recipe](./docs/HTTP_DEPLOYMENT.md#read-only-deployment-recipe) for the full setup guide.
+
 ## Documentation
 
 - [Self-Hosting Guide](./docs/SELF_HOSTING.md) - npx, Docker, Railway, and local installation
