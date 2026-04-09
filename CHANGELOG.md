@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.47.6] - 2026-04-09
+
+### Security
+
+- Fix missing authentication on HTTP endpoints and information disclosure via `/health` (GHSA-75hx-xj24-mqrw). Reported by @yotampe-pluto.
+
+Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+
 ## [2.47.5] - 2026-04-08
 
 ### Fixed
