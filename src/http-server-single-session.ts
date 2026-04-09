@@ -948,7 +948,43 @@ export class SingleSessionHTTPServer {
       });
       next();
     });
-    
+
+    // SECURITY: Rate limiting for authentication endpoints
+    // Prevents brute force attacks and DoS
+    // See: https://github.com/czlonkowski/n8n-mcp/issues/265 (HIGH-02)
+    // Declared before route registrations so all authenticated endpoints
+    // (including GET /mcp and DELETE /mcp) can reference it.
+    const authLimiter = rateLimit({
+      windowMs: parseInt(process.env.AUTH_RATE_LIMIT_WINDOW || '900000'), // 15 minutes
+      max: parseInt(process.env.AUTH_RATE_LIMIT_MAX || '20'), // 20 authentication attempts per IP
+      message: {
+        jsonrpc: '2.0',
+        error: {
+          code: -32000,
+          message: 'Too many authentication attempts. Please try again later.'
+        },
+        id: null
+      },
+      standardHeaders: true, // Return rate limit info in `RateLimit-*` headers
+      legacyHeaders: false, // Disable `X-RateLimit-*` headers
+      skipSuccessfulRequests: true, // Only count failed auth attempts (#617)
+      handler: (req, res) => {
+        logger.warn('Rate limit exceeded', {
+          ip: req.ip,
+          userAgent: req.get('user-agent'),
+          event: 'rate_limit'
+        });
+        res.status(429).json({
+          jsonrpc: '2.0',
+          error: {
+            code: -32000,
+            message: 'Too many authentication attempts'
+          },
+          id: null
+        });
+      }
+    });
+
     // Root endpoint with API information
     app.get('/', (req, res) => {
       const port = parseInt(process.env.PORT || '3000');
@@ -975,96 +1011,33 @@ export class SingleSessionHTTPServer {
         authentication: {
           type: 'Bearer Token',
           header: 'Authorization: Bearer <token>',
-          required_for: ['POST /mcp', 'GET /sse', 'POST /messages']
+          required_for: ['POST /mcp', 'GET /mcp', 'DELETE /mcp', 'GET /sse', 'POST /messages']
         },
         documentation: 'https://github.com/czlonkowski/n8n-mcp'
       });
     });
 
     // Health check endpoint (no body parsing needed for GET)
+    // Intentionally minimal: used by Docker HEALTHCHECK and CI without credentials.
+    // Must not disclose session IDs, token metadata, memory stats, environment
+    // flags, or any other operationally sensitive detail — those belong behind
+    // auth. status/version/uptime/timestamp is the standard liveness envelope.
     app.get('/health', (req, res) => {
-      const activeTransports = Object.keys(this.transports);
-      const activeServers = Object.keys(this.servers);
-      const sessionMetrics = this.getSessionMetrics();
-      const isProduction = process.env.NODE_ENV === 'production';
-      const isDefaultToken = this.authToken === 'REPLACE_THIS_AUTH_TOKEN_32_CHARS_MIN_abcdefgh';
-      
-      res.json({ 
-        status: 'ok', 
-        mode: 'sdk-pattern-transports',
+      res.json({
+        status: 'ok',
         version: PROJECT_VERSION,
-        environment: process.env.NODE_ENV || 'development',
         uptime: Math.floor(process.uptime()),
-        sessions: {
-          active: sessionMetrics.activeSessions,
-          total: sessionMetrics.totalSessions,
-          expired: sessionMetrics.expiredSessions,
-          max: MAX_SESSIONS,
-          usage: `${sessionMetrics.activeSessions}/${MAX_SESSIONS}`,
-          sessionIds: activeTransports
-        },
-        security: {
-          production: isProduction,
-          defaultToken: isDefaultToken,
-          tokenLength: this.authToken?.length || 0
-        },
-        activeTransports: activeTransports.length, // Legacy field
-        activeServers: activeServers.length, // Legacy field
-        legacySessionActive: false, // Deprecated: SSE now uses shared transports map
-        memory: {
-          used: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
-          total: Math.round(process.memoryUsage().heapTotal / 1024 / 1024),
-          unit: 'MB'
-        },
         timestamp: new Date().toISOString()
       });
     });
     
-    // Test endpoint for manual testing without auth
-    app.post('/mcp/test', jsonParser, async (req: express.Request, res: express.Response): Promise<void> => {
-      logger.info('TEST ENDPOINT: Manual test request received', {
-        method: req.method,
-        headers: req.headers,
-        body: req.body,
-        bodyType: typeof req.body,
-        bodyContent: req.body ? JSON.stringify(req.body, null, 2) : 'undefined'
-      });
-      
-      // Negotiate protocol version for test endpoint
-      const negotiationResult = negotiateProtocolVersion(
-        undefined, // no client version in test
-        undefined, // no client info
-        req.get('user-agent'),
-        req.headers
-      );
-      
-      logProtocolNegotiation(negotiationResult, logger, 'TEST_ENDPOINT');
-      
-      // Test what a basic MCP initialize request should look like
-      const testResponse = {
-        jsonrpc: '2.0',
-        id: req.body?.id || 1,
-        result: {
-          protocolVersion: negotiationResult.version,
-          capabilities: {
-            tools: {}
-          },
-          serverInfo: {
-            name: 'n8n-mcp',
-            version: PROJECT_VERSION
-          }
-        }
-      };
-      
-      logger.info('TEST ENDPOINT: Sending test response', {
-        response: testResponse
-      });
-      
-      res.json(testResponse);
-    });
+    // MCP GET endpoint — StreamableHTTP server-to-client stream + discovery info.
+    // Requires authentication because a session ID in the header hands the request
+    // off to an existing transport; an unauth caller with a leaked session ID
+    // could interact with another client's stream.
+    app.get('/mcp', authLimiter, async (req, res) => {
+      if (!this.authenticateRequest(req, res)) return;
 
-    // MCP information endpoint (no auth required for discovery) and SSE support
-    app.get('/mcp', async (req, res) => {
       // Handle StreamableHTTP transport requests with new pattern
       const sessionId = req.headers['mcp-session-id'] as string | undefined;
       const existingTransport = sessionId ? this.transports[sessionId] : undefined;
@@ -1127,6 +1100,12 @@ export class SingleSessionHTTPServer {
             description: 'Main MCP JSON-RPC endpoint (StreamableHTTP)',
             authentication: 'Bearer token required'
           },
+          mcpDelete: {
+            method: 'DELETE',
+            path: '/mcp',
+            description: 'Terminate an active MCP session by Mcp-Session-Id header',
+            authentication: 'Bearer token required'
+          },
           sse: {
             method: 'GET',
             path: '/sse',
@@ -1144,7 +1123,7 @@ export class SingleSessionHTTPServer {
           health: {
             method: 'GET',
             path: '/health',
-            description: 'Health check endpoint',
+            description: 'Minimal liveness check (status, version, uptime)',
             authentication: 'None'
           },
           root: {
@@ -1156,40 +1135,6 @@ export class SingleSessionHTTPServer {
         },
         documentation: 'https://github.com/czlonkowski/n8n-mcp'
       });
-    });
-
-    // SECURITY: Rate limiting for authentication endpoints
-    // Prevents brute force attacks and DoS
-    // See: https://github.com/czlonkowski/n8n-mcp/issues/265 (HIGH-02)
-    const authLimiter = rateLimit({
-      windowMs: parseInt(process.env.AUTH_RATE_LIMIT_WINDOW || '900000'), // 15 minutes
-      max: parseInt(process.env.AUTH_RATE_LIMIT_MAX || '20'), // 20 authentication attempts per IP
-      message: {
-        jsonrpc: '2.0',
-        error: {
-          code: -32000,
-          message: 'Too many authentication attempts. Please try again later.'
-        },
-        id: null
-      },
-      standardHeaders: true, // Return rate limit info in `RateLimit-*` headers
-      legacyHeaders: false, // Disable `X-RateLimit-*` headers
-      skipSuccessfulRequests: true, // Only count failed auth attempts (#617)
-      handler: (req, res) => {
-        logger.warn('Rate limit exceeded', {
-          ip: req.ip,
-          userAgent: req.get('user-agent'),
-          event: 'rate_limit'
-        });
-        res.status(429).json({
-          jsonrpc: '2.0',
-          error: {
-            code: -32000,
-            message: 'Too many authentication attempts'
-          },
-          id: null
-        });
-      }
     });
 
     // Legacy SSE stream endpoint (protocol version 2024-11-05)
@@ -1262,8 +1207,11 @@ export class SingleSessionHTTPServer {
       }
     });
 
-    // Session termination endpoint
-    app.delete('/mcp', async (req: express.Request, res: express.Response): Promise<void> => {
+    // Session termination endpoint — must require authentication, otherwise any
+    // unauthenticated client can terminate arbitrary MCP sessions (GHSA-75hx-xj24-mqrw).
+    app.delete('/mcp', authLimiter, async (req: express.Request, res: express.Response): Promise<void> => {
+      if (!this.authenticateRequest(req, res)) return;
+
       const mcpSessionId = req.headers['mcp-session-id'] as string;
       
       if (!mcpSessionId) {
