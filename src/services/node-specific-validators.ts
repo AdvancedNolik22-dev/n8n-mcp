@@ -338,40 +338,47 @@ export class NodeSpecificValidators {
   
   private static validateGoogleSheetsRead(context: NodeValidationContext): void {
     const { config, errors, suggestions } = context;
-    
-    if (!config.range) {
+
+    // In Google Sheets v4+, range is only required if NOT using the columns resourceMapper
+    // (same semantics as append operation)
+    if (!config.range && !config.columns) {
       errors.push({
         type: 'missing_required',
         property: 'range',
-        message: 'Range is required for read operation',
-        fix: 'Specify range like "Sheet1!A:B" or "Sheet1!A1:B10"'
+        message: 'Range or columns mapping is required for read operation',
+        fix: 'Specify range like "Sheet1!A:B" OR use columns with mappingMode'
       });
     }
-    
+
     // Suggest data structure options
     if (!config.options?.dataStructure) {
       suggestions.push('Consider setting options.dataStructure to "object" for easier data manipulation');
     }
   }
-  
+
   private static validateGoogleSheetsUpdate(context: NodeValidationContext): void {
     const { config, errors } = context;
-    
-    if (!config.range) {
+
+    // In Google Sheets v4+, the columns resourceMapper (mappingMode: "defineBelow" / "autoMapInputData")
+    // handles both range and values automatically via matchingColumns + schema.
+    // Range/values are only required when NOT using columns mapping.
+    const hasColumnsMapping = !!(config.columns && (config.columns.mappingMode || config.columns.value));
+
+    if (!config.range && !hasColumnsMapping) {
       errors.push({
         type: 'missing_required',
         property: 'range',
-        message: 'Range is required for update operation',
-        fix: 'Specify the exact range to update like "Sheet1!A1:B10"'
+        message: 'Range or columns mapping is required for update operation',
+        fix: 'Specify range like "Sheet1!A1:B10" OR use columns with mappingMode (e.g. defineBelow)'
       });
     }
-    
-    if (!config.values && !config.rawData) {
+
+    if (!config.values && !config.rawData && !hasColumnsMapping) {
       errors.push({
         type: 'missing_required',
         property: 'values',
-        message: 'Values are required for update operation',
-        fix: 'Provide the data to write to the spreadsheet'
+        message: 'Values or columns mapping is required for update operation',
+        fix: 'Provide data via values/rawData OR use columns.value with defineBelow mapping'
       });
     }
   }
