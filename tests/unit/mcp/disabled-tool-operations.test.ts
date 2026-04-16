@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { N8NDocumentationMCPServer } from '../../../src/mcp/server';
 import { n8nManagementTools } from '../../../src/mcp/tools-n8n-manager';
 import { getToolDocumentation } from '../../../src/mcp/tools-documentation';
+import { logger } from '../../../src/utils/logger';
 
 vi.mock('../../../src/database/database-adapter');
 vi.mock('../../../src/database/node-repository');
@@ -154,6 +155,18 @@ describe('Disabled Tool Operations Feature (Issue #714)', () => {
 
       expect(first).toBe(second);
     });
+
+    it('should normalise uppercase operation names in env var to lowercase', () => {
+      process.env.DISABLED_TOOL_OPERATIONS = 'n8n_executions:DELETE,List';
+      server = new TestableN8NMCPServer();
+      const ops = server.testGetDisabledToolOperations();
+
+      const execOps = ops.get('n8n_executions')!;
+      expect(execOps.has('delete')).toBe(true);
+      expect(execOps.has('list')).toBe(true);
+      expect(execOps.has('DELETE')).toBe(false);
+      expect(execOps.has('List')).toBe(false);
+    });
   });
 
   // ---------------------------------------------------------------------------
@@ -196,6 +209,15 @@ describe('Disabled Tool Operations Feature (Issue #714)', () => {
 
       expect(message).toContain('delete');
       expect(message).toContain('n8n_executions');
+    });
+
+    it('should block uppercase operation from client when lowercase rule is configured', async () => {
+      process.env.DISABLED_TOOL_OPERATIONS = 'n8n_executions:delete';
+      server = new TestableN8NMCPServer();
+
+      await expect(
+        server.testExecuteTool('n8n_executions', { action: 'DELETE', id: '123' })
+      ).rejects.toThrow("Operation 'DELETE' on tool 'n8n_executions' is disabled by server policy");
     });
   });
 
@@ -343,6 +365,18 @@ describe('Disabled Tool Operations Feature (Issue #714)', () => {
       const filtered = cache.get('n8n_executions');
       expect(filtered.description).toContain('disabled by server policy');
       expect(filtered.description).toContain('delete');
+    });
+
+    it('should warn when all operations for a tool are disabled', () => {
+      const disabledOps = new Map([
+        ['n8n_executions', new Set(['get', 'list', 'delete'])]
+      ]);
+      server = new TestableN8NMCPServer();
+      server.testBuildFilteredToolDefinitions(disabledOps);
+
+      expect(vi.mocked(logger.warn)).toHaveBeenCalledWith(
+        expect.stringContaining("all operations for 'n8n_executions' are disabled")
+      );
     });
   });
 

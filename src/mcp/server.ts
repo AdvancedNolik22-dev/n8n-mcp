@@ -668,7 +668,7 @@ export class N8NDocumentationMCPServer {
       if (ops.length === 0) continue;
 
       const existing = result.get(toolName) ?? new Set<string>();
-      ops.forEach(op => existing.add(op));
+      ops.forEach(op => existing.add(op.toLowerCase()));
       result.set(toolName, existing);
     }
 
@@ -704,6 +704,13 @@ export class N8NDocumentationMCPServer {
       const param = cloned.inputSchema?.properties?.[paramName];
       if (param?.enum) {
         param.enum = (param.enum as string[]).filter(v => !ops.has(v));
+        if (param.enum.length === 0) {
+          logger.warn(
+            `DISABLED_TOOL_OPERATIONS: all operations for '${toolName}' are disabled ` +
+            `but the tool still appears in ListTools. ` +
+            `Consider adding '${toolName}' to DISABLED_TOOLS instead.`
+          );
+        }
         if (param.description) {
           const disabledList = [...ops].join(', ');
           param.description = `${param.description} (disabled by server policy: ${disabledList})`;
