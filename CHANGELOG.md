@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.47.11] - 2026-04-16
+
+### Security
+
+- Fix sensitive data logging in HTTP mode (GHSA-pfm2-2mhg-8wpx). Reported by @S4nso.
+
+Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+
 ## [2.47.10] - 2026-04-16
 
 ### Added

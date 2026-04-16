@@ -45,6 +45,7 @@ const sse_js_1 = require("@modelcontextprotocol/sdk/server/sse.js");
 const server_1 = require("./mcp/server");
 const console_manager_1 = require("./utils/console-manager");
 const logger_1 = require("./utils/logger");
+const redaction_1 = require("./utils/redaction");
 const auth_1 = require("./utils/auth");
 const fs_1 = require("fs");
 const dotenv_1 = __importDefault(require("dotenv"));
@@ -364,8 +365,7 @@ class SingleSessionHTTPServer {
                     sessionId: sessionId,
                     method: req.method,
                     url: req.url,
-                    bodyType: typeof req.body,
-                    bodyContent: req.body ? JSON.stringify(req.body, null, 2) : 'undefined',
+                    body: (0, redaction_1.summarizeMcpBody)(req.body),
                     existingTransports: Object.keys(this.transports),
                     isInitializeRequest: isInitialize
                 });
@@ -918,21 +918,6 @@ class SingleSessionHTTPServer {
             }
         });
         app.post('/mcp', authLimiter, jsonParser, async (req, res) => {
-            logger_1.logger.info('POST /mcp request received - DETAILED DEBUG', {
-                headers: req.headers,
-                readable: req.readable,
-                readableEnded: req.readableEnded,
-                complete: req.complete,
-                bodyType: typeof req.body,
-                bodyContent: req.body ? JSON.stringify(req.body, null, 2) : 'undefined',
-                contentLength: req.get('content-length'),
-                contentType: req.get('content-type'),
-                userAgent: req.get('user-agent'),
-                ip: req.ip,
-                method: req.method,
-                url: req.url,
-                originalUrl: req.originalUrl
-            });
             const sessionId = req.headers['mcp-session-id'];
             if (typeof req.on === 'function') {
                 const closeHandler = () => {
@@ -958,7 +943,13 @@ class SingleSessionHTTPServer {
             }
             if (!this.authenticateRequest(req, res))
                 return;
-            logger_1.logger.info('Authentication successful - proceeding to handleRequest', {
+            logger_1.logger.debug('POST /mcp authenticated', {
+                ip: req.ip,
+                userAgent: req.get('user-agent'),
+                contentType: req.get('content-type'),
+                contentLength: req.get('content-length'),
+                headers: (0, redaction_1.redactHeaders)(req.headers),
+                body: (0, redaction_1.summarizeMcpBody)(req.body),
                 activeSessions: this.getActiveSessionCount()
             });
             let instanceContext;
