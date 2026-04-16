@@ -945,7 +945,8 @@ class NodeSpecificValidators {
         else if (language === 'python') {
             this.validatePythonCode(code, errors, warnings, suggestions);
         }
-        this.validateReturnStatement(code, language, errors, warnings, suggestions);
+        const mode = config.mode || 'runOnceForAllItems';
+        this.validateReturnStatement(code, language, errors, warnings, suggestions, mode);
         this.validateN8nVariables(code, language, warnings, suggestions, errors);
         this.validateCodeSecurity(code, language, warnings);
         if (!config.onError && code.length > 100) {
@@ -1049,7 +1050,7 @@ class NodeSpecificValidators {
             }
         });
     }
-    static validateReturnStatement(code, language, errors, warnings, suggestions) {
+    static validateReturnStatement(code, language, errors, warnings, suggestions, mode = 'runOnceForAllItems') {
         const hasReturn = /return\s+/.test(code);
         if (!hasReturn) {
             errors.push({
@@ -1063,7 +1064,8 @@ class NodeSpecificValidators {
             return;
         }
         if (language === 'javaScript') {
-            if (/return\s+{(?!.*\[).*}\s*;?$/s.test(code) && !code.includes('json:')) {
+            const isRunOncePerItem = mode === 'runOnceForEachItem';
+            if (!isRunOncePerItem && /return\s+{(?!.*\[).*}\s*;?$/s.test(code) && !code.includes('json:')) {
                 errors.push({
                     type: 'invalid_value',
                     property: 'jsCode',
@@ -1073,7 +1075,7 @@ class NodeSpecificValidators {
             }
             const hasHelperFunctions = code.length <= MAX_CODE_LENGTH
                 && /(?:function\s+\w+\s*\(|(?:const|let|var)\s+\w+\s*=\s*(?:async\s+)?(?:function|\([^)]*\)\s*=>|\w+\s*=>))/.test(code);
-            if (!hasHelperFunctions && /return\s+(true|false|null|undefined|\d+|['"`])/m.test(code)) {
+            if (!isRunOncePerItem && !hasHelperFunctions && /return\s+(true|false|null|undefined|\d+|['"`])/m.test(code)) {
                 errors.push({
                     type: 'invalid_value',
                     property: 'jsCode',
@@ -1095,7 +1097,8 @@ class NodeSpecificValidators {
             }
         }
         if (language === 'python') {
-            if (/return\s+{(?!.*\[).*}$/s.test(code)) {
+            const isRunOncePerItem = mode === 'runOnceForEachItem';
+            if (!isRunOncePerItem && /return\s+{(?!.*\[).*}$/s.test(code)) {
                 errors.push({
                     type: 'invalid_value',
                     property: 'pythonCode',
@@ -1103,7 +1106,7 @@ class NodeSpecificValidators {
                     fix: 'Wrap in list: return [{"json": your_dict}]'
                 });
             }
-            if (/return\s+(True|False|None|\d+|['"`])/m.test(code)) {
+            if (!isRunOncePerItem && /return\s+(True|False|None|\d+|['"`])/m.test(code)) {
                 errors.push({
                     type: 'invalid_value',
                     property: 'pythonCode',

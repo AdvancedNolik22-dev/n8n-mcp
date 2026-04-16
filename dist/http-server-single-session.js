@@ -654,6 +654,36 @@ class SingleSessionHTTPServer {
             });
             next();
         });
+        const authLimiter = (0, express_rate_limit_1.default)({
+            windowMs: parseInt(process.env.AUTH_RATE_LIMIT_WINDOW || '900000'),
+            max: parseInt(process.env.AUTH_RATE_LIMIT_MAX || '20'),
+            message: {
+                jsonrpc: '2.0',
+                error: {
+                    code: -32000,
+                    message: 'Too many authentication attempts. Please try again later.'
+                },
+                id: null
+            },
+            standardHeaders: true,
+            legacyHeaders: false,
+            skipSuccessfulRequests: true,
+            handler: (req, res) => {
+                logger_1.logger.warn('Rate limit exceeded', {
+                    ip: req.ip,
+                    userAgent: req.get('user-agent'),
+                    event: 'rate_limit'
+                });
+                res.status(429).json({
+                    jsonrpc: '2.0',
+                    error: {
+                        code: -32000,
+                        message: 'Too many authentication attempts'
+                    },
+                    id: null
+                });
+            }
+        });
         app.get('/', (req, res) => {
             const port = parseInt(process.env.PORT || '3000');
             const host = process.env.HOST || '0.0.0.0';
@@ -678,77 +708,22 @@ class SingleSessionHTTPServer {
                 authentication: {
                     type: 'Bearer Token',
                     header: 'Authorization: Bearer <token>',
-                    required_for: ['POST /mcp', 'GET /sse', 'POST /messages']
+                    required_for: ['POST /mcp', 'GET /mcp', 'DELETE /mcp', 'GET /sse', 'POST /messages']
                 },
                 documentation: 'https://github.com/czlonkowski/n8n-mcp'
             });
         });
         app.get('/health', (req, res) => {
-            const activeTransports = Object.keys(this.transports);
-            const activeServers = Object.keys(this.servers);
-            const sessionMetrics = this.getSessionMetrics();
-            const isProduction = process.env.NODE_ENV === 'production';
-            const isDefaultToken = this.authToken === 'REPLACE_THIS_AUTH_TOKEN_32_CHARS_MIN_abcdefgh';
             res.json({
                 status: 'ok',
-                mode: 'sdk-pattern-transports',
                 version: version_1.PROJECT_VERSION,
-                environment: process.env.NODE_ENV || 'development',
                 uptime: Math.floor(process.uptime()),
-                sessions: {
-                    active: sessionMetrics.activeSessions,
-                    total: sessionMetrics.totalSessions,
-                    expired: sessionMetrics.expiredSessions,
-                    max: MAX_SESSIONS,
-                    usage: `${sessionMetrics.activeSessions}/${MAX_SESSIONS}`,
-                    sessionIds: activeTransports
-                },
-                security: {
-                    production: isProduction,
-                    defaultToken: isDefaultToken,
-                    tokenLength: this.authToken?.length || 0
-                },
-                activeTransports: activeTransports.length,
-                activeServers: activeServers.length,
-                legacySessionActive: false,
-                memory: {
-                    used: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
-                    total: Math.round(process.memoryUsage().heapTotal / 1024 / 1024),
-                    unit: 'MB'
-                },
                 timestamp: new Date().toISOString()
             });
         });
-        app.post('/mcp/test', jsonParser, async (req, res) => {
-            logger_1.logger.info('TEST ENDPOINT: Manual test request received', {
-                method: req.method,
-                headers: req.headers,
-                body: req.body,
-                bodyType: typeof req.body,
-                bodyContent: req.body ? JSON.stringify(req.body, null, 2) : 'undefined'
-            });
-            const negotiationResult = (0, protocol_version_1.negotiateProtocolVersion)(undefined, undefined, req.get('user-agent'), req.headers);
-            (0, protocol_version_1.logProtocolNegotiation)(negotiationResult, logger_1.logger, 'TEST_ENDPOINT');
-            const testResponse = {
-                jsonrpc: '2.0',
-                id: req.body?.id || 1,
-                result: {
-                    protocolVersion: negotiationResult.version,
-                    capabilities: {
-                        tools: {}
-                    },
-                    serverInfo: {
-                        name: 'n8n-mcp',
-                        version: version_1.PROJECT_VERSION
-                    }
-                }
-            };
-            logger_1.logger.info('TEST ENDPOINT: Sending test response', {
-                response: testResponse
-            });
-            res.json(testResponse);
-        });
-        app.get('/mcp', async (req, res) => {
+        app.get('/mcp', authLimiter, async (req, res) => {
+            if (!this.authenticateRequest(req, res))
+                return;
             const sessionId = req.headers['mcp-session-id'];
             const existingTransport = sessionId ? this.transports[sessionId] : undefined;
             if (existingTransport && existingTransport instanceof streamableHttp_js_1.StreamableHTTPServerTransport) {
@@ -795,6 +770,12 @@ class SingleSessionHTTPServer {
                         description: 'Main MCP JSON-RPC endpoint (StreamableHTTP)',
                         authentication: 'Bearer token required'
                     },
+                    mcpDelete: {
+                        method: 'DELETE',
+                        path: '/mcp',
+                        description: 'Terminate an active MCP session by Mcp-Session-Id header',
+                        authentication: 'Bearer token required'
+                    },
                     sse: {
                         method: 'GET',
                         path: '/sse',
@@ -812,7 +793,7 @@ class SingleSessionHTTPServer {
                     health: {
                         method: 'GET',
                         path: '/health',
-                        description: 'Health check endpoint',
+                        description: 'Minimal liveness check (status, version, uptime)',
                         authentication: 'None'
                     },
                     root: {
@@ -824,36 +805,6 @@ class SingleSessionHTTPServer {
                 },
                 documentation: 'https://github.com/czlonkowski/n8n-mcp'
             });
-        });
-        const authLimiter = (0, express_rate_limit_1.default)({
-            windowMs: parseInt(process.env.AUTH_RATE_LIMIT_WINDOW || '900000'),
-            max: parseInt(process.env.AUTH_RATE_LIMIT_MAX || '20'),
-            message: {
-                jsonrpc: '2.0',
-                error: {
-                    code: -32000,
-                    message: 'Too many authentication attempts. Please try again later.'
-                },
-                id: null
-            },
-            standardHeaders: true,
-            legacyHeaders: false,
-            skipSuccessfulRequests: true,
-            handler: (req, res) => {
-                logger_1.logger.warn('Rate limit exceeded', {
-                    ip: req.ip,
-                    userAgent: req.get('user-agent'),
-                    event: 'rate_limit'
-                });
-                res.status(429).json({
-                    jsonrpc: '2.0',
-                    error: {
-                        code: -32000,
-                        message: 'Too many authentication attempts'
-                    },
-                    id: null
-                });
-            }
         });
         app.get('/sse', authLimiter, async (req, res) => {
             if (!this.authenticateRequest(req, res))
@@ -911,7 +862,9 @@ class SingleSessionHTTPServer {
                 }
             }
         });
-        app.delete('/mcp', async (req, res) => {
+        app.delete('/mcp', authLimiter, async (req, res) => {
+            if (!this.authenticateRequest(req, res))
+                return;
             const mcpSessionId = req.headers['mcp-session-id'];
             if (!mcpSessionId) {
                 res.status(400).json({

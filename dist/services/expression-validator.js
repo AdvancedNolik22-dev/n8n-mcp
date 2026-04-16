@@ -172,6 +172,9 @@ class ExpressionValidator {
         }
         else if (obj && typeof obj === 'object') {
             Object.entries(obj).forEach(([key, value]) => {
+                if (key === 'jsCode' || key === 'pythonCode' || key === 'functionCode') {
+                    return;
+                }
                 const newPath = path ? `${path}.${key}` : key;
                 this.validateParametersRecursive(value, context, result, newPath, visited);
             });
