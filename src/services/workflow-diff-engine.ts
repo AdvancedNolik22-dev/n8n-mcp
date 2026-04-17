@@ -625,10 +625,30 @@ export class WorkflowDiffEngine {
   }
 
   private validateMoveNode(workflow: Workflow, operation: MoveNodeOperation): string | null {
+    // Catch common parameter typos before any mutation (QA #6). Previously
+    // `newPosition` was silently accepted, position ended up undefined, and
+    // the only signal was a cryptic `position Required` from the final
+    // workflow-shape check — no mention of which op produced it. Reject
+    // even when `position` is also set, so callers don't carry a misleading
+    // alias through into their configs.
+    const operationAny = operation as any;
+    if (operationAny.newPosition !== undefined) {
+      return `Invalid parameter 'newPosition' for moveNode. Did you mean 'position'? Example: {type: "moveNode", nodeName: "My Node", position: [450, 600]}`;
+    }
+
     const node = this.findNode(workflow, operation.nodeId, operation.nodeName);
     if (!node) {
       return this.formatNodeNotFoundError(workflow, operation.nodeId || operation.nodeName || '', 'moveNode');
     }
+
+    if (!operation.position) {
+      return `Missing required parameter 'position' for moveNode. Example: {type: "moveNode", nodeName: "${node.name}", position: [450, 600]}`;
+    }
+    if (!Array.isArray(operation.position) || operation.position.length !== 2 ||
+        typeof operation.position[0] !== 'number' || typeof operation.position[1] !== 'number') {
+      return `Invalid 'position' for moveNode. Must be [x, y] with two numbers. Got: ${JSON.stringify(operation.position)}`;
+    }
+
     return null;
   }
 
@@ -738,6 +758,14 @@ export class WorkflowDiffEngine {
   }
 
   private validateRewireConnection(workflow: Workflow, operation: RewireConnectionOperation): string | null {
+    // Reject from === to up front. If both resolve to the same node, the
+    // apply would remove source→from and then skip the add (because "to" is
+    // already present — which is "from"), leaving source disconnected.
+    // Safer to fail the op than to silently drop the edge.
+    if (operation.from === operation.to) {
+      return `rewireConnection: "from" and "to" must refer to different nodes (got "${operation.from}" for both).`;
+    }
+
     // Validate source node exists
     const sourceNode = this.findNode(workflow, operation.source, operation.source);
     if (!sourceNode) {
@@ -1137,28 +1165,84 @@ export class WorkflowDiffEngine {
    * @param operation - Rewire operation specifying source, from, and to
    */
   private applyRewireConnection(workflow: Workflow, operation: RewireConnectionOperation): void {
+    // Resolve all three node refs up front so downstream calls never operate on
+    // half-resolved inputs. This prevents the silent-corruption case where an
+    // un-resolvable "from" caused removeConnection to no-op while addConnection
+    // still appended a duplicate edge to "to". Fail loudly instead.
+    const sourceNode = this.findNode(workflow, operation.source, operation.source);
+    const fromNode = this.findNode(workflow, operation.from, operation.from);
+    const toNode = this.findNode(workflow, operation.to, operation.to);
+    if (!sourceNode || !fromNode || !toNode) {
+      throw new Error(
+        `rewireConnection: unresolved node reference(s). ` +
+        `source=${JSON.stringify(operation.source)} (${sourceNode ? 'ok' : 'missing'}), ` +
+        `from=${JSON.stringify(operation.from)} (${fromNode ? 'ok' : 'missing'}), ` +
+        `to=${JSON.stringify(operation.to)} (${toNode ? 'ok' : 'missing'}). ` +
+        `Available nodes: ${workflow.nodes.map(n => `"${n.name}" (${n.id})`).join(', ')}`
+      );
+    }
+
+    // Catch the case where "from" and "to" are different strings (one ID, one
+    // name) that resolve to the same node. The string-level guard in the
+    // validator only covers identical inputs; this covers the aliased case.
+    if (fromNode.id === toNode.id) {
+      throw new Error(
+        `rewireConnection: "from" and "to" resolve to the same node "${fromNode.name}" (id: ${fromNode.id}). ` +
+        `A rewire requires a distinct target.`
+      );
+    }
+
     // Resolve smart parameters (branch, case) to technical parameters
     const { sourceOutput, sourceIndex } = this.resolveSmartParameters(workflow, operation);
 
-    // First, remove the old connection (source → from)
+    // Count edges to "from" across ALL sourceIndex slots on this output,
+    // because `applyRemoveConnection` filters by target node name across the
+    // entire output (not just the specific sourceIndex). A per-slot count
+    // would throw spuriously when multiple edges to "from" existed.
+    const totalFromEdges = (): number => {
+      const slots = workflow.connections[sourceNode.name]?.[sourceOutput] ?? [];
+      return slots.reduce((acc, slot) => acc + (slot ?? []).filter(c => c.node === fromNode.name).length, 0);
+    };
+    const fromEdgesBefore = totalFromEdges();
+    const toAlreadyPresent = (workflow.connections[sourceNode.name]?.[sourceOutput]?.[sourceIndex] ?? [])
+      .some(c => c.node === toNode.name);
+
+    // Remove source → from using resolved names (not raw op strings, which may
+    // be IDs that the inner apply would have to re-resolve).
     this.applyRemoveConnection(workflow, {
       type: 'removeConnection',
-      source: operation.source,
-      target: operation.from,
+      source: sourceNode.name,
+      target: fromNode.name,
       sourceOutput: sourceOutput,
       targetInput: operation.targetInput
     });
 
-    // Then, add the new connection (source → to)
-    this.applyAddConnection(workflow, {
-      type: 'addConnection',
-      source: operation.source,
-      target: operation.to,
-      sourceOutput: sourceOutput,
-      targetInput: operation.targetInput,
-      sourceIndex: sourceIndex,
-      targetIndex: 0 // Default target index for new connection
-    });
+    // Skip the add if "to" was already connected at this slot — otherwise a
+    // rewire where "to" is already a target would silently duplicate the edge.
+    if (!toAlreadyPresent) {
+      this.applyAddConnection(workflow, {
+        type: 'addConnection',
+        source: sourceNode.name,
+        target: toNode.name,
+        sourceOutput: sourceOutput,
+        targetInput: operation.targetInput,
+        sourceIndex: sourceIndex,
+        targetIndex: 0
+      });
+    }
+
+    // Invariant: all edges to "from" on this output must now be gone, since
+    // applyRemoveConnection strips every match. If any remain, the map is
+    // corrupted — refuse to commit. The diff engine's atomic rollback
+    // surfaces the throw to the caller.
+    const fromEdgesAfter = totalFromEdges();
+    if (fromEdgesBefore > 0 && fromEdgesAfter !== 0) {
+      throw new Error(
+        `rewireConnection invariant violated: "${sourceNode.name}" → "${fromNode.name}" ` +
+        `edges should have been removed (had ${fromEdgesBefore}, still have ${fromEdgesAfter}). ` +
+        `Refusing to commit a corrupted connection map.`
+      );
+    }
   }
 
   // Metadata operation appliers
@@ -1223,15 +1307,16 @@ export class WorkflowDiffEngine {
 
   // Workflow activation operation appliers
   private applyActivateWorkflow(workflow: Workflow, operation: ActivateWorkflowOperation): void {
-    // Set flag in workflow object to indicate activation intent
-    // The handler will call the API method after workflow update
+    // Activate / deactivate flags are mutually exclusive — clear the opposite
+    // so a batch like [activateWorkflow, deactivateWorkflow] ends with
+    // last-op-wins semantics instead of first-wins (QA #8).
     (workflow as any)._shouldActivate = true;
+    (workflow as any)._shouldDeactivate = false;
   }
 
   private applyDeactivateWorkflow(workflow: Workflow, operation: DeactivateWorkflowOperation): void {
-    // Set flag in workflow object to indicate deactivation intent
-    // The handler will call the API method after workflow update
     (workflow as any)._shouldDeactivate = true;
+    (workflow as any)._shouldActivate = false;
   }
 
   // Transfer operation — uses dedicated API call (PUT /workflows/{id}/transfer)

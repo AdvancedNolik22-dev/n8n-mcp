@@ -1144,10 +1144,48 @@ describe('WorkflowDiffEngine', () => {
       };
 
       const result = await diffEngine.applyDiff(baseWorkflow, request);
-      
+
       expect(result.success).toBe(true);
       const movedNode = result.workflow!.nodes.find((n: any) => n.name === 'Webhook');
       expect(movedNode!.position).toEqual([100, 100]);
+    });
+
+    it('rejects newPosition typo pre-mutation with did-you-mean hint (regression #6)', async () => {
+      const op: any = { type: 'moveNode', nodeName: 'Webhook', newPosition: [450, 600] };
+      const result = await diffEngine.applyDiff(baseWorkflow, { id: 'test-workflow', operations: [op] });
+      expect(result.success).toBe(false);
+      expect(result.errors![0].message).toMatch(/newPosition/);
+      expect(result.errors![0].message).toMatch(/Did you mean 'position'/);
+      const node = baseWorkflow.nodes.find(n => n.name === 'Webhook')!;
+      expect(node.position).not.toEqual([450, 600]);
+    });
+
+    it('rejects newPosition even when position is also provided (regression #6)', async () => {
+      const op: any = { type: 'moveNode', nodeName: 'Webhook', newPosition: [1, 2], position: [3, 4] };
+      const result = await diffEngine.applyDiff(baseWorkflow, { id: 'test-workflow', operations: [op] });
+      expect(result.success).toBe(false);
+      expect(result.errors![0].message).toMatch(/newPosition/);
+    });
+
+    it('rejects missing position parameter for moveNode (regression #6)', async () => {
+      const op: any = { type: 'moveNode', nodeName: 'Webhook' };
+      const result = await diffEngine.applyDiff(baseWorkflow, { id: 'test-workflow', operations: [op] });
+      expect(result.success).toBe(false);
+      expect(result.errors![0].message).toMatch(/Missing required parameter 'position'/);
+    });
+
+    it('rejects non-array position value for moveNode (regression #6)', async () => {
+      const op: any = { type: 'moveNode', nodeName: 'Webhook', position: 'not-an-array' };
+      const result = await diffEngine.applyDiff(baseWorkflow, { id: 'test-workflow', operations: [op] });
+      expect(result.success).toBe(false);
+      expect(result.errors![0].message).toMatch(/Invalid 'position' for moveNode/);
+    });
+
+    it('rejects wrong-length position array for moveNode (regression #6)', async () => {
+      const op: any = { type: 'moveNode', nodeName: 'Webhook', position: [1, 2, 3] };
+      const result = await diffEngine.applyDiff(baseWorkflow, { id: 'test-workflow', operations: [op] });
+      expect(result.success).toBe(false);
+      expect(result.errors![0].message).toMatch(/Invalid 'position' for moveNode/);
     });
   });
 
@@ -1797,6 +1835,82 @@ describe('WorkflowDiffEngine', () => {
       expect(result.errors![0].message).toContain('No connections found from');
       expect(result.errors![0].message).toContain('Slack');
     });
+
+    it('should not duplicate edge when rewiring to an already-connected target (regression #7)', async () => {
+      // Setup: Webhook → HTTP Request (baseWorkflow) AND Webhook → Slack (parallel).
+      // Rewire from HTTP Request to Slack. Slack is already a target of Webhook,
+      // so the result should contain exactly one Slack edge (not two) and no
+      // HTTP Request edge.
+      const addSlackConn: AddConnectionOperation = {
+        type: 'addConnection',
+        source: 'Webhook',
+        target: 'Slack'
+      };
+
+      const rewire: any = {
+        type: 'rewireConnection',
+        source: 'Webhook',
+        from: 'HTTP Request',
+        to: 'Slack'
+      };
+
+      const result = await diffEngine.applyDiff(baseWorkflow, {
+        id: 'test-workflow',
+        operations: [addSlackConn, rewire]
+      });
+
+      expect(result.success).toBe(true);
+      const webhookEdges = result.workflow!.connections['Webhook']['main'][0];
+      const slackEdges = webhookEdges.filter((c: any) => c.node === 'Slack');
+      const httpEdges = webhookEdges.filter((c: any) => c.node === 'HTTP Request');
+      expect(slackEdges).toHaveLength(1);
+      expect(httpEdges).toHaveLength(0);
+    });
+
+    it('should rewire correctly when source/from/to are passed as node IDs (regression #7)', async () => {
+      // baseWorkflow nodes have fixed ids: webhook-1, http-1, slack-1
+      const rewireById: any = {
+        type: 'rewireConnection',
+        source: 'webhook-1',
+        from: 'http-1',
+        to: 'slack-1'
+      };
+
+      const result = await diffEngine.applyDiff(baseWorkflow, {
+        id: 'test-workflow',
+        operations: [rewireById]
+      });
+
+      expect(result.success).toBe(true);
+      const webhookEdges = result.workflow!.connections['Webhook']['main'][0];
+      expect(webhookEdges.some((c: any) => c.node === 'HTTP Request')).toBe(false);
+      expect(webhookEdges.some((c: any) => c.node === 'Slack')).toBe(true);
+    });
+
+    it('rejects rewire when from and to are the same string (regression Copilot review)', async () => {
+      const rewire: any = {
+        type: 'rewireConnection',
+        source: 'Webhook',
+        from: 'HTTP Request',
+        to: 'HTTP Request'
+      };
+      const result = await diffEngine.applyDiff(baseWorkflow, { id: 'test-workflow', operations: [rewire] });
+      expect(result.success).toBe(false);
+      expect(result.errors![0].message).toMatch(/must refer to different nodes/);
+    });
+
+    it('rejects rewire when from (ID) and to (name) resolve to the same node (regression Copilot review)', async () => {
+      const rewire: any = {
+        type: 'rewireConnection',
+        source: 'Webhook',
+        from: 'http-1',
+        to: 'HTTP Request'
+      };
+      const result = await diffEngine.applyDiff(baseWorkflow, { id: 'test-workflow', operations: [rewire] });
+      expect(result.success).toBe(false);
+      expect(result.errors![0].message).toMatch(/resolve to the same node|must refer to different nodes/);
+    });
+
 
     it('should handle rewiring IF node branches correctly', async () => {
       // Add IF node with true/false branches
@@ -5332,6 +5446,34 @@ describe('WorkflowDiffEngine', () => {
 
       expect(result.success).toBe(true);
       expect(result.shouldDeactivate).toBe(true);
+    });
+
+    it('applies last-op-wins when activate+deactivate are batched together (regression #8)', async () => {
+      const workflowWithTrigger = createWorkflow('Test Workflow')
+        .addWebhookNode({ id: 'webhook-1', name: 'Webhook Trigger' })
+        .build() as Workflow;
+      const newConnections: any = {};
+      for (const [nodeId, outputs] of Object.entries(workflowWithTrigger.connections)) {
+        const node = workflowWithTrigger.nodes.find((n: any) => n.id === nodeId);
+        if (node) newConnections[node.name] = outputs;
+      }
+      workflowWithTrigger.connections = newConnections;
+
+      const lastWinsDeactivate = await diffEngine.applyDiff(workflowWithTrigger, {
+        id: 'test-workflow',
+        operations: [{ type: 'activateWorkflow' } as any, { type: 'deactivateWorkflow' } as any]
+      });
+      expect(lastWinsDeactivate.success).toBe(true);
+      expect(lastWinsDeactivate.shouldDeactivate).toBe(true);
+      expect(lastWinsDeactivate.shouldActivate).toBeFalsy();
+
+      const lastWinsActivate = await diffEngine.applyDiff(workflowWithTrigger, {
+        id: 'test-workflow',
+        operations: [{ type: 'deactivateWorkflow' } as any, { type: 'activateWorkflow' } as any]
+      });
+      expect(lastWinsActivate.success).toBe(true);
+      expect(lastWinsActivate.shouldActivate).toBe(true);
+      expect(lastWinsActivate.shouldDeactivate).toBeFalsy();
     });
 
     it('should combine activation with other operations', async () => {

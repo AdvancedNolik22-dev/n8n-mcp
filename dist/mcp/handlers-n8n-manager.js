@@ -2105,7 +2105,8 @@ const createTableSchema = zod_1.z.object({
     columns: zod_1.z.array(zod_1.z.object({
         name: zod_1.z.string().min(1, 'Column name cannot be empty'),
         type: zod_1.z.enum(['string', 'number', 'boolean', 'date']).optional(),
-    })).optional(),
+    })).min(1, 'At least one column is required'),
+    projectId: zod_1.z.string().optional(),
 });
 const listTablesSchema = zod_1.z.object({
     limit: zod_1.z.number().min(1).max(100).optional(),
@@ -2308,9 +2309,12 @@ async function handleDeleteRows(args, context) {
             ...params,
         };
         const result = await client.deleteDataTableRows(tableId, queryParams);
+        const cleanedResult = params.dryRun && Array.isArray(result)
+            ? result.filter((row) => row?.dryRunState !== 'after')
+            : result;
         return {
             success: true,
-            data: result,
+            data: cleanedResult,
             message: params.dryRun ? 'Dry run: rows matched for deletion (no changes applied)' : 'Rows deleted successfully',
         };
     }
