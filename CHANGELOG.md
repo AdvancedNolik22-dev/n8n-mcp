@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.47.14] - 2026-04-21
+
+### Security
+
+- Fix IPv6-mapped SSRF bypass in synchronous URL validation (GHSA-56c3-vfp2-5qqj, CVSS 8.5 High). `SSRFProtection.validateUrlSync` now rejects IPv4-mapped IPv6 (`::ffff:169.254.169.254`, `::ffff:127.0.0.1`, etc.) and private IPv6 addresses, matching the async webhook validator. The sync gate is the sole SSRF check in the SDK embedder path (`validateInstanceContext` → `getN8nApiClient`), so the bypass enabled cloud metadata access and `x-n8n-api-key` leakage for callers of `N8NDocumentationMCPServer` / `N8NMCPEngine` with user-supplied `InstanceContext`. Reported by @manthanghasadiya.
+
+Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+
 ## [2.47.13] - 2026-04-20
 
 ### Security

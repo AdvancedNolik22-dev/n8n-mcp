@@ -562,5 +562,134 @@ describe('SSRFProtection', () => {
       expect(result.valid).toBe(false);
       expect(result.reason).toBe('URL fragments are not allowed');
     });
+
+    // GHSA-56c3-vfp2-5qqj — IPv4-mapped IPv6 and private IPv6 addresses
+    // were skipped by the IPv4-only checks, enabling SSRF to cloud metadata,
+    // RFC1918 networks, and localhost via SDK embedders.
+    describe('IPv6 private and IPv4-mapped addresses (GHSA-56c3-vfp2-5qqj)', () => {
+      it('should reject IPv4-mapped IPv6 cloud metadata and private ranges in strict and moderate modes', () => {
+        const payloads = [
+          'http://[::ffff:169.254.169.254]', // AWS/Azure IMDS via IPv4-mapped
+          'http://[::ffff:127.0.0.1]:5678',  // localhost via IPv4-mapped
+          'http://[::ffff:10.0.0.1]',        // RFC1918 10.x
+          'http://[::ffff:192.168.1.1]',     // RFC1918 192.168.x
+          'http://[::ffff:172.16.0.1]',      // RFC1918 172.16.x
+        ];
+        for (const mode of ['strict', 'moderate']) {
+          process.env.WEBHOOK_SECURITY_MODE = mode;
+          for (const url of payloads) {
+            const result = SSRFProtection.validateUrlSync(url);
+            expect(result.valid, `url=${url} mode=${mode}`).toBe(false);
+            expect(result.reason).toBe('IPv6 private/mapped address not allowed');
+          }
+        }
+      });
+
+      it('should reject long-form IPv4-mapped IPv6 localhost', () => {
+        delete process.env.WEBHOOK_SECURITY_MODE;
+        const result = SSRFProtection.validateUrlSync('http://[0:0:0:0:0:ffff:7f00:1]');
+        expect(result.valid).toBe(false);
+        expect(result.reason).toBe('IPv6 private/mapped address not allowed');
+      });
+
+      it('should reject private IPv6 addresses in strict and moderate modes', () => {
+        const payloads = [
+          'http://[::1]',        // IPv6 loopback (strict hits LOCALHOST_PATTERNS first)
+          'http://[fe80::1]',    // Link-local
+          'http://[fc00::1]',    // Unique local (literal fc00:)
+          'http://[fd00::1]',    // Unique local (literal fd00:)
+        ];
+        for (const mode of ['strict', 'moderate']) {
+          process.env.WEBHOOK_SECURITY_MODE = mode;
+          for (const url of payloads) {
+            const result = SSRFProtection.validateUrlSync(url);
+            expect(result.valid, `url=${url} mode=${mode}`).toBe(false);
+          }
+        }
+      });
+
+      it('should reject IPv4-compatible IPv6 (::X:Y) that embeds cloud metadata or private IPv4', () => {
+        // WHATWG URL normalizes ::a.b.c.d into ::XXXX:YYYY hex form. The
+        // low 32 bits can hold any IPv4 including IMDS/RFC1918/loopback.
+        const payloads = [
+          'http://[::169.254.169.254]',  // → ::a9fe:a9fe (AWS/Azure IMDS)
+          'http://[::127.0.0.1]',        // → ::7f00:1 (loopback)
+          'http://[::10.0.0.1]',         // → ::a00:1 (RFC1918)
+        ];
+        for (const url of payloads) {
+          const result = SSRFProtection.validateUrlSync(url);
+          expect(result.valid, `url=${url}`).toBe(false);
+          expect(result.reason).toBe('IPv6 private/mapped address not allowed');
+        }
+      });
+
+      it('should reject 6to4 (2002::/16) embedding arbitrary IPv4', () => {
+        const result = SSRFProtection.validateUrlSync('http://[2002:a9fe:a9fe::]');
+        expect(result.valid).toBe(false);
+        expect(result.reason).toBe('IPv6 private/mapped address not allowed');
+      });
+
+      it('should reject NAT64 (64:ff9b::/96) embedding arbitrary IPv4', () => {
+        const result = SSRFProtection.validateUrlSync('http://[64:ff9b::a9fe:a9fe]');
+        expect(result.valid).toBe(false);
+        expect(result.reason).toBe('IPv6 private/mapped address not allowed');
+      });
+
+      it('should reject full fc00::/7 ULA range, not just fc00:/fd00: literals', () => {
+        // RFC 4193: fc00::/7 spans fc00-fdff in the first hextet.
+        const payloads = [
+          'http://[fcba::1]',     // ULA outside literal fc00:
+          'http://[fd12:3456::]', // ULA outside literal fd00:
+        ];
+        for (const url of payloads) {
+          const result = SSRFProtection.validateUrlSync(url);
+          expect(result.valid, `url=${url}`).toBe(false);
+          expect(result.reason).toBe('IPv6 private/mapped address not allowed');
+        }
+      });
+
+      it('should reject site-local fec0::/10 (deprecated, RFC 3879)', () => {
+        const result = SSRFProtection.validateUrlSync('http://[fec0::1]');
+        expect(result.valid).toBe(false);
+        expect(result.reason).toBe('IPv6 private/mapped address not allowed');
+      });
+
+      it('should not false-positive on public IPv6 addresses', () => {
+        // 2001:db8::/32 is the documentation range but is still parseable and
+        // public-routable from the validator's perspective; must NOT be blocked.
+        const publicPayloads = [
+          'http://[2001:db8::1]',
+          'http://[2606:4700:4700::1111]', // Cloudflare
+          'http://[2620:0:2d0:200::7]',
+        ];
+        for (const url of publicPayloads) {
+          const result = SSRFProtection.validateUrlSync(url);
+          expect(result.valid, `url=${url}`).toBe(true);
+        }
+      });
+
+      it('should not false-positive on domain names starting with hex-like labels', () => {
+        // isPrivateOrMappedIpv6 gates on net.isIPv6; domain names with "fc"/"fd"
+        // labels must not be misclassified as ULA.
+        const domains = [
+          'http://fcexample.com',
+          'http://fdexample.com',
+          'http://fec0example.com',
+        ];
+        for (const url of domains) {
+          const result = SSRFProtection.validateUrlSync(url);
+          expect(result.valid, `url=${url}`).toBe(true);
+        }
+      });
+
+      it('should not perform DNS resolution for IPv6 payloads', () => {
+        SSRFProtection.validateUrlSync('http://[::ffff:169.254.169.254]');
+        SSRFProtection.validateUrlSync('http://[::ffff:127.0.0.1]:5678');
+        SSRFProtection.validateUrlSync('http://[fe80::1]');
+        SSRFProtection.validateUrlSync('http://[2002:a9fe:a9fe::]');
+        SSRFProtection.validateUrlSync('http://[64:ff9b::a9fe:a9fe]');
+        expect(vi.mocked(dns.lookup)).toHaveBeenCalledTimes(0);
+      });
+    });
   });
 });

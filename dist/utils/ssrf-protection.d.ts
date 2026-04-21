@@ -1,4 +1,5 @@
 export declare class SSRFProtection {
+    private static isPrivateOrMappedIpv6;
     static validateWebhookUrl(urlString: string): Promise<{
         valid: boolean;
         reason?: string;
