@@ -86,6 +86,7 @@
     "test:update-partial:debug": "node dist/scripts/test-update-partial-debug.js",
     "test:issue-45-fix": "node dist/scripts/test-issue-45-fix.js",
     "test:auth-logging": "tsx scripts/test-auth-logging.ts",
+    "docker:test:build": "docker build -t n8n-mcp-test:latest .",
     "test:docker": "./scripts/test-docker-config.sh all",
     "test:docker:unit": "./scripts/test-docker-config.sh unit",
     "test:docker:integration": "./scripts/test-docker-config.sh integration",
