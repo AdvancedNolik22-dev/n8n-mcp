@@ -221,14 +221,32 @@ export async function handleUpdatePartialWorkflow(
       }
     }
     
-    // If validateOnly, return validation result
+    // Validate final workflow structure after applying all operations BEFORE the
+    // validateOnly early-return. Pre-fix the early-return ran first and `validateOnly: true`
+    // always reported `valid: true`, but `validateOnly: false` then ran structural validation
+    // and could fail — the two paths disagreed on validity. Now both paths see the same
+    // structural result. (#744)
+    //
+    // Validation can be skipped for specific integration tests that need to test
+    // n8n API behavior with edge case workflows by setting SKIP_WORKFLOW_VALIDATION=true.
+    // When skipping, both paths treat the workflow as valid so they continue to agree.
+    const skipValidation = process.env.SKIP_WORKFLOW_VALIDATION === 'true';
+    const structureErrors = !skipValidation && diffResult.workflow
+      ? validateWorkflowStructure(diffResult.workflow)
+      : [];
+
+    // If validateOnly, return the same structural-validity verdict the apply path would.
+    // operationsToApply reflects what would actually be applied, including continueOnError
+    // partial success (some operations may have failed during simulation).
     if (input.validateOnly) {
+      const operationsToApply = diffResult.operationsApplied ?? input.operations.length;
       return {
         success: true,
         message: diffResult.message,
         data: {
-          valid: true,
-          operationsToApply: input.operations.length
+          valid: structureErrors.length === 0,
+          operationsToApply,
+          ...(structureErrors.length > 0 ? { structureErrors } : {})
         },
         details: {
           warnings: diffResult.warnings
@@ -236,21 +254,15 @@ export async function handleUpdatePartialWorkflow(
       };
     }
 
-    // Validate final workflow structure after applying all operations
+    // Apply path: surface structural errors as a blocking save failure.
     // This prevents creating workflows that pass operation-level validation
-    // but fail workflow-level validation (e.g., UI can't render them)
-    //
-    // Validation can be skipped for specific integration tests that need to test
-    // n8n API behavior with edge case workflows by setting SKIP_WORKFLOW_VALIDATION=true
+    // but fail workflow-level validation (e.g., UI can't render them).
+    // structureErrors is empty when SKIP_WORKFLOW_VALIDATION=true (computed above).
     if (diffResult.workflow) {
-      const structureErrors = validateWorkflowStructure(diffResult.workflow);
       if (structureErrors.length > 0) {
-        const skipValidation = process.env.SKIP_WORKFLOW_VALIDATION === 'true';
-
         logger.warn('Workflow structure validation failed after applying diff operations', {
           workflowId: input.id,
-          errors: structureErrors,
-          blocking: !skipValidation
+          errors: structureErrors
         });
 
         // Analyze error types to provide targeted recovery guidance
@@ -292,28 +304,22 @@ export async function handleUpdatePartialWorkflow(
           ? `Workflow validation failed: ${structureErrors[0]}`
           : `Workflow validation failed with ${structureErrors.length} structural issues`;
 
-        // If validation is not skipped, return error and block the save
-        if (!skipValidation) {
-          return {
-            success: false,
-            saved: false,
-            error: errorMessage,
-            details: {
-              errors: structureErrors,
-              errorCount: structureErrors.length,
-              operationsApplied: diffResult.operationsApplied,
-              applied: diffResult.applied,
-              recoveryGuidance: recoverySteps,
-              note: 'Operations were applied but created an invalid workflow structure. The workflow was NOT saved to n8n to prevent UI rendering errors.',
-              autoSanitizationNote: 'Auto-sanitization runs on modified nodes during updates to fix operator structures and add missing metadata. However, it cannot fix all issues (e.g., broken connections, branch mismatches). Use the recovery guidance above to resolve remaining issues.'
-            }
-          };
-        }
-        // Validation skipped: log warning but continue (for specific integration tests)
-        logger.info('Workflow validation skipped (SKIP_WORKFLOW_VALIDATION=true): Allowing workflow with validation warnings to proceed', {
-          workflowId: input.id,
-          warningCount: structureErrors.length
-        });
+        // structureErrors is only populated when SKIP_WORKFLOW_VALIDATION is unset,
+        // so we can unconditionally block the save here.
+        return {
+          success: false,
+          saved: false,
+          error: errorMessage,
+          details: {
+            errors: structureErrors,
+            errorCount: structureErrors.length,
+            operationsApplied: diffResult.operationsApplied,
+            applied: diffResult.applied,
+            recoveryGuidance: recoverySteps,
+            note: 'Operations were applied but created an invalid workflow structure. The workflow was NOT saved to n8n to prevent UI rendering errors.',
+            autoSanitizationNote: 'Auto-sanitization runs on modified nodes during updates to fix operator structures and add missing metadata. However, it cannot fix all issues (e.g., broken connections, branch mismatches). Use the recovery guidance above to resolve remaining issues.'
+          }
+        };
       }
     }
 
