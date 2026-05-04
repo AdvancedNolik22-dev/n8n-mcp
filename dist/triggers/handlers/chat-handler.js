@@ -101,6 +101,7 @@ class ChatHandler extends base_handler_1.BaseTriggerHandler {
                 data: chatPayload,
                 timeout: input.timeout || (input.waitForResponse !== false ? 120000 : 30000),
                 validateStatus: (status) => status < 500,
+                maxRedirects: 0,
             };
             const response = await axios_1.default.request(config);
             const chatResponse = response.data;

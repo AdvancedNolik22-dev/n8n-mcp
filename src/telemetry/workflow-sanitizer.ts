@@ -150,6 +150,21 @@ export class WorkflowSanitizer {
   }
 
   /**
+   * Sanitize an arbitrary value before telemetry storage.
+   * SECURITY (GHSA-8g7g-hmwm-6rv2): redact secrets from caller-supplied
+   * values (operations diffs, validation results, error messages) prior to enqueue.
+   */
+  static sanitizeTelemetryObject<T = any>(value: any): T {
+    if (value === null || value === undefined) {
+      return value as T;
+    }
+    if (typeof value === 'string') {
+      return this.sanitizeString(value, '') as unknown as T;
+    }
+    return this.sanitizeObject(value) as T;
+  }
+
+  /**
    * Sanitize a single node
    */
   private static sanitizeNode(node: WorkflowNode): WorkflowNode {

@@ -50,6 +50,15 @@ class WorkflowSanitizer {
             workflowHash
         };
     }
+    static sanitizeTelemetryObject(value) {
+        if (value === null || value === undefined) {
+            return value;
+        }
+        if (typeof value === 'string') {
+            return this.sanitizeString(value, '');
+        }
+        return this.sanitizeObject(value);
+    }
     static sanitizeNode(node) {
         const sanitized = { ...node };
         delete sanitized.credentials;

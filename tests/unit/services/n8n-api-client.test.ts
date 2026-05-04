@@ -911,8 +911,9 @@ describe('N8nApiClient', () => {
       expect(axios.create).toHaveBeenCalledWith({
         baseURL: 'https://n8n.example.com/',
         validateStatus: expect.any(Function),
+        maxRedirects: 0,
       });
-      
+
       expect(result).toEqual(response);
     });
 
@@ -1786,6 +1787,65 @@ describe('N8nApiClient', () => {
       expect(() => {
         new N8nApiClient({ baseUrl: 'not-a-url', apiKey: 'k' });
       }).not.toThrow();
+    });
+  });
+
+  describe('path segment validation', () => {
+    beforeEach(() => {
+      client = new N8nApiClient(defaultConfig);
+    });
+
+    const invalidIds = [
+      '../credentials',
+      '../../../healthz',
+      '..%2Fcredentials',
+      '%2E%2E%2Fcredentials',
+      'workflow/../credentials',
+      'a?includeData=true',
+      'a#fragment',
+      'with space',
+      '',
+      'a'.repeat(129),
+    ];
+
+    it('rejects ids containing disallowed characters or sequences', async () => {
+      for (const badId of invalidIds) {
+        await expect(client.getWorkflow(badId)).rejects.toThrow();
+      }
+      expect(mockAxiosInstance.get).not.toHaveBeenCalled();
+    });
+
+    it('rejects disallowed ids on getCredential, deleteWorkflow, getExecution, deleteCredential', async () => {
+      await expect(client.getCredential('../tags')).rejects.toThrow();
+      await expect(client.deleteWorkflow('../../healthz')).rejects.toThrow();
+      await expect(client.getExecution('1?includeData=true')).rejects.toThrow();
+      await expect(client.deleteCredential('cred/../../variables')).rejects.toThrow();
+      expect(mockAxiosInstance.get).not.toHaveBeenCalled();
+      expect(mockAxiosInstance.delete).not.toHaveBeenCalled();
+    });
+
+    it('accepts valid nanoid-style ids', async () => {
+      const workflow = { id: 'abc-XYZ_123', name: 'Test', nodes: [], connections: {} };
+      mockAxiosInstance.get.mockResolvedValue({ data: workflow });
+
+      await expect(client.getWorkflow('abc-XYZ_123')).resolves.toEqual(workflow);
+      expect(mockAxiosInstance.get).toHaveBeenCalledWith('/workflows/abc-XYZ_123');
+    });
+
+    it('accepts valid uuid-style ids', async () => {
+      const workflow = { id: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', name: 'Test', nodes: [], connections: {} };
+      mockAxiosInstance.get.mockResolvedValue({ data: workflow });
+
+      await expect(client.getWorkflow('a1b2c3d4-e5f6-7890-abcd-ef1234567890')).resolves.toEqual(workflow);
+    });
+
+    it('rejects non-string id types', async () => {
+      // @ts-expect-error - intentional bad input
+      await expect(client.getWorkflow(123)).rejects.toThrow();
+      // @ts-expect-error - intentional bad input
+      await expect(client.getWorkflow(null)).rejects.toThrow();
+      // @ts-expect-error - intentional bad input
+      await expect(client.getWorkflow(undefined)).rejects.toThrow();
     });
   });
 });

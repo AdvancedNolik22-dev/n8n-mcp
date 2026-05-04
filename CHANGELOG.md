@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.50.1] - 2026-05-04
+
+### Security
+
+- Fix path-segment validation gap in n8n API client (GHSA-8g7g-hmwm-6rv2). Reported by @cybercraftsolutionsllc.
+- Fix redirect-following on validated webhook, form, and chat trigger requests (GHSA-8g7g-hmwm-6rv2). Reported by @cybercraftsolutionsllc.
+- Redact mutation telemetry payloads before storage (GHSA-8g7g-hmwm-6rv2). Reported by @cybercraftsolutionsllc.
+
+Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+
 ## [2.50.0] - 2026-05-02
 
 ### Added

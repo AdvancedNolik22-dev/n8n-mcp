@@ -567,5 +567,29 @@ describe('ChatHandler', () => {
       expect(config.validateStatus!(500)).toBe(false);
       expect(config.validateStatus!(503)).toBe(false);
     });
+
+    it('should disable redirect-following on outbound request', async () => {
+      const input = {
+        triggerType: 'chat' as const,
+        workflowId: 'workflow-1',
+        message: 'hi',
+      };
+      const workflow = {
+        id: 'workflow-1',
+        name: 'Test',
+        nodes: [],
+        connections: {},
+        active: true,
+      } as any;
+      const triggerInfo = {
+        triggerType: 'chat',
+        webhookPath: 'chat-test',
+      } as any;
+
+      await handler.execute(input, workflow, triggerInfo);
+
+      const config = vi.mocked(axios.request).mock.calls[0][0];
+      expect(config.maxRedirects).toBe(0);
+    });
   });
 });

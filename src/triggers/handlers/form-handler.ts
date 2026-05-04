@@ -405,6 +405,8 @@ export class FormHandler extends BaseTriggerHandler<FormTriggerInput> {
         data: formData,
         timeout: input.timeout || (input.waitForResponse !== false ? 120000 : 30000),
         validateStatus: (status) => status < 500,
+        // SECURITY (GHSA-8g7g-hmwm-6rv2): no redirect-following on validated URLs.
+        maxRedirects: 0,
       };
 
       // Make the request

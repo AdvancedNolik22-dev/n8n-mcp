@@ -33,6 +33,7 @@ import {
   DataTableDeleteRowsParams,
 } from '../types/n8n-api';
 import { handleN8nApiError, logN8nError } from '../utils/n8n-errors';
+import { encodeApiPathSegment } from '../utils/validation-schemas';
 import { cleanWorkflowForCreate, cleanWorkflowForUpdate } from './n8n-validation';
 import {
   fetchN8nVersion,
@@ -219,7 +220,7 @@ export class N8nApiClient {
 
   async getWorkflow(id: string): Promise<Workflow> {
     try {
-      const response = await this.client.get(`/workflows/${id}`);
+      const response = await this.client.get(`/workflows/${encodeApiPathSegment(id, 'workflowId')}`);
       return response.data;
     } catch (error) {
       throw handleN8nApiError(error);
@@ -246,15 +247,16 @@ export class N8nApiClient {
         // Without version info, we send all known properties (might fail on old n8n)
       }
 
+      const safeId = encodeApiPathSegment(id, 'workflowId');
       // First, try PUT method (newer n8n versions)
       try {
-        const response = await this.client.put(`/workflows/${id}`, cleanedWorkflow);
+        const response = await this.client.put(`/workflows/${safeId}`, cleanedWorkflow);
         return response.data;
       } catch (putError: any) {
         // If PUT fails with 405 (Method Not Allowed), try PATCH
         if (putError.response?.status === 405) {
           logger.debug('PUT method not supported, falling back to PATCH');
-          const response = await this.client.patch(`/workflows/${id}`, cleanedWorkflow);
+          const response = await this.client.patch(`/workflows/${safeId}`, cleanedWorkflow);
           return response.data;
         }
         throw putError;
@@ -266,7 +268,7 @@ export class N8nApiClient {
 
   async deleteWorkflow(id: string): Promise<Workflow> {
     try {
-      const response = await this.client.delete(`/workflows/${id}`);
+      const response = await this.client.delete(`/workflows/${encodeApiPathSegment(id, 'workflowId')}`);
       return response.data;
     } catch (error) {
       throw handleN8nApiError(error);
@@ -275,7 +277,7 @@ export class N8nApiClient {
 
   async transferWorkflow(id: string, destinationProjectId: string): Promise<void> {
     try {
-      await this.client.put(`/workflows/${id}/transfer`, { destinationProjectId });
+      await this.client.put(`/workflows/${encodeApiPathSegment(id, 'workflowId')}/transfer`, { destinationProjectId });
     } catch (error) {
       throw handleN8nApiError(error);
     }
@@ -283,7 +285,7 @@ export class N8nApiClient {
 
   async activateWorkflow(id: string): Promise<Workflow> {
     try {
-      const response = await this.client.post(`/workflows/${id}/activate`, {});
+      const response = await this.client.post(`/workflows/${encodeApiPathSegment(id, 'workflowId')}/activate`, {});
       return response.data;
     } catch (error) {
       throw handleN8nApiError(error);
@@ -292,7 +294,7 @@ export class N8nApiClient {
 
   async deactivateWorkflow(id: string): Promise<Workflow> {
     try {
-      const response = await this.client.post(`/workflows/${id}/deactivate`, {});
+      const response = await this.client.post(`/workflows/${encodeApiPathSegment(id, 'workflowId')}/deactivate`, {});
       return response.data;
     } catch (error) {
       throw handleN8nApiError(error);
@@ -358,7 +360,7 @@ export class N8nApiClient {
   // Execution Management
   async getExecution(id: string, includeData = false): Promise<Execution> {
     try {
-      const response = await this.client.get(`/executions/${id}`, {
+      const response = await this.client.get(`/executions/${encodeApiPathSegment(id, 'executionId')}`, {
         params: { includeData },
       });
       return response.data;
@@ -391,7 +393,7 @@ export class N8nApiClient {
 
   async deleteExecution(id: string): Promise<void> {
     try {
-      await this.client.delete(`/executions/${id}`);
+      await this.client.delete(`/executions/${encodeApiPathSegment(id, 'executionId')}`);
     } catch (error) {
       throw handleN8nApiError(error);
     }
@@ -434,6 +436,8 @@ export class N8nApiClient {
       const webhookClient = axios.create({
         baseURL: new URL('/', webhookUrl).toString(),
         validateStatus: (status: number) => status < 500, // Don't throw on 4xx
+        // SECURITY (GHSA-8g7g-hmwm-6rv2): no redirect-following on validated URLs.
+        maxRedirects: 0,
       });
 
       const response = await webhookClient.request(config);
@@ -474,7 +478,7 @@ export class N8nApiClient {
 
   async getCredential(id: string): Promise<Credential> {
     try {
-      const response = await this.client.get(`/credentials/${id}`);
+      const response = await this.client.get(`/credentials/${encodeApiPathSegment(id, 'credentialId')}`);
       return response.data;
     } catch (error) {
       throw handleN8nApiError(error);
@@ -492,7 +496,7 @@ export class N8nApiClient {
 
   async updateCredential(id: string, credential: Partial<Credential>): Promise<Credential> {
     try {
-      const response = await this.client.patch(`/credentials/${id}`, credential);
+      const response = await this.client.patch(`/credentials/${encodeApiPathSegment(id, 'credentialId')}`, credential);
       return response.data;
     } catch (error) {
       throw handleN8nApiError(error);
@@ -501,7 +505,7 @@ export class N8nApiClient {
 
   async deleteCredential(id: string): Promise<void> {
     try {
-      await this.client.delete(`/credentials/${id}`);
+      await this.client.delete(`/credentials/${encodeApiPathSegment(id, 'credentialId')}`);
     } catch (error) {
       throw handleN8nApiError(error);
     }
@@ -509,7 +513,7 @@ export class N8nApiClient {
 
   async getCredentialSchema(typeName: string): Promise<any> {
     try {
-      const response = await this.client.get(`/credentials/schema/${typeName}`);
+      const response = await this.client.get(`/credentials/schema/${encodeApiPathSegment(typeName, 'credentialTypeName')}`);
       return response.data;
     } catch (error) {
       throw handleN8nApiError(error);
@@ -550,7 +554,7 @@ export class N8nApiClient {
 
   async updateTag(id: string, tag: Partial<Tag>): Promise<Tag> {
     try {
-      const response = await this.client.patch(`/tags/${id}`, tag);
+      const response = await this.client.patch(`/tags/${encodeApiPathSegment(id, 'tagId')}`, tag);
       return response.data;
     } catch (error) {
       throw handleN8nApiError(error);
@@ -559,7 +563,7 @@ export class N8nApiClient {
 
   async deleteTag(id: string): Promise<void> {
     try {
-      await this.client.delete(`/tags/${id}`);
+      await this.client.delete(`/tags/${encodeApiPathSegment(id, 'tagId')}`);
     } catch (error) {
       throw handleN8nApiError(error);
     }
@@ -567,7 +571,7 @@ export class N8nApiClient {
 
   async updateWorkflowTags(workflowId: string, tagIds: string[]): Promise<Tag[]> {
     try {
-      const response = await this.client.put(`/workflows/${workflowId}/tags`, tagIds.filter(id => id).map(id => ({ id })));
+      const response = await this.client.put(`/workflows/${encodeApiPathSegment(workflowId, 'workflowId')}/tags`, tagIds.filter(id => id).map(id => ({ id })));
       return response.data;
     } catch (error) {
       throw handleN8nApiError(error);
@@ -631,7 +635,7 @@ export class N8nApiClient {
 
   async updateVariable(id: string, variable: Partial<Variable>): Promise<Variable> {
     try {
-      const response = await this.client.patch(`/variables/${id}`, variable);
+      const response = await this.client.patch(`/variables/${encodeApiPathSegment(id, 'variableId')}`, variable);
       return response.data;
     } catch (error) {
       throw handleN8nApiError(error);
@@ -640,7 +644,7 @@ export class N8nApiClient {
 
   async deleteVariable(id: string): Promise<void> {
     try {
-      await this.client.delete(`/variables/${id}`);
+      await this.client.delete(`/variables/${encodeApiPathSegment(id, 'variableId')}`);
     } catch (error) {
       throw handleN8nApiError(error);
     }
@@ -666,7 +670,7 @@ export class N8nApiClient {
 
   async getDataTable(id: string): Promise<DataTable> {
     try {
-      const response = await this.client.get(`/data-tables/${id}`);
+      const response = await this.client.get(`/data-tables/${encodeApiPathSegment(id, 'dataTableId')}`);
       return response.data;
     } catch (error) {
       throw handleN8nApiError(error);
@@ -675,7 +679,7 @@ export class N8nApiClient {
 
   async updateDataTable(id: string, params: { name: string }): Promise<DataTable> {
     try {
-      const response = await this.client.patch(`/data-tables/${id}`, params);
+      const response = await this.client.patch(`/data-tables/${encodeApiPathSegment(id, 'dataTableId')}`, params);
       return response.data;
     } catch (error) {
       throw handleN8nApiError(error);
@@ -684,7 +688,7 @@ export class N8nApiClient {
 
   async deleteDataTable(id: string): Promise<void> {
     try {
-      await this.client.delete(`/data-tables/${id}`);
+      await this.client.delete(`/data-tables/${encodeApiPathSegment(id, 'dataTableId')}`);
     } catch (error) {
       throw handleN8nApiError(error);
     }
@@ -692,7 +696,7 @@ export class N8nApiClient {
 
   async getDataTableRows(id: string, params: DataTableRowListParams = {}): Promise<{ data: DataTableRow[]; nextCursor?: string | null }> {
     try {
-      const response = await this.client.get(`/data-tables/${id}/rows`, {
+      const response = await this.client.get(`/data-tables/${encodeApiPathSegment(id, 'dataTableId')}/rows`, {
         params,
         paramsSerializer: (p) => this.serializeDataTableParams(p),
       });
@@ -704,7 +708,7 @@ export class N8nApiClient {
 
   async insertDataTableRows(id: string, params: DataTableInsertRowsParams): Promise<any> {
     try {
-      const response = await this.client.post(`/data-tables/${id}/rows`, params);
+      const response = await this.client.post(`/data-tables/${encodeApiPathSegment(id, 'dataTableId')}/rows`, params);
       return response.data;
     } catch (error) {
       throw handleN8nApiError(error);
@@ -713,7 +717,7 @@ export class N8nApiClient {
 
   async updateDataTableRows(id: string, params: DataTableUpdateRowsParams): Promise<any> {
     try {
-      const response = await this.client.patch(`/data-tables/${id}/rows/update`, params);
+      const response = await this.client.patch(`/data-tables/${encodeApiPathSegment(id, 'dataTableId')}/rows/update`, params);
       return response.data;
     } catch (error) {
       throw handleN8nApiError(error);
@@ -722,7 +726,7 @@ export class N8nApiClient {
 
   async upsertDataTableRow(id: string, params: DataTableUpsertRowParams): Promise<any> {
     try {
-      const response = await this.client.post(`/data-tables/${id}/rows/upsert`, params);
+      const response = await this.client.post(`/data-tables/${encodeApiPathSegment(id, 'dataTableId')}/rows/upsert`, params);
       return response.data;
     } catch (error) {
       throw handleN8nApiError(error);
@@ -731,7 +735,7 @@ export class N8nApiClient {
 
   async deleteDataTableRows(id: string, params: DataTableDeleteRowsParams): Promise<any> {
     try {
-      const response = await this.client.delete(`/data-tables/${id}/rows/delete`, {
+      const response = await this.client.delete(`/data-tables/${encodeApiPathSegment(id, 'dataTableId')}/rows/delete`, {
         params,
         paramsSerializer: (p) => this.serializeDataTableParams(p),
       });

@@ -315,6 +315,7 @@ class FormHandler extends base_handler_1.BaseTriggerHandler {
                 data: formData,
                 timeout: input.timeout || (input.waitForResponse !== false ? 120000 : 30000),
                 validateStatus: (status) => status < 500,
+                maxRedirects: 0,
             };
             const response = await axios_1.default.request(config);
             const result = this.normalizeResponse(response.data, input, startTime, {
