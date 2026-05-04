@@ -1,9 +1,14 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.SSRFProtection = void 0;
 const url_1 = require("url");
 const promises_1 = require("dns/promises");
 const net_1 = require("net");
+const http_1 = __importDefault(require("http"));
+const https_1 = __importDefault(require("https"));
 const logger_1 = require("./logger");
 const CLOUD_METADATA = new Set([
     '169.254.169.254',
@@ -64,9 +69,11 @@ class SSRFProtection {
                 return { valid: false, reason: 'Cloud metadata endpoint blocked' };
             }
             let resolvedIP;
+            let resolvedFamily;
             try {
-                const { address } = await (0, promises_1.lookup)(hostname);
+                const { address, family } = await (0, promises_1.lookup)(hostname);
                 resolvedIP = address;
+                resolvedFamily = family === 6 ? 6 : 4;
                 logger_1.logger.debug('DNS resolved for SSRF check', { hostname, resolvedIP, mode });
             }
             catch (error) {
@@ -89,7 +96,7 @@ class SSRFProtection {
                     hostname,
                     resolvedIP
                 });
-                return { valid: true };
+                return { valid: true, address: resolvedIP, family: resolvedFamily };
             }
             const isLocalhost = LOCALHOST_PATTERNS.has(hostname) ||
                 resolvedIP === '::1' ||
@@ -103,7 +110,7 @@ class SSRFProtection {
             }
             if (mode === 'moderate' && isLocalhost) {
                 logger_1.logger.info('Localhost webhook allowed (moderate mode)', { hostname, resolvedIP });
-                return { valid: true };
+                return { valid: true, address: resolvedIP, family: resolvedFamily };
             }
             if (PRIVATE_IP_RANGES.some(regex => regex.test(resolvedIP))) {
                 logger_1.logger.warn('SSRF blocked: Private IP address', { hostname, resolvedIP, mode });
@@ -122,11 +129,36 @@ class SSRFProtection {
                 });
                 return { valid: false, reason: 'IPv6 private address not allowed' };
             }
-            return { valid: true };
+            return { valid: true, address: resolvedIP, family: resolvedFamily };
         }
         catch (error) {
             return { valid: false, reason: 'Invalid URL format' };
         }
+    }
+    static createPinnedAgents(address, family) {
+        const pinnedLookup = (_hostname, options, callback) => {
+            if (options && options.all) {
+                callback(null, [{ address, family }]);
+            }
+            else {
+                callback(null, address, family);
+            }
+        };
+        const httpAgent = new http_1.default.Agent({ keepAlive: false });
+        const httpsAgent = new https_1.default.Agent({ keepAlive: false });
+        const wrap = (agent) => {
+            const proto = Object.getPrototypeOf(agent);
+            const original = proto.createConnection;
+            agent.createConnection = function (options, cb) {
+                return original.call(this, { ...options, lookup: pinnedLookup }, cb);
+            };
+            agent.options = { ...(agent.options || {}), lookup: pinnedLookup };
+            return agent;
+        };
+        return {
+            httpAgent: wrap(httpAgent),
+            httpsAgent: wrap(httpsAgent),
+        };
     }
     static validateUrlSync(urlString) {
         if (typeof urlString !== 'string' || urlString.includes('#')) {

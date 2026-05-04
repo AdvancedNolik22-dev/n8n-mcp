@@ -131,6 +131,8 @@ describe('HTTP Server instance URL validation (GHSA-4ggg-h7ph-26qr)', () => {
     process.env = { ...originalEnv };
     process.env.AUTH_TOKEN = TEST_AUTH_TOKEN;
     process.env.PORT = '0';
+    // These tests assert default-strict behavior; clear any test-env override.
+    delete process.env.WEBHOOK_SECURITY_MODE;
 
     consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
     consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});

@@ -11,7 +11,9 @@ export declare class N8nApiClient {
     private baseUrl;
     private versionInfo;
     private versionPromise;
+    private pinnedAgentsPromise;
     constructor(config: N8nApiClientConfig);
+    private getPinnedAgents;
     getVersion(): Promise<N8nVersionInfo | null>;
     private fetchVersionOnce;
     getCachedVersionInfo(): N8nVersionInfo | null;

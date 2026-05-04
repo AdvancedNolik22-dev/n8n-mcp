@@ -1,7 +1,21 @@
 import { URL } from 'url';
 import { lookup } from 'dns/promises';
 import { isIPv6 } from 'net';
+import http from 'http';
+import https from 'https';
 import { logger } from './logger';
+
+export interface PinnedAgents {
+  httpAgent: http.Agent;
+  httpsAgent: https.Agent;
+}
+
+export interface WebhookUrlValidationResult {
+  valid: boolean;
+  reason?: string;
+  address?: string;
+  family?: 4 | 6;
+}
 
 /**
  * SSRF Protection Utility with Configurable Security Modes
@@ -120,10 +134,7 @@ export class SSRFProtection {
    * const result = await SSRFProtection.validateWebhookUrl('http://localhost:5678');
    * // { valid: true }
    */
-  static async validateWebhookUrl(urlString: string): Promise<{
-    valid: boolean;
-    reason?: string
-  }> {
+  static async validateWebhookUrl(urlString: string): Promise<WebhookUrlValidationResult> {
     try {
       const url = new URL(urlString);
       const mode: SecurityMode = (process.env.WEBHOOK_SECURITY_MODE || 'strict') as SecurityMode;
@@ -149,9 +160,11 @@ export class SSRFProtection {
       // Step 3: Resolve DNS to get actual IP address
       // This prevents DNS rebinding attacks where hostname resolves to different IPs
       let resolvedIP: string;
+      let resolvedFamily: 4 | 6;
       try {
-        const { address } = await lookup(hostname);
+        const { address, family } = await lookup(hostname);
         resolvedIP = address;
+        resolvedFamily = family === 6 ? 6 : 4;
 
         logger.debug('DNS resolved for SSRF check', { hostname, resolvedIP, mode });
       } catch (error) {
@@ -180,7 +193,7 @@ export class SSRFProtection {
           hostname,
           resolvedIP
         });
-        return { valid: true };
+        return { valid: true, address: resolvedIP, family: resolvedFamily };
       }
 
       // Check if target is localhost
@@ -200,7 +213,7 @@ export class SSRFProtection {
       // MODE: moderate - Allow localhost, block private IPs
       if (mode === 'moderate' && isLocalhost) {
         logger.info('Localhost webhook allowed (moderate mode)', { hostname, resolvedIP });
-        return { valid: true };
+        return { valid: true, address: resolvedIP, family: resolvedFamily };
       }
 
       // Step 6: Check private IPv4 ranges (strict & moderate modes)
@@ -224,10 +237,57 @@ export class SSRFProtection {
         return { valid: false, reason: 'IPv6 private address not allowed' };
       }
 
-      return { valid: true };
+      return { valid: true, address: resolvedIP, family: resolvedFamily };
     } catch (error) {
       return { valid: false, reason: 'Invalid URL format' };
     }
+  }
+
+  /**
+   * Build a pair of HTTP/HTTPS agents that resolve every hostname to a fixed
+   * IP via a custom dns lookup callback. Pair with {@link validateWebhookUrl}
+   * so the transport connects to the IP that was just validated, regardless
+   * of what subsequent DNS queries would return.
+   *
+   * @security GHSA-cmrh-wvq6-wm9r
+   */
+  static createPinnedAgents(address: string, family: 4 | 6): PinnedAgents {
+    const pinnedLookup = (
+      _hostname: string,
+      options: any,
+      callback: any
+    ): void => {
+      // Node's lookup contract: when options.all is true, callback receives
+      // an array of {address, family}; otherwise (address, family).
+      // validateWebhookUrl resolved a single IP — return that for both shapes.
+      if (options && options.all) {
+        callback(null, [{ address, family }]);
+      } else {
+        callback(null, address, family);
+      }
+    };
+
+    const httpAgent = new http.Agent({ keepAlive: false });
+    const httpsAgent = new https.Agent({ keepAlive: false });
+
+    // http.Agent stores agent-level options but does NOT forward `lookup` to
+    // net.createConnection. Override createConnection so every socket gets
+    // the pinned resolver.
+    const wrap = <A extends http.Agent>(agent: A): A => {
+      const proto = Object.getPrototypeOf(agent);
+      const original = proto.createConnection;
+      (agent as any).createConnection = function (options: any, cb: any) {
+        return original.call(this, { ...options, lookup: pinnedLookup }, cb);
+      };
+      // Expose for tests; not load-bearing at runtime.
+      (agent as any).options = { ...((agent as any).options || {}), lookup: pinnedLookup };
+      return agent;
+    };
+
+    return {
+      httpAgent: wrap(httpAgent),
+      httpsAgent: wrap(httpsAgent),
+    };
   }
 
   /**

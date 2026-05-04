@@ -47,6 +47,7 @@ class N8nApiClient {
     constructor(config) {
         this.versionInfo = null;
         this.versionPromise = null;
+        this.pinnedAgentsPromise = null;
         const { baseUrl, apiKey, timeout = 30000, maxRetries = 3 } = config;
         this.maxRetries = maxRetries;
         let normalizedBase;
@@ -71,8 +72,12 @@ class N8nApiClient {
                 'X-N8N-API-KEY': apiKey,
                 'Content-Type': 'application/json',
             },
+            maxRedirects: 0,
         });
-        this.client.interceptors.request.use((config) => {
+        this.client.interceptors.request.use(async (config) => {
+            const agents = await this.getPinnedAgents();
+            config.httpAgent = agents.httpAgent;
+            config.httpsAgent = agents.httpsAgent;
             const isSensitive = config.url?.includes('/credentials') && config.method !== 'get';
             logger_1.logger.debug(`n8n API Request: ${config.method?.toUpperCase()} ${config.url}`, {
                 params: config.params,
@@ -92,6 +97,25 @@ class N8nApiClient {
             return Promise.reject(n8nError);
         });
     }
+    getPinnedAgents() {
+        if (!this.pinnedAgentsPromise) {
+            const promise = (async () => {
+                const { SSRFProtection } = await Promise.resolve().then(() => __importStar(require('../utils/ssrf-protection')));
+                const validation = await SSRFProtection.validateWebhookUrl(this.baseUrl);
+                if (!validation.valid || !validation.address || !validation.family) {
+                    throw new Error(`SSRF protection: ${validation.reason || 'baseUrl rejected'}`);
+                }
+                return SSRFProtection.createPinnedAgents(validation.address, validation.family);
+            })();
+            promise.catch(() => {
+                if (this.pinnedAgentsPromise === promise) {
+                    this.pinnedAgentsPromise = null;
+                }
+            });
+            this.pinnedAgentsPromise = promise;
+        }
+        return this.pinnedAgentsPromise;
+    }
     async getVersion() {
         if (this.versionInfo) {
             return this.versionInfo;
@@ -109,7 +133,11 @@ class N8nApiClient {
         }
     }
     async fetchVersionOnce() {
-        return (0, n8n_version_1.getCachedVersion)(this.baseUrl) ?? await (0, n8n_version_1.fetchN8nVersion)(this.baseUrl);
+        const cached = (0, n8n_version_1.getCachedVersion)(this.baseUrl);
+        if (cached)
+            return cached;
+        const agents = await this.getPinnedAgents();
+        return await (0, n8n_version_1.fetchN8nVersion)(this.baseUrl, agents);
     }
     getCachedVersionInfo() {
         return this.versionInfo;
@@ -118,9 +146,13 @@ class N8nApiClient {
         try {
             const baseUrl = this.client.defaults.baseURL || '';
             const healthzUrl = baseUrl.replace(/\/api\/v\d+\/?$/, '') + '/healthz';
+            const agents = await this.getPinnedAgents();
             const response = await axios_1.default.get(healthzUrl, {
                 timeout: 5000,
-                validateStatus: (status) => status < 500
+                validateStatus: (status) => status < 500,
+                maxRedirects: 0,
+                httpAgent: agents.httpAgent,
+                httpsAgent: agents.httpsAgent,
             });
             const versionInfo = await this.getVersion();
             if (response.status === 200 && response.data?.status === 'ok') {
@@ -320,10 +352,15 @@ class N8nApiClient {
                 params: httpMethod === 'GET' ? data : undefined,
                 timeout: waitForResponse ? 120000 : 30000,
             };
+            const pinned = validation.address && validation.family
+                ? SSRFProtection.createPinnedAgents(validation.address, validation.family)
+                : undefined;
             const webhookClient = axios_1.default.create({
                 baseURL: new URL('/', webhookUrl).toString(),
                 validateStatus: (status) => status < 500,
                 maxRedirects: 0,
+                httpAgent: pinned?.httpAgent,
+                httpsAgent: pinned?.httpsAgent,
             });
             const response = await webhookClient.request(config);
             return {

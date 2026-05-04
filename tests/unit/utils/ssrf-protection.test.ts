@@ -692,4 +692,102 @@ describe('SSRFProtection', () => {
       });
     });
   });
+
+  // SECURITY (GHSA-cmrh-wvq6-wm9r): pinned-transport regression tests.
+  describe('Transport pinning', () => {
+    beforeEach(() => {
+      delete process.env.WEBHOOK_SECURITY_MODE;
+    });
+
+    it('should return resolved address and family on success', async () => {
+      vi.mocked(dns.lookup).mockResolvedValue({ address: '93.184.216.34', family: 4 } as any);
+      const result = await SSRFProtection.validateWebhookUrl('https://example.com');
+      expect(result.valid).toBe(true);
+      expect(result.address).toBe('93.184.216.34');
+      expect(result.family).toBe(4);
+    });
+
+    it('should return IPv6 family when hostname resolves to v6', async () => {
+      vi.mocked(dns.lookup).mockResolvedValue({ address: '2606:4700:4700::1111', family: 6 } as any);
+      const result = await SSRFProtection.validateWebhookUrl('https://example.com');
+      expect(result.valid).toBe(true);
+      expect(result.address).toBe('2606:4700:4700::1111');
+      expect(result.family).toBe(6);
+    });
+
+    it('createPinnedAgents lookup returns the pinned IP regardless of hostname', () => {
+      const { httpAgent, httpsAgent } = SSRFProtection.createPinnedAgents('93.184.216.34', 4);
+      const httpLookup = (httpAgent as any).options.lookup;
+      const httpsLookup = (httpsAgent as any).options.lookup;
+      expect(typeof httpLookup).toBe('function');
+      expect(typeof httpsLookup).toBe('function');
+
+      const captured: Array<{ address: string; family: number }> = [];
+      httpLookup('rebind.example.test', {}, (_err: any, address: string, family: number) => {
+        captured.push({ address, family });
+      });
+      httpsLookup('different-host.example.test', {}, (_err: any, address: string, family: number) => {
+        captured.push({ address, family });
+      });
+
+      expect(captured).toEqual([
+        { address: '93.184.216.34', family: 4 },
+        { address: '93.184.216.34', family: 4 },
+      ]);
+    });
+
+    it('pinned lookup ignores subsequent dns.lookup answers', async () => {
+      // Validator DNS answer (the "good" IP). Subsequent dns.lookup calls
+      // simulate an attacker-controlled resolver flipping to a private IP —
+      // the pinned agent's lookup must never consult them.
+      let dnsCalls = 0;
+      vi.mocked(dns.lookup).mockImplementation(async () => {
+        dnsCalls += 1;
+        return dnsCalls === 1
+          ? ({ address: '1.1.1.1', family: 4 } as any)
+          : ({ address: '127.0.0.1', family: 4 } as any);
+      });
+
+      const validation = await SSRFProtection.validateWebhookUrl('https://rebind.example.test');
+      expect(validation.valid).toBe(true);
+      expect(validation.address).toBe('1.1.1.1');
+
+      const { httpAgent } = SSRFProtection.createPinnedAgents(
+        validation.address!,
+        validation.family!
+      );
+
+      const transportCalls: Array<{ address: string; family: number }> = [];
+      const lookup = (httpAgent as any).options.lookup as Function;
+      // Two separate "transport-time" calls: pinned lookup must return the
+      // validated IP both times and must not dispatch to dns.lookup.
+      lookup('rebind.example.test', {}, (_e: any, addr: string, fam: number) => {
+        transportCalls.push({ address: addr, family: fam });
+      });
+      lookup('rebind.example.test', {}, (_e: any, addr: string, fam: number) => {
+        transportCalls.push({ address: addr, family: fam });
+      });
+
+      expect(transportCalls).toEqual([
+        { address: '1.1.1.1', family: 4 },
+        { address: '1.1.1.1', family: 4 },
+      ]);
+      // Validator burned exactly one dns.lookup; the transport burned zero.
+      expect(dnsCalls).toBe(1);
+    });
+
+    it('agents disable keep-alive so connections do not leak across hosts', () => {
+      const { httpAgent, httpsAgent } = SSRFProtection.createPinnedAgents('1.2.3.4', 4);
+      expect((httpAgent as any).keepAlive).toBe(false);
+      expect((httpsAgent as any).keepAlive).toBe(false);
+    });
+
+    it('does not return address/family on rejection', async () => {
+      vi.mocked(dns.lookup).mockResolvedValue({ address: '169.254.169.254', family: 4 } as any);
+      const result = await SSRFProtection.validateWebhookUrl('http://attacker.example');
+      expect(result.valid).toBe(false);
+      expect(result.address).toBeUndefined();
+      expect(result.family).toBeUndefined();
+    });
+  });
 });

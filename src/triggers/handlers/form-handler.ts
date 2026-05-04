@@ -267,6 +267,11 @@ export class FormHandler extends BaseTriggerHandler<FormTriggerInput> {
         return this.errorResponse(input, `SSRF protection: ${validation.reason}`, startTime);
       }
 
+      // SECURITY (GHSA-cmrh-wvq6-wm9r): pin transport to validated IP.
+      const pinned = validation.address && validation.family
+        ? SSRFProtection.createPinnedAgents(validation.address, validation.family)
+        : undefined;
+
       // Build multipart/form-data (required by n8n form triggers)
       const formData = new FormData();
       const warnings: string[] = [];
@@ -407,6 +412,8 @@ export class FormHandler extends BaseTriggerHandler<FormTriggerInput> {
         validateStatus: (status) => status < 500,
         // SECURITY (GHSA-8g7g-hmwm-6rv2): no redirect-following on validated URLs.
         maxRedirects: 0,
+        httpAgent: pinned?.httpAgent,
+        httpsAgent: pinned?.httpsAgent,
       };
 
       // Make the request

@@ -129,15 +129,18 @@ describe('N8nApiClient', () => {
   describe('constructor', () => {
     it('should create client with default configuration', () => {
       client = new N8nApiClient(defaultConfig);
-      
-      expect(axios.create).toHaveBeenCalledWith({
+
+      expect(axios.create).toHaveBeenCalledWith(expect.objectContaining({
         baseURL: 'https://n8n.example.com/api/v1',
         timeout: 30000,
         headers: {
           'X-N8N-API-KEY': 'test-api-key',
           'Content-Type': 'application/json',
         },
-      });
+        // SECURITY (GHSA-cmrh-wvq6-wm9r): no redirect-following on the
+        // authenticated client.
+        maxRedirects: 0,
+      }));
     });
 
     it('should handle baseUrl without /api/v1', () => {
@@ -202,10 +205,14 @@ describe('N8nApiClient', () => {
       
       expect(axios.get).toHaveBeenCalledWith(
         'https://n8n.example.com/healthz',
-        {
+        expect.objectContaining({
           timeout: 5000,
           validateStatus: expect.any(Function),
-        }
+          maxRedirects: 0,
+          // SECURITY (GHSA-cmrh-wvq6-wm9r): pinned transport agents.
+          httpAgent: expect.any(Object),
+          httpsAgent: expect.any(Object),
+        })
       );
       expect(result).toEqual({ status: 'ok', features: {} });
     });
@@ -908,11 +915,14 @@ describe('N8nApiClient', () => {
       
       const result = await client.triggerWebhook(webhookRequest);
       
-      expect(axios.create).toHaveBeenCalledWith({
+      expect(axios.create).toHaveBeenCalledWith(expect.objectContaining({
         baseURL: 'https://n8n.example.com/',
         validateStatus: expect.any(Function),
         maxRedirects: 0,
-      });
+        // SECURITY (GHSA-cmrh-wvq6-wm9r): pinned transport agents.
+        httpAgent: expect.any(Object),
+        httpsAgent: expect.any(Object),
+      }));
 
       expect(result).toEqual(response);
     });
@@ -1679,21 +1689,26 @@ describe('N8nApiClient', () => {
       client = new N8nApiClient(defaultConfig);
     });
 
-    it('should log requests', () => {
-      const config = { 
-        method: 'get', 
+    it('should log requests', async () => {
+      const config = {
+        method: 'get',
         url: '/workflows',
         params: { limit: 10 },
         data: undefined,
       };
-      
-      const result = requestInterceptor(config);
-      
+
+      const result = await requestInterceptor(config);
+
       expect(logger.debug).toHaveBeenCalledWith(
         'n8n API Request: GET /workflows',
         { params: { limit: 10 }, data: undefined }
       );
+      // SECURITY (GHSA-cmrh-wvq6-wm9r): interceptor returns the config with
+      // pinned agents attached. Compare identity rather than expecting the
+      // original object back unchanged.
       expect(result).toBe(config);
+      expect(result.httpAgent).toBeDefined();
+      expect(result.httpsAgent).toBeDefined();
     });
 
     it('should log successful responses', () => {

@@ -40,6 +40,7 @@ import {
   cleanSettingsForVersion,
   getCachedVersion,
 } from './n8n-version';
+import type { PinnedAgents } from '../utils/ssrf-protection';
 
 export interface N8nApiClientConfig {
   baseUrl: string;
@@ -54,6 +55,8 @@ export class N8nApiClient {
   private baseUrl: string;
   private versionInfo: N8nVersionInfo | null = null;
   private versionPromise: Promise<N8nVersionInfo | null> | null = null;
+  // SECURITY (GHSA-cmrh-wvq6-wm9r): cached pinned transport agents.
+  private pinnedAgentsPromise: Promise<PinnedAgents> | null = null;
 
   constructor(config: N8nApiClientConfig) {
     const { baseUrl, apiKey, timeout = 30000, maxRetries = 3 } = config;
@@ -89,11 +92,19 @@ export class N8nApiClient {
         'X-N8N-API-KEY': apiKey,
         'Content-Type': 'application/json',
       },
+      // SECURITY (GHSA-cmrh-wvq6-wm9r): no redirect-following on the
+      // authenticated client; pinned agent neutralizes cross-host hops anyway.
+      maxRedirects: 0,
     });
 
-    // Request interceptor for logging
+    // Request interceptor for logging + transport pinning
     this.client.interceptors.request.use(
-      (config: InternalAxiosRequestConfig) => {
+      async (config: InternalAxiosRequestConfig) => {
+        // SECURITY (GHSA-cmrh-wvq6-wm9r): pin transport to validated IP.
+        const agents = await this.getPinnedAgents();
+        config.httpAgent = agents.httpAgent;
+        config.httpsAgent = agents.httpsAgent;
+
         // Redact request body for credential endpoints to prevent secret leakage
         const isSensitive = config.url?.includes('/credentials') && config.method !== 'get';
         logger.debug(`n8n API Request: ${config.method?.toUpperCase()} ${config.url}`, {
@@ -120,6 +131,34 @@ export class N8nApiClient {
         return Promise.reject(n8nError);
       }
     );
+  }
+
+  /**
+   * Resolve the configured baseUrl once and return HTTP/HTTPS agents that
+   * pin every connection to the validated IP.
+   *
+   * @security GHSA-cmrh-wvq6-wm9r — without this, axios performs an
+   * independent DNS lookup on every request, opening a TOCTOU window.
+   */
+  private getPinnedAgents(): Promise<PinnedAgents> {
+    if (!this.pinnedAgentsPromise) {
+      const promise = (async () => {
+        const { SSRFProtection } = await import('../utils/ssrf-protection');
+        const validation = await SSRFProtection.validateWebhookUrl(this.baseUrl);
+        if (!validation.valid || !validation.address || !validation.family) {
+          throw new Error(`SSRF protection: ${validation.reason || 'baseUrl rejected'}`);
+        }
+        return SSRFProtection.createPinnedAgents(validation.address, validation.family);
+      })();
+      // Reset on rejection so transient DNS failures don't brick the client.
+      promise.catch(() => {
+        if (this.pinnedAgentsPromise === promise) {
+          this.pinnedAgentsPromise = null;
+        }
+      });
+      this.pinnedAgentsPromise = promise;
+    }
+    return this.pinnedAgentsPromise;
   }
 
   /**
@@ -152,7 +191,11 @@ export class N8nApiClient {
    * Internal method to fetch version once
    */
   private async fetchVersionOnce(): Promise<N8nVersionInfo | null> {
-    return getCachedVersion(this.baseUrl) ?? await fetchN8nVersion(this.baseUrl);
+    const cached = getCachedVersion(this.baseUrl);
+    if (cached) return cached;
+    // SECURITY (GHSA-cmrh-wvq6-wm9r): reuse the validated transport agents.
+    const agents = await this.getPinnedAgents();
+    return await fetchN8nVersion(this.baseUrl, agents);
   }
 
   /**
@@ -169,9 +212,14 @@ export class N8nApiClient {
       const baseUrl = this.client.defaults.baseURL || '';
       const healthzUrl = baseUrl.replace(/\/api\/v\d+\/?$/, '') + '/healthz';
 
+      // SECURITY (GHSA-cmrh-wvq6-wm9r): pin transport for the unauthenticated probe.
+      const agents = await this.getPinnedAgents();
       const response = await axios.get(healthzUrl, {
         timeout: 5000,
-        validateStatus: (status) => status < 500
+        validateStatus: (status) => status < 500,
+        maxRedirects: 0,
+        httpAgent: agents.httpAgent,
+        httpsAgent: agents.httpsAgent,
       });
 
       // Also fetch version info (will be cached)
@@ -416,7 +464,7 @@ export class N8nApiClient {
       // Extract path from webhook URL
       const url = new URL(webhookUrl);
       const webhookPath = url.pathname;
-      
+
       // Make request directly to webhook endpoint
       const config: AxiosRequestConfig = {
         method: httpMethod,
@@ -432,12 +480,19 @@ export class N8nApiClient {
         timeout: waitForResponse ? 120000 : 30000,
       };
 
+      // SECURITY (GHSA-cmrh-wvq6-wm9r): pin transport to validated IP.
+      const pinned = validation.address && validation.family
+        ? SSRFProtection.createPinnedAgents(validation.address, validation.family)
+        : undefined;
+
       // Create a new axios instance for webhook requests to avoid API interceptors
       const webhookClient = axios.create({
         baseURL: new URL('/', webhookUrl).toString(),
         validateStatus: (status: number) => status < 500, // Don't throw on 4xx
         // SECURITY (GHSA-8g7g-hmwm-6rv2): no redirect-following on validated URLs.
         maxRedirects: 0,
+        httpAgent: pinned?.httpAgent,
+        httpsAgent: pinned?.httpsAgent,
       });
 
       const response = await webhookClient.request(config);
