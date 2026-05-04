@@ -45,6 +45,18 @@ const workflow_versioning_service_1 = require("../services/workflow-versioning-s
 const workflow_validator_1 = require("../services/workflow-validator");
 const enhanced_config_validator_1 = require("../services/enhanced-config-validator");
 let cachedValidator = null;
+function compareVersions(a, b) {
+    if (a.versionId !== undefined && b.versionId !== undefined) {
+        return a.versionId === b.versionId ? 'same' : 'changed';
+    }
+    if (a.versionCounter !== undefined && b.versionCounter !== undefined) {
+        return a.versionCounter === b.versionCounter ? 'same' : 'changed';
+    }
+    if (a.updatedAt !== undefined && b.updatedAt !== undefined) {
+        return a.updatedAt === b.updatedAt ? 'same' : 'changed';
+    }
+    return 'unknown';
+}
 function getValidator(repository) {
     if (!cachedValidator) {
         cachedValidator = new workflow_validator_1.WorkflowValidator(repository, enhanced_config_validator_1.EnhancedConfigValidator);
@@ -277,7 +289,69 @@ async function handleUpdatePartialWorkflow(args, repository, context) {
             }
         }
         try {
-            const updatedWorkflow = await client.updateWorkflow(input.id, diffResult.workflow);
+            let updatedWorkflow;
+            try {
+                updatedWorkflow = await client.updateWorkflow(input.id, diffResult.workflow);
+            }
+            catch (updateError) {
+                if (workflowBefore && !input.validateOnly) {
+                    let serverState = null;
+                    try {
+                        serverState = await client.getWorkflow(input.id);
+                    }
+                    catch (getErr) {
+                        logger_1.logger.debug('Post-failure GET failed; falling back to best-effort rollback', getErr);
+                    }
+                    const versionState = serverState
+                        ? compareVersions(serverState, workflowBefore)
+                        : 'unknown';
+                    if (versionState === 'same') {
+                        logger_1.logger.debug('PUT failed before persisting; skipping rollback', {
+                            workflowId: input.id,
+                        });
+                        if (updateError instanceof n8n_errors_1.N8nApiError) {
+                            throw new n8n_errors_1.N8nApiError(updateError.message, updateError.statusCode, updateError.code, {
+                                ...(updateError.details ?? {}),
+                                rollbackPerformed: false,
+                            });
+                        }
+                        throw updateError;
+                    }
+                    let rollbackPerformed = false;
+                    let rollbackErrorMessage;
+                    try {
+                        await client.updateWorkflow(input.id, workflowBefore);
+                        rollbackPerformed = true;
+                        logger_1.logger.warn('updateWorkflow failed; rolled back to prior state', {
+                            workflowId: input.id,
+                            originalError: updateError instanceof Error ? updateError.message : String(updateError),
+                        });
+                    }
+                    catch (rollbackErr) {
+                        rollbackErrorMessage = rollbackErr instanceof Error ? rollbackErr.message : String(rollbackErr);
+                        logger_1.logger.error('updateWorkflow failed AND rollback failed', {
+                            workflowId: input.id,
+                            originalError: updateError instanceof Error ? updateError.message : String(updateError),
+                            rollbackError: rollbackErrorMessage,
+                        });
+                    }
+                    if (updateError instanceof n8n_errors_1.N8nApiError) {
+                        const augmentedDetails = {
+                            ...(updateError.details ?? {}),
+                            rollbackPerformed,
+                            ...(rollbackErrorMessage ? { rollbackError: rollbackErrorMessage } : {}),
+                            ...(workflowBefore.versionId ? { priorVersionId: workflowBefore.versionId } : {}),
+                        };
+                        const suffix = rollbackPerformed
+                            ? ' (workflow restored to prior state)'
+                            : (rollbackErrorMessage
+                                ? ' (rollback also failed; workflow may be in a broken state — try n8n_workflow_versions for a backup)'
+                                : '');
+                        throw new n8n_errors_1.N8nApiError(`${updateError.message}${suffix}`, updateError.statusCode, updateError.code, augmentedDetails);
+                    }
+                }
+                throw updateError;
+            }
             let tagWarnings = [];
             if (diffResult.tagsToAdd?.length || diffResult.tagsToRemove?.length) {
                 try {

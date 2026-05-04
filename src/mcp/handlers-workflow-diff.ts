@@ -21,6 +21,28 @@ import { EnhancedConfigValidator } from '../services/enhanced-config-validator';
 // Cached validator instance to avoid recreating on every mutation
 let cachedValidator: WorkflowValidator | null = null;
 
+// Detect whether a fetched workflow has moved past the snapshot we hold.
+// Tries versionId first (most reliable), then versionCounter (n8n 1.118.1+),
+// then updatedAt. Returns 'unknown' when no comparable field is present on
+// both sides; caller falls back to attempting rollback so the safety net
+// is preserved on older n8n versions.
+type VersionCompare = 'same' | 'changed' | 'unknown';
+function compareVersions(
+  a: { versionId?: string; versionCounter?: number; updatedAt?: string },
+  b: { versionId?: string; versionCounter?: number; updatedAt?: string },
+): VersionCompare {
+  if (a.versionId !== undefined && b.versionId !== undefined) {
+    return a.versionId === b.versionId ? 'same' : 'changed';
+  }
+  if (a.versionCounter !== undefined && b.versionCounter !== undefined) {
+    return a.versionCounter === b.versionCounter ? 'same' : 'changed';
+  }
+  if (a.updatedAt !== undefined && b.updatedAt !== undefined) {
+    return a.updatedAt === b.updatedAt ? 'same' : 'changed';
+  }
+  return 'unknown';
+}
+
 /**
  * Get or create cached workflow validator instance
  * Reuses the same validator to avoid redundant NodeSimilarityService initialization
@@ -325,7 +347,100 @@ export async function handleUpdatePartialWorkflow(
 
     // Update workflow via API
     try {
-      const updatedWorkflow = await client.updateWorkflow(input.id, diffResult.workflow!);
+      // Rollback-on-error: if the PUT fails, n8n may have persisted the body
+      // before failing (e.g. an unsupported typeVersion trips the activation
+      // step within the same PUT, but the body is already saved). Re-PUT the
+      // workflowBefore snapshot in that case to restore prior state. The
+      // snapshot is captured earlier in this handler for telemetry and is
+      // safe to reuse here.
+      //
+      // To distinguish persist-then-fail from pre-save rejection, GET the
+      // server state after the failed PUT and compare versionId (or
+      // versionCounter / updatedAt — whichever the running n8n exposes). If
+      // unchanged, the body never persisted and rolling back would be both
+      // a wasted PUT and a misleading "(restored to prior state)" message.
+      let updatedWorkflow;
+      try {
+        updatedWorkflow = await client.updateWorkflow(input.id, diffResult.workflow!);
+      } catch (updateError) {
+        if (workflowBefore && !input.validateOnly) {
+          let serverState: any = null;
+          try {
+            serverState = await client.getWorkflow(input.id);
+          } catch (getErr) {
+            logger.debug('Post-failure GET failed; falling back to best-effort rollback', getErr);
+          }
+          // Only skip rollback when we KNOW the body never persisted.
+          // If serverState is missing or we can't compare versions, attempt
+          // rollback as a safety net — the bug class in #770 is silent
+          // corruption, and a redundant PUT is far less harmful than a
+          // missed rollback.
+          const versionState = serverState
+            ? compareVersions(serverState, workflowBefore)
+            : 'unknown';
+
+          if (versionState === 'same') {
+            // Pre-save rejection: nothing to roll back.
+            logger.debug('PUT failed before persisting; skipping rollback', {
+              workflowId: input.id,
+            });
+            if (updateError instanceof N8nApiError) {
+              throw new N8nApiError(
+                updateError.message,
+                updateError.statusCode,
+                updateError.code,
+                {
+                  ...((updateError.details as Record<string, unknown>) ?? {}),
+                  rollbackPerformed: false,
+                },
+              );
+            }
+            throw updateError;
+          }
+
+          // Either persist-then-fail OR couldn't determine — attempt rollback.
+          let rollbackPerformed = false;
+          let rollbackErrorMessage: string | undefined;
+          try {
+            await client.updateWorkflow(input.id, workflowBefore);
+            rollbackPerformed = true;
+            logger.warn('updateWorkflow failed; rolled back to prior state', {
+              workflowId: input.id,
+              originalError: updateError instanceof Error ? updateError.message : String(updateError),
+            });
+          } catch (rollbackErr) {
+            rollbackErrorMessage = rollbackErr instanceof Error ? rollbackErr.message : String(rollbackErr);
+            logger.error('updateWorkflow failed AND rollback failed', {
+              workflowId: input.id,
+              originalError: updateError instanceof Error ? updateError.message : String(updateError),
+              rollbackError: rollbackErrorMessage,
+            });
+          }
+
+          // Re-throw with rollback context attached so the outer N8nApiError
+          // catch (below) surfaces it with the user-friendly formatting.
+          if (updateError instanceof N8nApiError) {
+            const augmentedDetails: Record<string, unknown> = {
+              ...((updateError.details as Record<string, unknown>) ?? {}),
+              rollbackPerformed,
+              ...(rollbackErrorMessage ? { rollbackError: rollbackErrorMessage } : {}),
+              ...(workflowBefore.versionId ? { priorVersionId: workflowBefore.versionId } : {}),
+            };
+            const suffix = rollbackPerformed
+              ? ' (workflow restored to prior state)'
+              : (rollbackErrorMessage
+                  ? ' (rollback also failed; workflow may be in a broken state — try n8n_workflow_versions for a backup)'
+                  : '');
+            throw new N8nApiError(
+              `${updateError.message}${suffix}`,
+              updateError.statusCode,
+              updateError.code,
+              augmentedDetails,
+            );
+          }
+        }
+        throw updateError;
+      }
 
       // Handle tag operations via dedicated API (#599)
       let tagWarnings: string[] = [];
