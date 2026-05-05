@@ -378,6 +378,14 @@ export function tryParseJson(val: unknown): unknown {
   try { return JSON.parse(val); } catch { return val; }
 }
 
+// Some MCP clients (e.g. opencode) serialize all schema fields including optional ones,
+// sending '' instead of omitting them. Coerce blank strings to undefined so the n8n API
+// doesn't receive `?cursor=&projectId=` and reject the request. See issue #774.
+const emptyToUndefined = (v: unknown) =>
+  typeof v === 'string' && v.trim() === '' ? undefined : v;
+const optionalEmptyAware = <T extends z.ZodTypeAny>(schema: T) =>
+  z.preprocess(emptyToUndefined, schema.optional());
+
 // Zod schemas for input validation
 const createWorkflowSchema = z.object({
   name: z.string(),
@@ -410,10 +418,10 @@ const updateWorkflowSchema = z.object({
 
 const listWorkflowsSchema = z.object({
   limit: z.number().min(1).max(100).optional(),
-  cursor: z.string().optional(),
+  cursor: optionalEmptyAware(z.string()),
   active: z.boolean().optional(),
   tags: z.preprocess(tryParseJson, z.array(z.string())).optional(),
-  projectId: z.string().optional(),
+  projectId: optionalEmptyAware(z.string()),
   excludePinnedData: z.boolean().optional(),
 });
 
@@ -452,11 +460,11 @@ const autofixWorkflowSchema = z.object({
 // Schema for n8n_test_workflow tool
 const testWorkflowSchema = z.object({
   workflowId: z.string(),
-  triggerType: z.enum(['webhook', 'form', 'chat']).optional(),
-  httpMethod: z.enum(['GET', 'POST', 'PUT', 'DELETE']).optional(),
-  webhookPath: z.string().optional(),
-  message: z.string().optional(),
-  sessionId: z.string().optional(),
+  triggerType: optionalEmptyAware(z.enum(['webhook', 'form', 'chat'])),
+  httpMethod: optionalEmptyAware(z.enum(['GET', 'POST', 'PUT', 'DELETE'])),
+  webhookPath: optionalEmptyAware(z.string()),
+  message: optionalEmptyAware(z.string()),
+  sessionId: optionalEmptyAware(z.string()),
   data: z.record(z.unknown()).optional(),
   headers: z.record(z.string()).optional(),
   timeout: z.number().optional(),
@@ -465,10 +473,10 @@ const testWorkflowSchema = z.object({
 
 const listExecutionsSchema = z.object({
   limit: z.number().min(1).max(100).optional(),
-  cursor: z.string().optional(),
-  workflowId: z.string().optional(),
-  projectId: z.string().optional(),
-  status: z.enum(['success', 'error', 'waiting']).optional(),
+  cursor: optionalEmptyAware(z.string()),
+  workflowId: optionalEmptyAware(z.string()),
+  projectId: optionalEmptyAware(z.string()),
+  status: optionalEmptyAware(z.enum(['success', 'error', 'waiting'])),
   includeData: z.boolean().optional(),
 });
 
@@ -2654,7 +2662,7 @@ export async function handleDeployTemplate(
 export async function handleTriggerWebhookWorkflow(args: unknown, context?: InstanceContext): Promise<McpToolResponse> {
   const triggerWebhookSchema = z.object({
     webhookUrl: z.string().url(),
-    httpMethod: z.enum(['GET', 'POST', 'PUT', 'DELETE']).optional(),
+    httpMethod: optionalEmptyAware(z.enum(['GET', 'POST', 'PUT', 'DELETE'])),
     data: z.record(z.unknown()).optional(),
     headers: z.record(z.string()).optional(),
     waitForResponse: z.boolean().optional(),
@@ -2754,12 +2762,12 @@ const createTableSchema = z.object({
     name: z.string().min(1, 'Column name cannot be empty'),
     type: z.enum(['string', 'number', 'boolean', 'date']).optional(),
   })).min(1, 'At least one column is required'),
-  projectId: z.string().optional(),
+  projectId: optionalEmptyAware(z.string()),
 });
 
 const listTablesSchema = z.object({
   limit: z.number().min(1).max(100).optional(),
-  cursor: z.string().optional(),
+  cursor: optionalEmptyAware(z.string()),
 });
 
 const updateTableSchema = tableIdSchema.extend({
@@ -2772,10 +2780,10 @@ const coerceJsonFilter = z.preprocess(tryParseJson, dataTableFilterSchema);
 
 const getRowsSchema = tableIdSchema.extend({
   limit: z.number().min(1).max(100).optional(),
-  cursor: z.string().optional(),
+  cursor: optionalEmptyAware(z.string()),
   filter: z.union([coerceJsonFilter, z.string()]).optional(),
-  sortBy: z.string().optional(),
-  search: z.string().optional(),
+  sortBy: optionalEmptyAware(z.string()),
+  search: optionalEmptyAware(z.string()),
 });
 
 const insertRowsSchema = tableIdSchema.extend({

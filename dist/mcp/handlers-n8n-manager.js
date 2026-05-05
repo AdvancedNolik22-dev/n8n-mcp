@@ -192,6 +192,8 @@ function tryParseJson(val) {
         return val;
     }
 }
+const emptyToUndefined = (v) => typeof v === 'string' && v.trim() === '' ? undefined : v;
+const optionalEmptyAware = (schema) => zod_1.z.preprocess(emptyToUndefined, schema.optional());
 const createWorkflowSchema = zod_1.z.object({
     name: zod_1.z.string(),
     nodes: zod_1.z.preprocess(tryParseJson, zod_1.z.array(zod_1.z.any())),
@@ -219,10 +221,10 @@ const updateWorkflowSchema = zod_1.z.object({
 });
 const listWorkflowsSchema = zod_1.z.object({
     limit: zod_1.z.number().min(1).max(100).optional(),
-    cursor: zod_1.z.string().optional(),
+    cursor: optionalEmptyAware(zod_1.z.string()),
     active: zod_1.z.boolean().optional(),
     tags: zod_1.z.preprocess(tryParseJson, zod_1.z.array(zod_1.z.string())).optional(),
-    projectId: zod_1.z.string().optional(),
+    projectId: optionalEmptyAware(zod_1.z.string()),
     excludePinnedData: zod_1.z.boolean().optional(),
 });
 const validateWorkflowSchema = zod_1.z.object({
@@ -257,11 +259,11 @@ const autofixWorkflowSchema = zod_1.z.object({
 });
 const testWorkflowSchema = zod_1.z.object({
     workflowId: zod_1.z.string(),
-    triggerType: zod_1.z.enum(['webhook', 'form', 'chat']).optional(),
-    httpMethod: zod_1.z.enum(['GET', 'POST', 'PUT', 'DELETE']).optional(),
-    webhookPath: zod_1.z.string().optional(),
-    message: zod_1.z.string().optional(),
-    sessionId: zod_1.z.string().optional(),
+    triggerType: optionalEmptyAware(zod_1.z.enum(['webhook', 'form', 'chat'])),
+    httpMethod: optionalEmptyAware(zod_1.z.enum(['GET', 'POST', 'PUT', 'DELETE'])),
+    webhookPath: optionalEmptyAware(zod_1.z.string()),
+    message: optionalEmptyAware(zod_1.z.string()),
+    sessionId: optionalEmptyAware(zod_1.z.string()),
     data: zod_1.z.record(zod_1.z.unknown()).optional(),
     headers: zod_1.z.record(zod_1.z.string()).optional(),
     timeout: zod_1.z.number().optional(),
@@ -269,10 +271,10 @@ const testWorkflowSchema = zod_1.z.object({
 });
 const listExecutionsSchema = zod_1.z.object({
     limit: zod_1.z.number().min(1).max(100).optional(),
-    cursor: zod_1.z.string().optional(),
-    workflowId: zod_1.z.string().optional(),
-    projectId: zod_1.z.string().optional(),
-    status: zod_1.z.enum(['success', 'error', 'waiting']).optional(),
+    cursor: optionalEmptyAware(zod_1.z.string()),
+    workflowId: optionalEmptyAware(zod_1.z.string()),
+    projectId: optionalEmptyAware(zod_1.z.string()),
+    status: optionalEmptyAware(zod_1.z.enum(['success', 'error', 'waiting'])),
     includeData: zod_1.z.boolean().optional(),
 });
 const workflowVersionsSchema = zod_1.z.object({
@@ -2025,7 +2027,7 @@ async function handleDeployTemplate(args, templateService, repository, context) 
 async function handleTriggerWebhookWorkflow(args, context) {
     const triggerWebhookSchema = zod_1.z.object({
         webhookUrl: zod_1.z.string().url(),
-        httpMethod: zod_1.z.enum(['GET', 'POST', 'PUT', 'DELETE']).optional(),
+        httpMethod: optionalEmptyAware(zod_1.z.enum(['GET', 'POST', 'PUT', 'DELETE'])),
         data: zod_1.z.record(zod_1.z.unknown()).optional(),
         headers: zod_1.z.record(zod_1.z.string()).optional(),
         waitForResponse: zod_1.z.boolean().optional(),
@@ -2106,11 +2108,11 @@ const createTableSchema = zod_1.z.object({
         name: zod_1.z.string().min(1, 'Column name cannot be empty'),
         type: zod_1.z.enum(['string', 'number', 'boolean', 'date']).optional(),
     })).min(1, 'At least one column is required'),
-    projectId: zod_1.z.string().optional(),
+    projectId: optionalEmptyAware(zod_1.z.string()),
 });
 const listTablesSchema = zod_1.z.object({
     limit: zod_1.z.number().min(1).max(100).optional(),
-    cursor: zod_1.z.string().optional(),
+    cursor: optionalEmptyAware(zod_1.z.string()),
 });
 const updateTableSchema = tableIdSchema.extend({
     name: zod_1.z.string().min(1, 'New table name cannot be empty'),
@@ -2120,10 +2122,10 @@ const coerceJsonObject = zod_1.z.preprocess(tryParseJson, zod_1.z.record(zod_1.z
 const coerceJsonFilter = zod_1.z.preprocess(tryParseJson, dataTableFilterSchema);
 const getRowsSchema = tableIdSchema.extend({
     limit: zod_1.z.number().min(1).max(100).optional(),
-    cursor: zod_1.z.string().optional(),
+    cursor: optionalEmptyAware(zod_1.z.string()),
     filter: zod_1.z.union([coerceJsonFilter, zod_1.z.string()]).optional(),
-    sortBy: zod_1.z.string().optional(),
-    search: zod_1.z.string().optional(),
+    sortBy: optionalEmptyAware(zod_1.z.string()),
+    search: optionalEmptyAware(zod_1.z.string()),
 });
 const insertRowsSchema = tableIdSchema.extend({
     data: coerceJsonArray.pipe(zod_1.z.array(zod_1.z.record(zod_1.z.unknown())).min(1, 'At least one row is required')),

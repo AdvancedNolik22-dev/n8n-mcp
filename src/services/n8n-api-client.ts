@@ -807,7 +807,10 @@ export class N8nApiClient {
   private serializeDataTableParams(params: Record<string, any>): string {
     const parts: string[] = [];
     for (const [key, value] of Object.entries(params)) {
+      // Skip blank strings as well so MCP clients that serialize all fields
+      // don't leak empty values into the query string. See issue #774.
       if (value === undefined || value === null) continue;
+      if (typeof value === 'string' && value.trim() === '') continue;
       parts.push(`${encodeURIComponent(key)}=${encodeURIComponent(String(value))}`);
     }
     return parts.join('&');

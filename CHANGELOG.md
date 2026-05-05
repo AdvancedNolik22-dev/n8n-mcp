@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.50.4] - 2026-05-05
+
+### Fixed
+
+- `n8n_list_workflows` and `n8n_executions` no longer fail with `VALIDATION_ERROR: Empty value found for query parameter` when MCP clients (e.g. opencode v1.14.35) serialize all schema fields — including optional ones — as empty strings. Optional string params (`cursor`, `projectId`, `workflowId`, `status`, `sortBy`, `search`) are now coerced to `undefined` before reaching the n8n API. Reported and diagnosed by @ale90bsas (#774).
+- The same coercion is applied to `n8n_manage_datatable` (list/create/get-rows actions), `n8n_test_workflow`, and `n8n_trigger_webhook_workflow`, all of which had the same vulnerability surface from a broader audit.
+- `serializeDataTableParams` in the n8n API client now also skips blank-string values as defense-in-depth.
+
+Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+
 ## [2.50.3] - 2026-05-04
 
 ### Fixed

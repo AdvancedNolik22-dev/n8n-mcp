@@ -973,6 +973,52 @@ describe('handlers-n8n-manager', () => {
         })
       );
     });
+
+    // Issue #774: opencode and similar MCP clients serialize all schema fields,
+    // including optional ones, as empty strings. Empty strings must be coerced
+    // to undefined so they don't reach the n8n API as `?cursor=&projectId=`.
+    it('should coerce empty-string optional params to undefined (issue #774)', async () => {
+      mockApiClient.listWorkflows.mockResolvedValue({ data: [], nextCursor: null });
+
+      const result = await handlers.handleListWorkflows({
+        cursor: '',
+        projectId: '',
+      });
+
+      expect(result.success).toBe(true);
+      expect(mockApiClient.listWorkflows).toHaveBeenCalledWith(
+        expect.objectContaining({
+          cursor: undefined,
+          projectId: undefined,
+        })
+      );
+    });
+  });
+
+  describe('handleListExecutions', () => {
+    // Issue #774: opencode and similar MCP clients serialize all schema fields,
+    // including optional ones, as empty strings. Empty strings must be coerced
+    // to undefined so they don't reach the n8n API as `?cursor=&workflowId=`.
+    it('should coerce empty-string optional params to undefined (issue #774)', async () => {
+      mockApiClient.listExecutions.mockResolvedValue({ data: [], nextCursor: null });
+
+      const result = await handlers.handleListExecutions({
+        cursor: '',
+        workflowId: '',
+        projectId: '',
+        status: '',
+      });
+
+      expect(result.success).toBe(true);
+      expect(mockApiClient.listExecutions).toHaveBeenCalledWith(
+        expect.objectContaining({
+          cursor: undefined,
+          workflowId: undefined,
+          projectId: undefined,
+          status: undefined,
+        })
+      );
+    });
   });
 
   describe('handleValidateWorkflow', () => {
