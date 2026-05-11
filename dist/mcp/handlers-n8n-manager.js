@@ -155,6 +155,10 @@ function getN8nApiClient(context) {
         }
         return null;
     }
+    if (process.env.ENABLE_MULTI_TENANT === 'true') {
+        logger_1.logger.warn('Refusing env-credential fallback in multi-tenant mode');
+        return null;
+    }
     logger_1.logger.info('Falling back to environment configuration for n8n API client');
     const config = (0, n8n_api_1.getN8nApiConfig)();
     if (!config) {
@@ -181,6 +185,16 @@ function ensureApiConfigured(context) {
         throw new Error('n8n API not configured. Please set N8N_API_URL and N8N_API_KEY environment variables.');
     }
     return client;
+}
+function resolveN8nApiConfigForResponse(context) {
+    const fromContext = context ? (0, n8n_api_1.getN8nApiConfigFromContext)(context) : null;
+    if (fromContext) {
+        return fromContext;
+    }
+    if (process.env.ENABLE_MULTI_TENANT === 'true') {
+        return null;
+    }
+    return (0, n8n_api_1.getN8nApiConfig)();
 }
 function tryParseJson(val) {
     if (typeof val !== 'string')
@@ -1256,7 +1270,7 @@ async function handleHealthCheck(context) {
             instanceId: health.instanceId,
             n8nVersion: health.n8nVersion,
             features: health.features,
-            apiUrl: (0, n8n_api_1.getN8nApiConfig)()?.baseUrl,
+            apiUrl: resolveN8nApiConfigForResponse(context)?.baseUrl,
             mcpVersion,
             supportedN8nVersion,
             versionCheck: {
@@ -1307,7 +1321,7 @@ async function handleHealthCheck(context) {
                 error: (0, n8n_errors_1.getUserFriendlyErrorMessage)(error),
                 code: error.code,
                 details: {
-                    apiUrl: (0, n8n_api_1.getN8nApiConfig)()?.baseUrl,
+                    apiUrl: resolveN8nApiConfigForResponse(context)?.baseUrl,
                     hint: 'Check if n8n is running and API is enabled',
                     troubleshooting: [
                         '1. Verify n8n instance is running',
@@ -1492,9 +1506,10 @@ async function handleDiagnostic(request, context) {
     const mcpMode = process.env.MCP_MODE || 'stdio';
     const isDocker = process.env.IS_DOCKER === 'true';
     const cloudPlatform = detectCloudPlatform();
+    const isMultiTenant = process.env.ENABLE_MULTI_TENANT === 'true';
     const envVars = {
-        N8N_API_URL: process.env.N8N_API_URL || null,
-        N8N_API_KEY: process.env.N8N_API_KEY ? '***configured***' : null,
+        N8N_API_URL: isMultiTenant ? null : (process.env.N8N_API_URL || null),
+        N8N_API_KEY: isMultiTenant ? null : (process.env.N8N_API_KEY ? '***configured***' : null),
         NODE_ENV: process.env.NODE_ENV || 'production',
         MCP_MODE: mcpMode,
         isDocker,
@@ -1502,7 +1517,7 @@ async function handleDiagnostic(request, context) {
         nodeVersion: process.version,
         platform: process.platform
     };
-    const apiConfig = (0, n8n_api_1.getN8nApiConfig)();
+    const apiConfig = resolveN8nApiConfigForResponse(context);
     const apiConfigured = apiConfig !== null;
     const apiClient = getN8nApiClient(context);
     let apiStatus = {
@@ -1951,7 +1966,7 @@ async function handleDeployTemplate(args, templateService, repository, context) 
             connections: workflow.connections,
             settings: workflow.settings || { executionOrder: 'v1' }
         });
-        const apiConfig = context ? (0, n8n_api_1.getN8nApiConfigFromContext)(context) : (0, n8n_api_1.getN8nApiConfig)();
+        const apiConfig = resolveN8nApiConfigForResponse(context);
         const baseUrl = apiConfig?.baseUrl?.replace('/api/v1', '') || '';
         let fixesApplied = [];
         let fixSummary = '';
@@ -2623,9 +2638,7 @@ async function handleAuditInstance(args, context) {
             }
         }
         const totalMs = Date.now() - totalStart;
-        const apiConfig = context?.n8nApiUrl
-            ? { baseUrl: context.n8nApiUrl }
-            : (0, n8n_api_1.getN8nApiConfig)();
+        const apiConfig = resolveN8nApiConfigForResponse(context);
         const instanceUrl = apiConfig?.baseUrl || 'unknown';
         const report = (0, audit_report_builder_1.buildAuditReport)({
             builtinAudit,

@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.51.2] - 2026-05-11
+
+### Security
+
+- Fix silent env-credential fallback in multi-tenant HTTP mode (GHSA-jxx9-px88-pj69). When `ENABLE_MULTI_TENANT=true`, requests that omitted the `x-n8n-url` and `x-n8n-key` headers fell through to the process-level `N8N_API_URL` / `N8N_API_KEY`, letting one authenticated MCP tenant operate on the operator's n8n instance. Both paths now fail closed: the HTTP edge rejects header-less multi-tenant requests with `400 Multi-tenant headers required`, and `getN8nApiClient` refuses to construct an env-fallback client when `ENABLE_MULTI_TENANT=true`. Single-tenant mode is unchanged. Reported by @u-ktdi.
+
+Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+
 ## [2.51.1] - 2026-05-06
 
 ### Security

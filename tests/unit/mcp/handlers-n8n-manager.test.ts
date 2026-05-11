@@ -205,7 +205,7 @@ describe('handlers-n8n-manager', () => {
       // First call with initial config
       const client1 = handlers.getN8nApiClient();
       expect(N8nApiClient).toHaveBeenCalledTimes(1);
-      
+
       // Change the config URL
       vi.mocked(getN8nApiConfig).mockReturnValue({
         baseUrl: 'https://different.test.com',
@@ -213,17 +213,54 @@ describe('handlers-n8n-manager', () => {
         timeout: 30000,
         maxRetries: 3,
       });
-      
+
       // Second call should create a new client
       const client2 = handlers.getN8nApiClient();
       expect(N8nApiClient).toHaveBeenCalledTimes(2);
-      
+
       // Verify the second call used the new config
       expect(N8nApiClient).toHaveBeenNthCalledWith(2, {
         baseUrl: 'https://different.test.com',
         apiKey: 'test-key',
         timeout: 30000,
         maxRetries: 3,
+      });
+    });
+
+    describe('GHSA-jxx9-px88-pj69 — multi-tenant fail-closed', () => {
+      const originalMultiTenant = process.env.ENABLE_MULTI_TENANT;
+
+      beforeEach(() => {
+        process.env.ENABLE_MULTI_TENANT = 'true';
+      });
+
+      afterEach(() => {
+        if (originalMultiTenant === undefined) {
+          delete process.env.ENABLE_MULTI_TENANT;
+        } else {
+          process.env.ENABLE_MULTI_TENANT = originalMultiTenant;
+        }
+      });
+
+      it('returns null when called with no context in multi-tenant mode', () => {
+        // Env config is intentionally available; the guard must still refuse it.
+        const client = handlers.getN8nApiClient();
+        expect(client).toBeNull();
+        expect(N8nApiClient).not.toHaveBeenCalled();
+      });
+
+      it('returns null when called with empty context in multi-tenant mode', () => {
+        const client = handlers.getN8nApiClient({});
+        expect(client).toBeNull();
+        expect(N8nApiClient).not.toHaveBeenCalled();
+      });
+
+      it('returns null when called with context missing the API key', () => {
+        const client = handlers.getN8nApiClient({
+          n8nApiUrl: 'https://tenant.example.com',
+        });
+        expect(client).toBeNull();
+        expect(N8nApiClient).not.toHaveBeenCalled();
       });
     });
   });
@@ -1172,6 +1209,61 @@ describe('handlers-n8n-manager', () => {
       });
 
       // Clean up env vars
+      process.env.N8N_API_URL = undefined as any;
+      process.env.N8N_API_KEY = undefined as any;
+    });
+  });
+
+  describe('GHSA-jxx9-px88-pj69 — handler responses do not leak operator URL', () => {
+    const originalMultiTenant = process.env.ENABLE_MULTI_TENANT;
+
+    beforeEach(() => {
+      process.env.ENABLE_MULTI_TENANT = 'true';
+    });
+
+    afterEach(() => {
+      if (originalMultiTenant === undefined) {
+        delete process.env.ENABLE_MULTI_TENANT;
+      } else {
+        process.env.ENABLE_MULTI_TENANT = originalMultiTenant;
+      }
+    });
+
+    it('handleHealthCheck without context returns no apiUrl in multi-tenant mode', async () => {
+      // getN8nApiClient returns null in multi-tenant mode + no context,
+      // so ensureApiConfigured throws and the response goes through the
+      // generic-error branch (no apiUrl field at all).
+      const result = await handlers.handleHealthCheck();
+      expect(result.success).toBe(false);
+      // Must not surface the env config's baseUrl in the error.
+      const serialized = JSON.stringify(result);
+      expect(serialized).not.toContain('https://n8n.test.com');
+    });
+
+    it('handleDiagnostic without context reports apiConfiguration as not configured', async () => {
+      process.env.N8N_API_URL = 'https://n8n.test.com';
+      process.env.N8N_API_KEY = 'test-key';
+
+      const result = await handlers.handleDiagnostic({ params: { arguments: {} } });
+
+      expect(result.success).toBe(true);
+      expect(result.data).toMatchObject({
+        apiConfiguration: {
+          configured: false,
+          config: null,
+        },
+        environment: {
+          N8N_API_URL: null,
+          N8N_API_KEY: null,
+        },
+      });
+      // Defense-in-depth: scan the whole response body, not just one
+      // section, so a future field that surfaces the operator URL is
+      // caught even if it lives outside apiConfiguration.
+      const serialized = JSON.stringify(result.data);
+      expect(serialized).not.toContain('https://n8n.test.com');
+      expect(serialized).not.toContain('***configured***');
+
       process.env.N8N_API_URL = undefined as any;
       process.env.N8N_API_KEY = undefined as any;
     });

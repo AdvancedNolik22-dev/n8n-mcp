@@ -332,6 +332,14 @@ export function getN8nApiClient(context?: InstanceContext): N8nApiClient | null 
     return null;
   }
 
+  // SECURITY (GHSA-jxx9-px88-pj69): never fall back to process-level credentials
+  // when multi-tenant mode is enabled. A missing or incomplete tenant context
+  // must result in no client, not the operator's N8N_API_KEY.
+  if (process.env.ENABLE_MULTI_TENANT === 'true') {
+    logger.warn('Refusing env-credential fallback in multi-tenant mode');
+    return null;
+  }
+
   // Fall back to default singleton from environment
   logger.info('Falling back to environment configuration for n8n API client');
   const config = getN8nApiConfig();
@@ -370,6 +378,27 @@ function ensureApiConfigured(context?: InstanceContext): N8nApiClient {
     throw new Error('n8n API not configured. Please set N8N_API_URL and N8N_API_KEY environment variables.');
   }
   return client;
+}
+
+/**
+ * Resolve the n8n API config to surface in a tool response (apiUrl,
+ * baseUrl for workflow links, etc.). Prefers the per-request tenant
+ * context; falls back to the process-env config only in single-tenant
+ * mode.
+ *
+ * SECURITY (GHSA-jxx9-px88-pj69): in multi-tenant mode this never returns
+ * the operator's env config, so handler responses cannot disclose the
+ * operator's apiUrl to a tenant whose context was missing or incomplete.
+ */
+function resolveN8nApiConfigForResponse(context?: InstanceContext) {
+  const fromContext = context ? getN8nApiConfigFromContext(context) : null;
+  if (fromContext) {
+    return fromContext;
+  }
+  if (process.env.ENABLE_MULTI_TENANT === 'true') {
+    return null;
+  }
+  return getN8nApiConfig();
 }
 
 // MCP transports may serialize JSON objects/arrays as strings.
@@ -1719,7 +1748,7 @@ export async function handleHealthCheck(context?: InstanceContext): Promise<McpT
       instanceId: health.instanceId,
       n8nVersion: health.n8nVersion,
       features: health.features,
-      apiUrl: getN8nApiConfig()?.baseUrl,
+      apiUrl: resolveN8nApiConfigForResponse(context)?.baseUrl,
       mcpVersion,
       supportedN8nVersion,
       versionCheck: {
@@ -1779,7 +1808,7 @@ export async function handleHealthCheck(context?: InstanceContext): Promise<McpT
         error: getUserFriendlyErrorMessage(error),
         code: error.code,
         details: {
-          apiUrl: getN8nApiConfig()?.baseUrl,
+          apiUrl: resolveN8nApiConfigForResponse(context)?.baseUrl,
           hint: 'Check if n8n is running and API is enabled',
           troubleshooting: [
             '1. Verify n8n instance is running',
@@ -1983,10 +2012,14 @@ export async function handleDiagnostic(request: any, context?: InstanceContext):
   const isDocker = process.env.IS_DOCKER === 'true';
   const cloudPlatform = detectCloudPlatform();
 
-  // Check environment variables
+  // Check environment variables. SECURITY (GHSA-jxx9-px88-pj69): in
+  // multi-tenant mode the operator's env credentials are not part of the
+  // tenant's view of the system, so we mask them out of the diagnostic
+  // payload rather than letting them leak through `environment.*`.
+  const isMultiTenant = process.env.ENABLE_MULTI_TENANT === 'true';
   const envVars = {
-    N8N_API_URL: process.env.N8N_API_URL || null,
-    N8N_API_KEY: process.env.N8N_API_KEY ? '***configured***' : null,
+    N8N_API_URL: isMultiTenant ? null : (process.env.N8N_API_URL || null),
+    N8N_API_KEY: isMultiTenant ? null : (process.env.N8N_API_KEY ? '***configured***' : null),
     NODE_ENV: process.env.NODE_ENV || 'production',
     MCP_MODE: mcpMode,
     isDocker,
@@ -1996,7 +2029,7 @@ export async function handleDiagnostic(request: any, context?: InstanceContext):
   };
 
   // Check API configuration
-  const apiConfig = getN8nApiConfig();
+  const apiConfig = resolveN8nApiConfigForResponse(context);
   const apiConfigured = apiConfig !== null;
   const apiClient = getN8nApiClient(context);
 
@@ -2567,7 +2600,7 @@ export async function handleDeployTemplate(
     });
 
     // Get base URL for workflow link
-    const apiConfig = context ? getN8nApiConfigFromContext(context) : getN8nApiConfig();
+    const apiConfig = resolveN8nApiConfigForResponse(context);
     const baseUrl = apiConfig?.baseUrl?.replace('/api/v1', '') || '';
 
     // Auto-fix common issues after deployment (expression format, etc.)
@@ -3370,9 +3403,7 @@ export async function handleAuditInstance(args: unknown, context?: InstanceConte
     const totalMs = Date.now() - totalStart;
 
     // Build the API URL for the report (mask the key)
-    const apiConfig = context?.n8nApiUrl
-      ? { baseUrl: context.n8nApiUrl }
-      : getN8nApiConfig();
+    const apiConfig = resolveN8nApiConfigForResponse(context);
     const instanceUrl = apiConfig?.baseUrl || 'unknown';
 
     // Build unified markdown report
