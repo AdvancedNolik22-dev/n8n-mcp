@@ -43,6 +43,7 @@ exports.handleGetWorkflow = handleGetWorkflow;
 exports.handleGetWorkflowDetails = handleGetWorkflowDetails;
 exports.handleGetWorkflowStructure = handleGetWorkflowStructure;
 exports.handleGetWorkflowMinimal = handleGetWorkflowMinimal;
+exports.handleGetWorkflowActive = handleGetWorkflowActive;
 exports.handleUpdateWorkflow = handleUpdateWorkflow;
 exports.handleDeleteWorkflow = handleDeleteWorkflow;
 exports.handleListWorkflows = handleListWorkflows;
@@ -205,6 +206,10 @@ function tryParseJson(val) {
     catch {
         return val;
     }
+}
+function stripActiveVersion(workflow) {
+    const { activeVersion, ...rest } = workflow;
+    return rest;
 }
 const emptyToUndefined = (v) => typeof v === 'string' && v.trim() === '' ? undefined : v;
 const optionalEmptyAware = (schema) => zod_1.z.preprocess(emptyToUndefined, schema.optional());
@@ -386,7 +391,7 @@ async function handleGetWorkflow(args, context) {
         const workflow = await client.getWorkflow(id);
         return {
             success: true,
-            data: workflow
+            data: stripActiveVersion(workflow)
         };
     }
     catch (error) {
@@ -428,7 +433,7 @@ async function handleGetWorkflowDetails(args, context) {
         return {
             success: true,
             data: {
-                workflow,
+                workflow: stripActiveVersion(workflow),
                 executionStats: stats,
                 hasWebhookTrigger: (0, n8n_validation_1.hasWebhookTrigger)(workflow),
                 webhookPath: (0, n8n_validation_1.getWebhookUrl)(workflow)
@@ -519,6 +524,75 @@ async function handleGetWorkflowMinimal(args, context) {
                 createdAt: workflow.createdAt,
                 updatedAt: workflow.updatedAt
             }
+        };
+    }
+    catch (error) {
+        if (error instanceof zod_1.z.ZodError) {
+            return {
+                success: false,
+                error: 'Invalid input',
+                details: { errors: error.errors }
+            };
+        }
+        if (error instanceof n8n_errors_1.N8nApiError) {
+            return {
+                success: false,
+                error: (0, n8n_errors_1.getUserFriendlyErrorMessage)(error),
+                code: error.code
+            };
+        }
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : 'Unknown error occurred'
+        };
+    }
+}
+async function handleGetWorkflowActive(args, context) {
+    try {
+        const client = ensureApiConfigured(context);
+        const { id } = zod_1.z.object({ id: zod_1.z.string() }).parse(args);
+        const workflow = await client.getWorkflow(id);
+        const activeVersion = workflow.activeVersion;
+        const baseMeta = {
+            id: workflow.id,
+            name: workflow.name,
+            active: workflow.active,
+            isArchived: workflow.isArchived,
+            tags: workflow.tags || [],
+            settings: workflow.settings,
+            createdAt: workflow.createdAt,
+            updatedAt: workflow.updatedAt,
+        };
+        if (workflow.activeVersionId && activeVersion) {
+            return {
+                success: true,
+                data: {
+                    ...baseMeta,
+                    activeVersionId: workflow.activeVersionId,
+                    versionCreatedAt: activeVersion.createdAt ?? null,
+                    versionName: activeVersion.name ?? null,
+                    nodes: activeVersion.nodes,
+                    connections: activeVersion.connections,
+                }
+            };
+        }
+        if (workflow.active === true) {
+            return {
+                success: true,
+                data: {
+                    ...baseMeta,
+                    activeVersionId: null,
+                    versionCreatedAt: null,
+                    versionName: null,
+                    nodes: workflow.nodes,
+                    connections: workflow.connections,
+                }
+            };
+        }
+        return {
+            success: false,
+            error: 'No published version. Workflow is inactive and has never been activated. Use mode="full" to see the draft.',
+            code: 'NO_ACTIVE_VERSION'
         };
     }
     catch (error) {

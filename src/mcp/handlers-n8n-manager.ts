@@ -408,6 +408,16 @@ export function tryParseJson(val: unknown): unknown {
   try { return JSON.parse(val); } catch { return val; }
 }
 
+// n8n's draft/publish model returns a full `activeVersion` object on every workflow GET,
+// duplicating the live graph's nodes/connections alongside the draft. That payload roughly
+// doubles the response size and pushes large workflows past MCP host caps. Strip the
+// heavy object here while preserving `activeVersionId` as a lightweight pointer. Callers
+// that need the published graph should use mode='active' (handleGetWorkflowActive).
+function stripActiveVersion(workflow: Workflow): Workflow {
+  const { activeVersion, ...rest } = workflow;
+  return rest;
+}
+
 // Some MCP clients (e.g. opencode) serialize all schema fields including optional ones,
 // sending '' instead of omitting them. Coerce blank strings to undefined so the n8n API
 // doesn't receive `?cursor=&projectId=` and reject the request. See issue #774.
@@ -623,12 +633,12 @@ export async function handleGetWorkflow(args: unknown, context?: InstanceContext
   try {
     const client = ensureApiConfigured(context);
     const { id } = z.object({ id: z.string() }).parse(args);
-    
+
     const workflow = await client.getWorkflow(id);
-    
+
     return {
       success: true,
-      data: workflow
+      data: stripActiveVersion(workflow)
     };
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -658,15 +668,15 @@ export async function handleGetWorkflowDetails(args: unknown, context?: Instance
   try {
     const client = ensureApiConfigured(context);
     const { id } = z.object({ id: z.string() }).parse(args);
-    
+
     const workflow = await client.getWorkflow(id);
-    
+
     // Get recent executions for this workflow
     const executions = await client.listExecutions({
       workflowId: id,
       limit: 10
     });
-    
+
     // Calculate execution statistics
     const stats = {
       totalExecutions: executions.data.length,
@@ -674,11 +684,11 @@ export async function handleGetWorkflowDetails(args: unknown, context?: Instance
       errorCount: executions.data.filter(e => e.status === ExecutionStatus.ERROR).length,
       lastExecutionTime: executions.data[0]?.startedAt || null
     };
-    
+
     return {
       success: true,
       data: {
-        workflow,
+        workflow: stripActiveVersion(workflow),
         executionStats: stats,
         hasWebhookTrigger: hasWebhookTrigger(workflow),
         webhookPath: getWebhookUrl(workflow)
@@ -797,6 +807,99 @@ export async function handleGetWorkflowMinimal(args: unknown, context?: Instance
       };
     }
     
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error occurred'
+    };
+  }
+}
+
+/**
+ * Returns the workflow's published (active) graph. n8n's draft/publish model exposes
+ * the live version under `activeVersion`; this handler surfaces that as a single-shaped
+ * response with `nodes`/`connections` populated from the published version. Use this when
+ * you need to see what is actually running in production rather than the latest editor draft.
+ *
+ * Returns `code: 'NO_ACTIVE_VERSION'` when the workflow has never been published.
+ */
+export async function handleGetWorkflowActive(args: unknown, context?: InstanceContext): Promise<McpToolResponse> {
+  try {
+    const client = ensureApiConfigured(context);
+    const { id } = z.object({ id: z.string() }).parse(args);
+
+    const workflow = await client.getWorkflow(id);
+    const activeVersion = workflow.activeVersion;
+
+    // Common metadata fields returned regardless of which graph source we use.
+    const baseMeta = {
+      id: workflow.id,
+      name: workflow.name,
+      active: workflow.active,
+      isArchived: workflow.isArchived,
+      tags: workflow.tags || [],
+      settings: workflow.settings,
+      createdAt: workflow.createdAt,
+      updatedAt: workflow.updatedAt,
+    };
+
+    if (workflow.activeVersionId && activeVersion) {
+      return {
+        success: true,
+        data: {
+          ...baseMeta,
+          activeVersionId: workflow.activeVersionId,
+          // The version row's creation timestamp, not the publish-event time. n8n doesn't
+          // expose a dedicated "publishedAt" on the active version; in current n8n the two
+          // are within ~1s of each other but we don't claim they're identical.
+          versionCreatedAt: activeVersion.createdAt ?? null,
+          versionName: activeVersion.name ?? null,
+          nodes: activeVersion.nodes,
+          connections: activeVersion.connections,
+        }
+      };
+    }
+
+    // Fallback: older n8n versions don't have a draft/publish split — workflow.nodes IS
+    // the running graph when workflow.active is true. The same fallback covers the rare
+    // orphan case in newer n8n where activeVersionId got nulled but the workflow is still
+    // running. In both cases, returning the workflow body honors the "what is actually
+    // running" semantic of mode='active'.
+    if (workflow.active === true) {
+      return {
+        success: true,
+        data: {
+          ...baseMeta,
+          activeVersionId: null,
+          versionCreatedAt: null,
+          versionName: null,
+          nodes: workflow.nodes,
+          connections: workflow.connections,
+        }
+      };
+    }
+
+    return {
+      success: false,
+      error: 'No published version. Workflow is inactive and has never been activated. Use mode="full" to see the draft.',
+      code: 'NO_ACTIVE_VERSION'
+    };
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return {
+        success: false,
+        error: 'Invalid input',
+        details: { errors: error.errors }
+      };
+    }
+
+    if (error instanceof N8nApiError) {
+      return {
+        success: false,
+        error: getUserFriendlyErrorMessage(error),
+        code: error.code
+      };
+    }
+
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error occurred'
