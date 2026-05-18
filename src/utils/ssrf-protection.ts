@@ -3,6 +3,7 @@ import { lookup } from 'dns/promises';
 import { isIPv6 } from 'net';
 import http from 'http';
 import https from 'https';
+import ipaddr from 'ipaddr.js';
 import { logger } from './logger';
 
 export interface PinnedAgents {
@@ -68,10 +69,10 @@ const PRIVATE_IP_RANGES = [
 export class SSRFProtection {
   /**
    * IPv6 addresses that must be blocked: loopback, unspecified, link-local,
-   * unique-local, site-local (deprecated), IPv4-mapped, IPv4-compatible,
-   * 6to4, and NAT64-mapped addresses. All of these either represent private
-   * networks or embed an arbitrary IPv4 address that would bypass IPv4-only
-   * SSRF checks.
+   * unique-local, site-local (deprecated), IPv4-mapped, IPv4-compatible, and
+   * any IPv6→IPv4 tunneling address (NAT64, 6to4, Teredo) whose embedded IPv4
+   * is private or a cloud-metadata endpoint. Tunneling prefixes with a public
+   * embedded IPv4 are allowed so legitimate DNS64/NAT64 environments work.
    *
    * Hostname must be lowercased and bracket-stripped. WHATWG URL parser
    * canonicalizes IPv6 literals (zero compression, dotted-quad → hex pairs),
@@ -104,15 +105,112 @@ export class SSRFProtection {
     // Unique local fc00::/7 (RFC 4193). Covers fc00-fdff in the first hextet.
     if (/^f[cd]/.test(hostname)) return true;
 
-    // 6to4 2002::/16 (RFC 3056) — bits 16-47 embed an arbitrary IPv4 address,
-    // so any 2002: address can tunnel to RFC1918 or metadata endpoints.
-    if (hostname.startsWith('2002:')) return true;
-
-    // NAT64 64:ff9b::/96 (RFC 6052) and 64:ff9b:1::/48 (RFC 8215) — embedded
-    // IPv4 in the low 32 bits, same tunneling concern as 6to4.
-    if (hostname.startsWith('64:ff9b:')) return true;
+    // Tunneling prefixes (NAT64, 6to4, Teredo) carry an embedded IPv4. Extract
+    // it and reuse the IPv4 policy so we don't blanket-block legitimate users
+    // on DNS64/NAT64 networks reaching public IPv4 servers, while keeping the
+    // GHSA-56c3-vfp2-5qqj defense against tunneled private/metadata IPv4.
+    const embedded = SSRFProtection.tryExtractTunneledIPv4(hostname);
+    if (embedded === 'non_canonical') return true;
+    if (embedded !== null) {
+      if (CLOUD_METADATA.has(embedded)) return true;
+      if (PRIVATE_IP_RANGES.some(regex => regex.test(embedded))) return true;
+      return false;
+    }
 
     return false;
+  }
+
+  /**
+   * Extract the embedded IPv4 from a canonical IPv6 tunneling address.
+   *
+   * Returns a dotted-quad string when the address is RFC 6052 NAT64
+   * (`64:ff9b::/96`), RFC 8215 local-use NAT64 at the well-known
+   * `64:ff9b:1::/96` sub-prefix layout (parts[3..5] == 0), RFC 3056 6to4
+   * (`2002::/16`), or RFC 4380 Teredo (`2001::/32`). Returns the literal
+   * `'non_canonical'` when the prefix family is recognized but the shape
+   * does not strictly match — this includes anything in `64:ff9b:1::/48`
+   * outside the /96 sub-prefix layout (e.g. the literal RFC 6052 /48
+   * embedding that interleaves the IPv4 around a u-octet at bits 64-71).
+   * Returns `null` for any other IPv6 (caller continues with other checks).
+   *
+   * Parsing is delegated to `ipaddr.js` so we don't roll a homegrown hextet
+   * expander — a bug there would be an SSRF bypass.
+   */
+  private static tryExtractTunneledIPv4(hostname: string): string | 'non_canonical' | null {
+    let parsed: ReturnType<typeof ipaddr.parse>;
+    try {
+      parsed = ipaddr.parse(hostname);
+    } catch {
+      return null;
+    }
+    if (parsed.kind() !== 'ipv6') return null;
+    const p = (parsed as ipaddr.IPv6).parts;
+
+    // NAT64 64:ff9b: family — both layouts here put the IPv4 in the last 32
+    // bits, so we recognize only the /96 well-known position for each.
+    //   * RFC 6052 well-known: `64:ff9b::/96` (parts[2..5] all zero)
+    //   * RFC 8215 local-use: `64:ff9b:1::/96` sub-prefix within the /48 block
+    //     (parts[2]==1, parts[3..5] zero) — RFC 8215 §3.1 recommends operators
+    //     embed IPv4 in /96 sub-prefixes rather than the literal RFC 6052 /48
+    //     layout, which interleaves the IPv4 around a u-octet at bits 64-71.
+    // Any other 64:ff9b: shape (including a literal RFC 6052 /48 embedding
+    // such as `64:ff9b:1:a9fe:a9:fe00::`) is treated as non-canonical and
+    // fail-safe blocked — we won't guess which slot the OS NAT64 translator
+    // will read the IPv4 from.
+    if (p[0] === 0x64 && p[1] === 0xff9b) {
+      const rfc6052 = p[2] === 0 && p[3] === 0 && p[4] === 0 && p[5] === 0;
+      const rfc8215 = p[2] === 0x0001 && p[3] === 0 && p[4] === 0 && p[5] === 0;
+      if (rfc6052 || rfc8215) {
+        return SSRFProtection.hextetsToIPv4(p[6], p[7]);
+      }
+      return 'non_canonical';
+    }
+
+    // 6to4 2002::/16 (RFC 3056) — bits 16-47 are the embedded IPv4
+    if (p[0] === 0x2002) {
+      return SSRFProtection.hextetsToIPv4(p[1], p[2]);
+    }
+
+    // Teredo 2001::/32 (RFC 4380) — last 32 bits are the client IPv4
+    // obfuscated by XOR with all-ones.
+    if (p[0] === 0x2001 && p[1] === 0) {
+      return SSRFProtection.hextetsToIPv4(p[6] ^ 0xffff, p[7] ^ 0xffff);
+    }
+
+    return null;
+  }
+
+  private static hextetsToIPv4(hi: number, lo: number): string {
+    return `${(hi >>> 8) & 0xff}.${hi & 0xff}.${(lo >>> 8) & 0xff}.${lo & 0xff}`;
+  }
+
+  /**
+   * Decisions that must hold across every security mode, including
+   * `permissive`. Both validators return valid early under `permissive`
+   * (the documented "block cloud metadata; allow everything else" mode),
+   * so the broader `isPrivateOrMappedIpv6` gate wouldn't otherwise run
+   * against the resolved/literal IPv6.
+   *
+   * Two cases need pre-permissive rejection:
+   *   * **Tunneled metadata** — `64:ff9b::169.254.169.254` and equivalents
+   *     across NAT64/6to4/Teredo. Without this, permissive lets IMDS
+   *     traffic through an IPv6 wrapper.
+   *   * **Non-canonical tunneling prefix** — `64:ff9b:` shapes that match
+   *     neither RFC 6052 nor RFC 8215 (or 6to4/Teredo equivalents we don't
+   *     recognize). We refuse to guess what the OS translator will route
+   *     to, regardless of mode.
+   *
+   * Returns the user-facing reason string when blocking, or null when the
+   * address is fine for the mode check that follows.
+   */
+  private static tunneledIPv6BlockReason(addr: string): string | null {
+    if (!isIPv6(addr)) return null;
+    const embedded = SSRFProtection.tryExtractTunneledIPv4(addr);
+    if (embedded === 'non_canonical') return 'IPv6 private/mapped address not allowed';
+    if (typeof embedded === 'string' && CLOUD_METADATA.has(embedded)) {
+      return 'Cloud metadata endpoint blocked';
+    }
+    return null;
   }
 
   /**
@@ -183,6 +281,21 @@ export class SSRFProtection {
           mode
         });
         return { valid: false, reason: 'Hostname resolves to cloud metadata endpoint' };
+      }
+
+      // Step 4b: All-mode IPv6 tunneling gate — runs before the permissive
+      // early-return. Rejects (a) tunneled cloud-metadata (any mode) and
+      // (b) non-canonical tunneling prefixes (the fail-safe promise must
+      // hold in permissive too, not just strict/moderate).
+      const tunneledReason = SSRFProtection.tunneledIPv6BlockReason(resolvedIP);
+      if (tunneledReason !== null) {
+        logger.warn('SSRF blocked: IPv6 tunneling rejection (all-mode gate)', {
+          hostname,
+          resolvedIP,
+          mode,
+          reason: tunneledReason
+        });
+        return { valid: false, reason: tunneledReason };
       }
 
       // Step 5: Mode-specific validation
@@ -328,6 +441,13 @@ export class SSRFProtection {
 
     if (CLOUD_METADATA.has(hostname)) {
       return { valid: false, reason: 'Cloud metadata endpoint blocked' };
+    }
+
+    // All-mode IPv6 tunneling gate — rejects tunneled metadata and
+    // non-canonical tunneling prefixes before the permissive early-return.
+    const tunneledReason = SSRFProtection.tunneledIPv6BlockReason(hostname);
+    if (tunneledReason !== null) {
+      return { valid: false, reason: tunneledReason };
     }
 
     const mode: SecurityMode = (process.env.WEBHOOK_SECURITY_MODE || 'strict') as SecurityMode;

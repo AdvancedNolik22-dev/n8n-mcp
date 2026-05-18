@@ -12,6 +12,9 @@ export interface WebhookUrlValidationResult {
 }
 export declare class SSRFProtection {
     private static isPrivateOrMappedIpv6;
+    private static tryExtractTunneledIPv4;
+    private static hextetsToIPv4;
+    private static tunneledIPv6BlockReason;
     static validateWebhookUrl(urlString: string): Promise<WebhookUrlValidationResult>;
     static createPinnedAgents(address: string, family: 4 | 6): PinnedAgents;
     static validateUrlSync(urlString: string): {

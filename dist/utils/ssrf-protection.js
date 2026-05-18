@@ -9,6 +9,7 @@ const promises_1 = require("dns/promises");
 const net_1 = require("net");
 const http_1 = __importDefault(require("http"));
 const https_1 = __importDefault(require("https"));
+const ipaddr_js_1 = __importDefault(require("ipaddr.js"));
 const logger_1 = require("./logger");
 const CLOUD_METADATA = new Set([
     '169.254.169.254',
@@ -47,11 +48,58 @@ class SSRFProtection {
             return true;
         if (/^f[cd]/.test(hostname))
             return true;
-        if (hostname.startsWith('2002:'))
+        const embedded = SSRFProtection.tryExtractTunneledIPv4(hostname);
+        if (embedded === 'non_canonical')
             return true;
-        if (hostname.startsWith('64:ff9b:'))
-            return true;
+        if (embedded !== null) {
+            if (CLOUD_METADATA.has(embedded))
+                return true;
+            if (PRIVATE_IP_RANGES.some(regex => regex.test(embedded)))
+                return true;
+            return false;
+        }
         return false;
+    }
+    static tryExtractTunneledIPv4(hostname) {
+        let parsed;
+        try {
+            parsed = ipaddr_js_1.default.parse(hostname);
+        }
+        catch {
+            return null;
+        }
+        if (parsed.kind() !== 'ipv6')
+            return null;
+        const p = parsed.parts;
+        if (p[0] === 0x64 && p[1] === 0xff9b) {
+            const rfc6052 = p[2] === 0 && p[3] === 0 && p[4] === 0 && p[5] === 0;
+            const rfc8215 = p[2] === 0x0001 && p[3] === 0 && p[4] === 0 && p[5] === 0;
+            if (rfc6052 || rfc8215) {
+                return SSRFProtection.hextetsToIPv4(p[6], p[7]);
+            }
+            return 'non_canonical';
+        }
+        if (p[0] === 0x2002) {
+            return SSRFProtection.hextetsToIPv4(p[1], p[2]);
+        }
+        if (p[0] === 0x2001 && p[1] === 0) {
+            return SSRFProtection.hextetsToIPv4(p[6] ^ 0xffff, p[7] ^ 0xffff);
+        }
+        return null;
+    }
+    static hextetsToIPv4(hi, lo) {
+        return `${(hi >>> 8) & 0xff}.${hi & 0xff}.${(lo >>> 8) & 0xff}.${lo & 0xff}`;
+    }
+    static tunneledIPv6BlockReason(addr) {
+        if (!(0, net_1.isIPv6)(addr))
+            return null;
+        const embedded = SSRFProtection.tryExtractTunneledIPv4(addr);
+        if (embedded === 'non_canonical')
+            return 'IPv6 private/mapped address not allowed';
+        if (typeof embedded === 'string' && CLOUD_METADATA.has(embedded)) {
+            return 'Cloud metadata endpoint blocked';
+        }
+        return null;
     }
     static async validateWebhookUrl(urlString) {
         try {
@@ -90,6 +138,16 @@ class SSRFProtection {
                     mode
                 });
                 return { valid: false, reason: 'Hostname resolves to cloud metadata endpoint' };
+            }
+            const tunneledReason = SSRFProtection.tunneledIPv6BlockReason(resolvedIP);
+            if (tunneledReason !== null) {
+                logger_1.logger.warn('SSRF blocked: IPv6 tunneling rejection (all-mode gate)', {
+                    hostname,
+                    resolvedIP,
+                    mode,
+                    reason: tunneledReason
+                });
+                return { valid: false, reason: tunneledReason };
             }
             if (mode === 'permissive') {
                 logger_1.logger.warn('SSRF protection in permissive mode (localhost and private IPs allowed)', {
@@ -183,6 +241,10 @@ class SSRFProtection {
         }
         if (CLOUD_METADATA.has(hostname)) {
             return { valid: false, reason: 'Cloud metadata endpoint blocked' };
+        }
+        const tunneledReason = SSRFProtection.tunneledIPv6BlockReason(hostname);
+        if (tunneledReason !== null) {
+            return { valid: false, reason: tunneledReason };
         }
         const mode = (process.env.WEBHOOK_SECURITY_MODE || 'strict');
         if (mode === 'permissive') {
