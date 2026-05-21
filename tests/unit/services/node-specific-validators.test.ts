@@ -1948,6 +1948,43 @@ return [{"json": {"result": result}}]
         expect(primitiveErrors).toHaveLength(0);
       });
 
+      it('should not error on primitive-looking returns in comments or strings', () => {
+        context.config = {
+          language: 'javaScript',
+          jsCode: [
+            'const quoted = "not code: return \\"bad\\"";',
+            'const templated = `not code: return false`;',
+            '// return "bad";',
+            '/* return null; */',
+            'return [{json: {quoted, templated}}];',
+          ].join('\n')
+        };
+
+        NodeSpecificValidators.validateCode(context);
+
+        const primitiveErrors = context.errors.filter(e => e.message === 'Cannot return primitive values directly');
+        expect(primitiveErrors).toHaveLength(0);
+      });
+
+      it('should not error on primitive helper returns inside nested blocks', () => {
+        context.config = {
+          language: 'javaScript',
+          jsCode: [
+            'const normalize = (value) => {',
+            '  /* helper can return primitives */',
+            '  if (!value) { return ""; }',
+            '  return value;',
+            '};',
+            'return [{json: {value: normalize("ok")}}];',
+          ].join('\n')
+        };
+
+        NodeSpecificValidators.validateCode(context);
+
+        const primitiveErrors = context.errors.filter(e => e.message === 'Cannot return primitive values directly');
+        expect(primitiveErrors).toHaveLength(0);
+      });
+
       it('should still error on primitive top-level return when helper functions exist', () => {
         context.config = {
           language: 'javaScript',
