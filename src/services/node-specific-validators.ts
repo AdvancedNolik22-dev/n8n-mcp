@@ -1417,14 +1417,7 @@ export class NodeSpecificValidators {
         });
       }
 
-      // Skip primitive return check when helper functions are present,
-      // since we can't distinguish top-level vs nested returns without AST.
-      // Matches: function name(), const/let/var name = [async] function/arrow.
-      // Length guard caps CodeQL polynomial-ReDoS exposure on the
-      // alternation with nested `[^)]*` groups.
-      const hasHelperFunctions = code.length <= MAX_CODE_LENGTH
-        && /(?:function\s+\w+\s*\(|(?:const|let|var)\s+\w+\s*=\s*(?:async\s+)?(?:function|\([^)]*\)\s*=>|\w+\s*=>))/.test(code);
-      if (!isRunOncePerItem && !hasHelperFunctions && /return\s+(true|false|null|undefined|\d+|['"`])/m.test(code)) {
+      if (!isRunOncePerItem && this.hasTopLevelPrimitiveReturn(code)) {
         errors.push({
           type: 'invalid_value',
           property: 'jsCode',
@@ -1476,6 +1469,123 @@ export class NodeSpecificValidators {
         });
       }
     }
+  }
+
+  private static hasTopLevelPrimitiveReturn(code: string): boolean {
+    if (code.length > MAX_CODE_LENGTH) {
+      return /return\s+(true|false|null|undefined|\d+|['"`])/m.test(code);
+    }
+
+    const topLevelCode = this.stripNestedJavaScriptFunctionBodies(code);
+    return /return\s+(true|false|null|undefined|\d+|['"`])/m.test(topLevelCode);
+  }
+
+  private static stripNestedJavaScriptFunctionBodies(code: string): string {
+    let result = '';
+    let braceDepth = 0;
+    const functionBodyDepths: number[] = [];
+    let state: 'code' | 'single' | 'double' | 'template' | 'lineComment' | 'blockComment' = 'code';
+
+    for (let i = 0; i < code.length; i++) {
+      const char = code[i];
+      const next = code[i + 1];
+      const inFunctionBody = functionBodyDepths.length > 0;
+
+      if (state === 'lineComment') {
+        result += char === '\n' ? '\n' : ' ';
+        if (char === '\n') state = 'code';
+        continue;
+      }
+
+      if (state === 'blockComment') {
+        result += char === '\n' ? '\n' : ' ';
+        if (char === '*' && next === '/') {
+          result += ' ';
+          i++;
+          state = 'code';
+        }
+        continue;
+      }
+
+      if (state === 'single' || state === 'double' || state === 'template') {
+        result += char === '\n' ? '\n' : ' ';
+        if (char === '\\') {
+          if (next) {
+            result += next === '\n' ? '\n' : ' ';
+            i++;
+          }
+          continue;
+        }
+        if (
+          (state === 'single' && char === "'") ||
+          (state === 'double' && char === '"') ||
+          (state === 'template' && char === '`')
+        ) {
+          state = 'code';
+        }
+        continue;
+      }
+
+      if (char === '/' && next === '/') {
+        result += '  ';
+        i++;
+        state = 'lineComment';
+        continue;
+      }
+
+      if (char === '/' && next === '*') {
+        result += '  ';
+        i++;
+        state = 'blockComment';
+        continue;
+      }
+
+      if (char === "'") {
+        result += inFunctionBody ? ' ' : char;
+        state = 'single';
+        continue;
+      }
+
+      if (char === '"') {
+        result += inFunctionBody ? ' ' : char;
+        state = 'double';
+        continue;
+      }
+
+      if (char === '`') {
+        result += inFunctionBody ? ' ' : char;
+        state = 'template';
+        continue;
+      }
+
+      if (char === '{') {
+        if (this.startsJavaScriptFunctionBody(code, i)) {
+          functionBodyDepths.push(braceDepth + 1);
+        }
+        braceDepth++;
+        result += functionBodyDepths.length > 0 ? ' ' : char;
+        continue;
+      }
+
+      if (char === '}') {
+        result += inFunctionBody ? ' ' : char;
+        if (functionBodyDepths[functionBodyDepths.length - 1] === braceDepth) {
+          functionBodyDepths.pop();
+        }
+        braceDepth = Math.max(0, braceDepth - 1);
+        continue;
+      }
+
+      result += inFunctionBody ? (char === '\n' ? '\n' : ' ') : char;
+    }
+
+    return result;
+  }
+
+  private static startsJavaScriptFunctionBody(code: string, openBraceIndex: number): boolean {
+    const prefix = code.slice(Math.max(0, openBraceIndex - 500), openBraceIndex);
+    return /=>\s*$/.test(prefix)
+      || /(?:^|[^\w$])(?:async\s+)?function(?:\s+[\w$]+)?\s*\([^)]*\)\s*$/.test(prefix);
   }
   
   private static validateN8nVariables(

@@ -1948,6 +1948,32 @@ return [{"json": {"result": result}}]
         expect(primitiveErrors).toHaveLength(0);
       });
 
+      it('should still error on primitive top-level return when helper functions exist', () => {
+        context.config = {
+          language: 'javaScript',
+          jsCode: 'const isValid = (item) => { return false; };\nconst items = $input.all();\nif (!items.length) return "empty";\nreturn items.filter(isValid).map(i => ({json: i.json}));'
+        };
+
+        NodeSpecificValidators.validateCode(context);
+
+        expect(context.errors).toContainEqual(expect.objectContaining({
+          message: 'Cannot return primitive values directly'
+        }));
+      });
+
+      it('should still error on primitive try-block return when helper functions exist', () => {
+        context.config = {
+          language: 'javaScript',
+          jsCode: 'function normalize(item) { return null; }\ntry {\n  const items = $input.all();\n  return "bad";\n} catch (error) {\n  return [{json: {error: error.message}}];\n}'
+        };
+
+        NodeSpecificValidators.validateCode(context);
+
+        expect(context.errors).toContainEqual(expect.objectContaining({
+          message: 'Cannot return primitive values directly'
+        }));
+      });
+
       it('should still error on primitive return without helper functions', () => {
         context.config = {
           language: 'javaScript',
