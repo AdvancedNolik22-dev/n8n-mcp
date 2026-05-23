@@ -8,6 +8,7 @@ import {
   ListResourceTemplatesRequestSchema,
   ReadResourceRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
+import type { CallToolResult, Tool } from '@modelcontextprotocol/sdk/types.js';
 import { existsSync, readFileSync, promises as fs } from 'fs';
 import path from 'path';
 import { n8nDocumentationToolsFinal } from './tools';
@@ -46,6 +47,7 @@ import {
 } from '../utils/protocol-version';
 import { InstanceContext } from '../types/instance-context';
 import { GenerateWorkflowHandler, GenerateWorkflowHelpers } from '../types/generate-workflow';
+import type { AdditionalTool, AdditionalToolContext } from '../types/additional-tools';
 import { telemetry } from '../telemetry';
 import { EarlyErrorLogger } from '../telemetry/early-error-logger';
 import { STARTUP_CHECKPOINTS } from '../telemetry/startup-checkpoints';
@@ -161,6 +163,7 @@ type NodeInfoResponse = NodeMinimalInfo | NodeStandardInfo | NodeFullInfo | Vers
 
 interface MCPServerOptions {
   generateWorkflowHandler?: GenerateWorkflowHandler;
+  additionalTools?: AdditionalTool[];
 }
 
 export class N8NDocumentationMCPServer {
@@ -180,11 +183,13 @@ export class N8NDocumentationMCPServer {
   private sharedDbState: SharedDatabaseState | null = null;  // Reference to shared DB state for release
   private isShutdown: boolean = false;  // Prevent double-shutdown
   private generateWorkflowHandler?: GenerateWorkflowHandler;
+  private additionalToolsByName: Map<string, AdditionalTool> = new Map();
 
   constructor(instanceContext?: InstanceContext, earlyLogger?: EarlyErrorLogger, options?: MCPServerOptions) {
     this.instanceContext = instanceContext;
     this.earlyLogger = earlyLogger || null;
     this.generateWorkflowHandler = options?.generateWorkflowHandler;
+    this.registerAdditionalTools(options?.additionalTools || []);
     // Check for test environment first
     const envDbPath = process.env.NODE_DB_PATH;
     let dbPath: string | null = null;
@@ -277,6 +282,40 @@ export class N8NDocumentationMCPServer {
     UIAppRegistry.load();
     SkillResourceRegistry.load();
     this.setupHandlers();
+  }
+
+  private registerAdditionalTools(additionalTools: AdditionalTool[]): void {
+    if (additionalTools.length === 0) {
+      return;
+    }
+
+    const builtInToolNames = new Set([
+      ...n8nDocumentationToolsFinal.map(tool => tool.name),
+      ...n8nManagementTools.map(tool => tool.name),
+    ]);
+
+    for (const additionalTool of additionalTools) {
+      const toolName = additionalTool.tool.name;
+      if (builtInToolNames.has(toolName)) {
+        throw new Error(`Additional tool "${toolName}" collides with a built-in tool`);
+      }
+
+      if (this.additionalToolsByName.has(toolName)) {
+        throw new Error(`Duplicate additional tool "${toolName}" provided`);
+      }
+
+      this.additionalToolsByName.set(toolName, additionalTool);
+    }
+  }
+
+  private getEnabledAdditionalTools(disabledTools: Set<string>): Tool[] {
+    if (this.additionalToolsByName.size === 0) {
+      return [];
+    }
+
+    return Array.from(this.additionalToolsByName.values())
+      .map(toolDef => toolDef.tool)
+      .filter(tool => !disabledTools.has(tool.name));
   }
 
   /**
@@ -656,9 +695,14 @@ export class N8NDocumentationMCPServer {
         });
       }
 
+      const enabledAdditionalTools = this.getEnabledAdditionalTools(disabledTools);
+      tools.push(...enabledAdditionalTools);
+
       // Log filtered tools count if any tools are disabled
       if (disabledTools.size > 0) {
-        const totalAvailableTools = n8nDocumentationToolsFinal.length + (shouldIncludeManagementTools ? n8nManagementTools.length : 0);
+        const totalAvailableTools = n8nDocumentationToolsFinal.length +
+          (shouldIncludeManagementTools ? n8nManagementTools.length : 0) +
+          this.additionalToolsByName.size;
         logger.debug(`Filtered ${disabledTools.size} disabled tools, ${tools.length}/${totalAvailableTools} tools available`);
       }
       
@@ -782,7 +826,10 @@ export class N8NDocumentationMCPServer {
         // SECURITY (GHSA-wg4g-395p-mqv3): log metadata only, not raw arg values.
         logger.debug(`Executing tool: ${name}`, summarizeToolCallArgs(processedArgs));
         const startTime = Date.now();
-        const result = await this.executeTool(name, processedArgs);
+        const additionalTool = this.additionalToolsByName.get(name);
+        const result: CallToolResult | any = additionalTool
+          ? await additionalTool.handler(processedArgs ?? {}, { instanceContext: this.instanceContext } satisfies AdditionalToolContext)
+          : await this.executeTool(name, processedArgs);
         const duration = Date.now() - startTime;
         logger.debug(`Tool ${name} executed successfully`);
 
@@ -1360,6 +1407,11 @@ export class N8NDocumentationMCPServer {
     // Validate that args is actually an object
     if (typeof args !== 'object' || args === null) {
       throw new Error(`Invalid arguments for tool ${name}: expected object, got ${typeof args}`);
+    }
+
+    const additionalTool = this.additionalToolsByName.get(name);
+    if (additionalTool) {
+      return additionalTool.handler(args, { instanceContext: this.instanceContext } satisfies AdditionalToolContext);
     }
 
     switch (name) {
