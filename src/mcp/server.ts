@@ -8,7 +8,8 @@ import {
   ListResourceTemplatesRequestSchema,
   ReadResourceRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
-import type { CallToolResult, Tool } from '@modelcontextprotocol/sdk/types.js';
+import type { Tool } from '@modelcontextprotocol/sdk/types.js';
+import type { ToolDefinition } from '../types';
 import { existsSync, readFileSync, promises as fs } from 'fs';
 import path from 'path';
 import { n8nDocumentationToolsFinal } from './tools';
@@ -285,10 +286,6 @@ export class N8NDocumentationMCPServer {
   }
 
   private registerAdditionalTools(additionalTools: AdditionalTool[]): void {
-    if (additionalTools.length === 0) {
-      return;
-    }
-
     const builtInToolNames = new Set([
       ...n8nDocumentationToolsFinal.map(tool => tool.name),
       ...n8nManagementTools.map(tool => tool.name),
@@ -304,18 +301,32 @@ export class N8NDocumentationMCPServer {
         throw new Error(`Duplicate additional tool "${toolName}" provided`);
       }
 
-      this.additionalToolsByName.set(toolName, additionalTool);
+      // Defensive deep copy of the tool definition so per-session servers that
+      // share the same engine-level additionalTools array cannot mutate each
+      // other's tool descriptors (cross-tenant isolation).
+      this.additionalToolsByName.set(toolName, {
+        tool: structuredClone(additionalTool.tool),
+        handler: additionalTool.handler,
+      });
     }
   }
 
   private getEnabledAdditionalTools(disabledTools: Set<string>): Tool[] {
-    if (this.additionalToolsByName.size === 0) {
-      return [];
-    }
-
     return Array.from(this.additionalToolsByName.values())
       .map(toolDef => toolDef.tool)
       .filter(tool => !disabledTools.has(tool.name));
+  }
+
+  /**
+   * Look up a tool's schema by name across built-in and host-provided tools.
+   * Used by the arg preprocessing pipeline so additional tools receive the
+   * same client-bug coercion and schema validation as built-ins.
+   */
+  private findToolSchema(name: string): { name: string; inputSchema?: any } | undefined {
+    const builtIn = [...n8nDocumentationToolsFinal, ...n8nManagementTools]
+      .find(t => t.name === name);
+    if (builtIn) return builtIn;
+    return this.additionalToolsByName.get(name)?.tool;
   }
 
   /**
@@ -696,7 +707,10 @@ export class N8NDocumentationMCPServer {
       }
 
       const enabledAdditionalTools = this.getEnabledAdditionalTools(disabledTools);
-      tools.push(...enabledAdditionalTools);
+      // MCP `Tool` has an optional `description`; `ToolDefinition` (used by built-ins)
+      // requires it. The merged array is returned as MCP `Tool[]` by the SDK at the
+      // wire layer, so the cast is structurally safe.
+      tools.push(...(enabledAdditionalTools as unknown as ToolDefinition[]));
 
       // Log filtered tools count if any tools are disabled
       if (disabledTools.size > 0) {
@@ -822,19 +836,17 @@ export class N8NDocumentationMCPServer {
         processedArgs = JSON.parse(JSON.stringify(processedArgs));
       }
 
+      const isAdditionalTool = this.additionalToolsByName.has(name);
+
       try {
         // SECURITY (GHSA-wg4g-395p-mqv3): log metadata only, not raw arg values.
         logger.debug(`Executing tool: ${name}`, summarizeToolCallArgs(processedArgs));
         const startTime = Date.now();
-        const isAdditionalTool = this.additionalToolsByName.has(name);
-        const result: CallToolResult = await this.executeTool(name, processedArgs);
+        const result = await this.executeTool(name, processedArgs);
         const duration = Date.now() - startTime;
         logger.debug(`Tool ${name} executed successfully`);
 
-        // Track tool usage and sequence.
-        // Additional tools receive the same telemetry treatment as built-ins:
-        // tool name and duration are recorded. Hosts that prefer not to emit
-        // internal tool names in telemetry should filter at the telemetry sink.
+        // Track tool usage and sequence
         telemetry.trackToolUsage(name, true, duration);
 
         // Track tool sequence if there was a previous tool
@@ -848,8 +860,7 @@ export class N8NDocumentationMCPServer {
         this.previousToolTimestamp = Date.now();
 
         if (isAdditionalTool) {
-          // Return the handler's CallToolResult directly, skipping the
-          // built-in stringify/wrap path so the host controls the response shape.
+          // Host controls the response shape.
           return result;
         }
         
@@ -917,6 +928,22 @@ export class N8NDocumentationMCPServer {
         // Update previous tool tracking (even for failed tools)
         this.previousTool = name;
         this.previousToolTimestamp = Date.now();
+
+        if (isAdditionalTool) {
+          // Host controls error response shape. Skip the n8n-specific guidance
+          // and arg-type diagnostic the built-in branch appends — those leak
+          // n8n vocabulary into host tool surfaces. Handlers that want a
+          // structured error response should return one instead of throwing.
+          return {
+            content: [
+              {
+                type: 'text',
+                text: `Error executing tool ${name}: ${errorMessage}`,
+              },
+            ],
+            isError: true,
+          };
+        }
 
         // Provide more helpful error messages for common n8n issues
         let helpfulMessage = `Error executing tool ${name}: ${errorMessage}`;
@@ -1215,9 +1242,9 @@ export class N8NDocumentationMCPServer {
       return false;
     }
 
-    // Get all available tools
-    const allTools = [...n8nDocumentationToolsFinal, ...n8nManagementTools];
-    const tool = allTools.find(t => t.name === toolName);
+    // Look up tool schema across built-in and additional tools so host-injected
+    // tools receive the same schema-driven validation as built-ins.
+    const tool = this.findToolSchema(toolName);
     if (!tool || !tool.inputSchema) {
       return true; // If no schema, assume valid
     }
@@ -1297,8 +1324,10 @@ export class N8NDocumentationMCPServer {
   ): Record<string, any> | undefined {
     if (!args || typeof args !== 'object') return args;
 
-    const allTools = [...n8nDocumentationToolsFinal, ...n8nManagementTools];
-    const tool = allTools.find(t => t.name === toolName);
+    // Look up tool schema across built-in and additional tools so host-injected
+    // tools receive the same client-bug coercion (string→object, string→number,
+    // etc.) that built-ins do.
+    const tool = this.findToolSchema(toolName);
     if (!tool?.inputSchema?.properties) return args;
 
     const properties = tool.inputSchema.properties;

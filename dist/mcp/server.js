@@ -168,9 +168,6 @@ class N8NDocumentationMCPServer {
         this.setupHandlers();
     }
     registerAdditionalTools(additionalTools) {
-        if (additionalTools.length === 0) {
-            return;
-        }
         const builtInToolNames = new Set([
             ...tools_1.n8nDocumentationToolsFinal.map(tool => tool.name),
             ...tools_n8n_manager_1.n8nManagementTools.map(tool => tool.name),
@@ -183,16 +180,23 @@ class N8NDocumentationMCPServer {
             if (this.additionalToolsByName.has(toolName)) {
                 throw new Error(`Duplicate additional tool "${toolName}" provided`);
             }
-            this.additionalToolsByName.set(toolName, additionalTool);
+            this.additionalToolsByName.set(toolName, {
+                tool: structuredClone(additionalTool.tool),
+                handler: additionalTool.handler,
+            });
         }
     }
     getEnabledAdditionalTools(disabledTools) {
-        if (this.additionalToolsByName.size === 0) {
-            return [];
-        }
         return Array.from(this.additionalToolsByName.values())
             .map(toolDef => toolDef.tool)
             .filter(tool => !disabledTools.has(tool.name));
+    }
+    findToolSchema(name) {
+        const builtIn = [...tools_1.n8nDocumentationToolsFinal, ...tools_n8n_manager_1.n8nManagementTools]
+            .find(t => t.name === name);
+        if (builtIn)
+            return builtIn;
+        return this.additionalToolsByName.get(name)?.tool;
     }
     async close() {
         try {
@@ -541,16 +545,13 @@ class N8NDocumentationMCPServer {
             if (processedArgs) {
                 processedArgs = JSON.parse(JSON.stringify(processedArgs));
             }
+            const isAdditionalTool = this.additionalToolsByName.has(name);
             try {
                 logger_1.logger.debug(`Executing tool: ${name}`, (0, redaction_1.summarizeToolCallArgs)(processedArgs));
                 const startTime = Date.now();
-                const isAdditionalTool = this.additionalToolsByName.has(name);
                 const result = await this.executeTool(name, processedArgs);
                 const duration = Date.now() - startTime;
                 logger_1.logger.debug(`Tool ${name} executed successfully`);
-                // Additional tools receive the same telemetry treatment as built-ins:
-                // tool name and duration are recorded. Hosts that prefer not to emit
-                // internal tool names in telemetry should filter at the telemetry sink.
                 telemetry_1.telemetry.trackToolUsage(name, true, duration);
                 if (this.previousTool) {
                     const timeDelta = Date.now() - this.previousToolTimestamp;
@@ -559,8 +560,6 @@ class N8NDocumentationMCPServer {
                 this.previousTool = name;
                 this.previousToolTimestamp = Date.now();
                 if (isAdditionalTool) {
-                    // Return the handler's CallToolResult directly, skipping the
-                    // built-in stringify/wrap path so the host controls the response shape.
                     return result;
                 }
                 let responseText;
@@ -608,6 +607,17 @@ class N8NDocumentationMCPServer {
                 }
                 this.previousTool = name;
                 this.previousToolTimestamp = Date.now();
+                if (isAdditionalTool) {
+                    return {
+                        content: [
+                            {
+                                type: 'text',
+                                text: `Error executing tool ${name}: ${errorMessage}`,
+                            },
+                        ],
+                        isError: true,
+                    };
+                }
                 let helpfulMessage = `Error executing tool ${name}: ${errorMessage}`;
                 if (errorMessage.includes('required') || errorMessage.includes('missing')) {
                     helpfulMessage += '\n\nNote: This error often occurs when the AI agent sends incomplete or incorrectly formatted parameters. Please ensure all required fields are provided with the correct types.';
@@ -850,8 +860,7 @@ class N8NDocumentationMCPServer {
         if (!args || typeof args !== 'object') {
             return false;
         }
-        const allTools = [...tools_1.n8nDocumentationToolsFinal, ...tools_n8n_manager_1.n8nManagementTools];
-        const tool = allTools.find(t => t.name === toolName);
+        const tool = this.findToolSchema(toolName);
         if (!tool || !tool.inputSchema) {
             return true;
         }
@@ -901,8 +910,7 @@ class N8NDocumentationMCPServer {
     coerceStringifiedJsonParams(toolName, args) {
         if (!args || typeof args !== 'object')
             return args;
-        const allTools = [...tools_1.n8nDocumentationToolsFinal, ...tools_n8n_manager_1.n8nManagementTools];
-        const tool = allTools.find(t => t.name === toolName);
+        const tool = this.findToolSchema(toolName);
         if (!tool?.inputSchema?.properties)
             return args;
         const properties = tool.inputSchema.properties;

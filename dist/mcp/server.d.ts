@@ -27,6 +27,7 @@ export declare class N8NDocumentationMCPServer {
     constructor(instanceContext?: InstanceContext, earlyLogger?: EarlyErrorLogger, options?: MCPServerOptions);
     private registerAdditionalTools;
     private getEnabledAdditionalTools;
+    private findToolSchema;
     close(): Promise<void>;
     private initializeDatabase;
     private initializeInMemorySchema;

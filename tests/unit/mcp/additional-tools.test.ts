@@ -195,4 +195,86 @@ describe('Additional tools hook', () => {
     // another content array as built-in tools are.
     expect(result).toEqual(handlerResult);
   });
+
+  it('handler rejection returns a plain isError response without n8n-specific guidance', async () => {
+    const additionalTools: AdditionalTool[] = [
+      {
+        tool: {
+          name: 'host_failing_tool',
+          description: 'Always fails',
+          inputSchema: { type: 'object', properties: {} },
+        },
+        handler: vi.fn().mockRejectedValue(new Error('host tool failed')),
+      },
+    ];
+
+    const server = new TestableN8NMCPServer(undefined, undefined, { additionalTools });
+    const result = await server.simulateToolCallRequest('host_failing_tool', {});
+
+    expect(result.isError).toBe(true);
+    expect(result.content).toHaveLength(1);
+    expect(result.content[0]).toEqual({
+      type: 'text',
+      text: 'Error executing tool host_failing_tool: host tool failed',
+    });
+    // Must NOT leak n8n-flavored guidance or arg diagnostic into host tool errors.
+    expect(result.content[0].text).not.toContain('nodeType');
+    expect(result.content[0].text).not.toContain('[Diagnostic]');
+    expect(result.content[0].text).not.toContain('validation tools');
+  });
+
+  it('coerces string-encoded args for additional tools (Claude Desktop client-bug parity)', async () => {
+    const handler = vi.fn().mockResolvedValue({ content: [{ type: 'text', text: 'ok' }] });
+
+    const additionalTools: AdditionalTool[] = [
+      {
+        tool: {
+          name: 'host_typed_tool',
+          description: 'Has a typed input schema',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              count: { type: 'number' },
+              config: { type: 'object' },
+            },
+          },
+        },
+        handler,
+      },
+    ];
+
+    const server = new TestableN8NMCPServer(undefined, undefined, { additionalTools });
+    // Simulate the Claude Desktop bug: object serialized as string, number as string.
+    await server.simulateToolCallRequest('host_typed_tool', {
+      count: '42' as any,
+      config: '{"foo":"bar"}' as any,
+    });
+
+    expect(handler).toHaveBeenCalledTimes(1);
+    const [receivedArgs] = handler.mock.calls[0];
+    // Coercion ran the same way it does for built-ins.
+    expect(receivedArgs).toEqual({ count: 42, config: { foo: 'bar' } });
+  });
+
+  it('mutating the input tool descriptor after registration does not affect the registered tool', () => {
+    const tool = {
+      name: 'host_mutable_tool',
+      description: 'original description',
+      inputSchema: { type: 'object' as const, properties: {} },
+    };
+
+    const additionalTools: AdditionalTool[] = [
+      { tool, handler: vi.fn().mockResolvedValue({ content: [{ type: 'text', text: 'ok' }] }) },
+    ];
+
+    const server = new TestableN8NMCPServer(undefined, undefined, { additionalTools });
+
+    // Mutate the caller's tool descriptor after registration.
+    tool.description = 'mutated description';
+    (tool.inputSchema as any).properties = { injected: { type: 'string' } };
+
+    const enabled = server.testGetEnabledAdditionalTools(new Set());
+    expect(enabled[0].description).toBe('original description');
+    expect(enabled[0].inputSchema.properties).toEqual({});
+  });
 });
