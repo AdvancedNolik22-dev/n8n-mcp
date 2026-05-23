@@ -192,11 +192,9 @@ class N8NDocumentationMCPServer {
             .filter(tool => !disabledTools.has(tool.name));
     }
     findToolSchema(name) {
-        const builtIn = [...tools_1.n8nDocumentationToolsFinal, ...tools_n8n_manager_1.n8nManagementTools]
-            .find(t => t.name === name);
-        if (builtIn)
-            return builtIn;
-        return this.additionalToolsByName.get(name)?.tool;
+        return tools_1.n8nDocumentationToolsFinal.find(t => t.name === name)
+            ?? tools_n8n_manager_1.n8nManagementTools.find(t => t.name === name)
+            ?? this.additionalToolsByName.get(name)?.tool;
     }
     async close() {
         try {
@@ -450,8 +448,7 @@ class N8NDocumentationMCPServer {
                     disabledToolsCount: disabledTools.size
                 });
             }
-            const enabledAdditionalTools = this.getEnabledAdditionalTools(disabledTools);
-            tools.push(...enabledAdditionalTools);
+            tools.push(...this.getEnabledAdditionalTools(disabledTools));
             if (disabledTools.size > 0) {
                 const totalAvailableTools = tools_1.n8nDocumentationToolsFinal.length +
                     (shouldIncludeManagementTools ? tools_n8n_manager_1.n8nManagementTools.length : 0) +

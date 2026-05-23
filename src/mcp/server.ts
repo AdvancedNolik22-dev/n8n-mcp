@@ -323,10 +323,9 @@ export class N8NDocumentationMCPServer {
    * same client-bug coercion and schema validation as built-ins.
    */
   private findToolSchema(name: string): { name: string; inputSchema?: any } | undefined {
-    const builtIn = [...n8nDocumentationToolsFinal, ...n8nManagementTools]
-      .find(t => t.name === name);
-    if (builtIn) return builtIn;
-    return this.additionalToolsByName.get(name)?.tool;
+    return n8nDocumentationToolsFinal.find(t => t.name === name)
+      ?? n8nManagementTools.find(t => t.name === name)
+      ?? this.additionalToolsByName.get(name)?.tool;
   }
 
   /**
@@ -706,11 +705,8 @@ export class N8NDocumentationMCPServer {
         });
       }
 
-      const enabledAdditionalTools = this.getEnabledAdditionalTools(disabledTools);
-      // MCP `Tool` has an optional `description`; `ToolDefinition` (used by built-ins)
-      // requires it. The merged array is returned as MCP `Tool[]` by the SDK at the
-      // wire layer, so the cast is structurally safe.
-      tools.push(...(enabledAdditionalTools as unknown as ToolDefinition[]));
+      // Cast: MCP `Tool.description` is optional, `ToolDefinition.description` is required.
+      tools.push(...(this.getEnabledAdditionalTools(disabledTools) as unknown as ToolDefinition[]));
 
       // Log filtered tools count if any tools are disabled
       if (disabledTools.size > 0) {
