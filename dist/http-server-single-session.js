@@ -90,6 +90,7 @@ class SingleSessionHTTPServer {
         this.authToken = null;
         this.cleanupTimer = null;
         this.generateWorkflowHandler = options?.generateWorkflowHandler;
+        this.additionalTools = options?.additionalTools;
         this.validateEnvironment();
         this.startSessionCleanup();
     }
@@ -431,6 +432,7 @@ class SingleSessionHTTPServer {
                     }
                     const server = new server_1.N8NDocumentationMCPServer(instanceContext, undefined, {
                         generateWorkflowHandler: this.generateWorkflowHandler,
+                        additionalTools: this.additionalTools,
                     });
                     transport = new streamableHttp_js_1.StreamableHTTPServerTransport({
                         sessionIdGenerator: () => sessionIdToUse,
@@ -598,6 +600,7 @@ class SingleSessionHTTPServer {
         }
         const server = new server_1.N8NDocumentationMCPServer(undefined, undefined, {
             generateWorkflowHandler: this.generateWorkflowHandler,
+            additionalTools: this.additionalTools,
         });
         const transport = new sse_js_1.SSEServerTransport('/messages', res);
         const sessionId = transport.sessionId;

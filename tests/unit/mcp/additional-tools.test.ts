@@ -62,6 +62,23 @@ describe('Additional tools hook', () => {
     );
   });
 
+  it('rejects non-object arguments for additional tools', async () => {
+    const additionalTools: AdditionalTool[] = [
+      {
+        tool: {
+          name: 'host_switch_instance',
+          description: 'Switch active n8n instance',
+          inputSchema: { type: 'object', properties: {} },
+        },
+        handler: vi.fn().mockResolvedValue({ content: [{ type: 'text', text: 'ok' }] }),
+      },
+    ];
+
+    const server = new TestableN8NMCPServer(undefined, undefined, { additionalTools });
+    await expect(server.testExecuteTool('host_switch_instance', 'bad-args' as any))
+      .rejects.toThrow('expected object');
+  });
+
   it('filters additional tools via DISABLED_TOOLS list', () => {
     const additionalTools: AdditionalTool[] = [
       {

@@ -91,11 +91,13 @@ class N8NDocumentationMCPServer {
         this.useSharedDatabase = false;
         this.sharedDbState = null;
         this.isShutdown = false;
+        this.additionalToolsByName = new Map();
         this.dbHealthChecked = false;
         this.workflowPatternsCache = null;
         this.instanceContext = instanceContext;
         this.earlyLogger = earlyLogger || null;
         this.generateWorkflowHandler = options?.generateWorkflowHandler;
+        this.registerAdditionalTools(options?.additionalTools || []);
         const envDbPath = process.env.NODE_DB_PATH;
         let dbPath = null;
         let possiblePaths = [];
@@ -164,6 +166,33 @@ class N8NDocumentationMCPServer {
         ui_1.UIAppRegistry.load();
         skills_1.SkillResourceRegistry.load();
         this.setupHandlers();
+    }
+    registerAdditionalTools(additionalTools) {
+        if (additionalTools.length === 0) {
+            return;
+        }
+        const builtInToolNames = new Set([
+            ...tools_1.n8nDocumentationToolsFinal.map(tool => tool.name),
+            ...tools_n8n_manager_1.n8nManagementTools.map(tool => tool.name),
+        ]);
+        for (const additionalTool of additionalTools) {
+            const toolName = additionalTool.tool.name;
+            if (builtInToolNames.has(toolName)) {
+                throw new Error(`Additional tool "${toolName}" collides with a built-in tool`);
+            }
+            if (this.additionalToolsByName.has(toolName)) {
+                throw new Error(`Duplicate additional tool "${toolName}" provided`);
+            }
+            this.additionalToolsByName.set(toolName, additionalTool);
+        }
+    }
+    getEnabledAdditionalTools(disabledTools) {
+        if (this.additionalToolsByName.size === 0) {
+            return [];
+        }
+        return Array.from(this.additionalToolsByName.values())
+            .map(toolDef => toolDef.tool)
+            .filter(tool => !disabledTools.has(tool.name));
     }
     async close() {
         try {
@@ -417,8 +446,12 @@ class N8NDocumentationMCPServer {
                     disabledToolsCount: disabledTools.size
                 });
             }
+            const enabledAdditionalTools = this.getEnabledAdditionalTools(disabledTools);
+            tools.push(...enabledAdditionalTools);
             if (disabledTools.size > 0) {
-                const totalAvailableTools = tools_1.n8nDocumentationToolsFinal.length + (shouldIncludeManagementTools ? tools_n8n_manager_1.n8nManagementTools.length : 0);
+                const totalAvailableTools = tools_1.n8nDocumentationToolsFinal.length +
+                    (shouldIncludeManagementTools ? tools_n8n_manager_1.n8nManagementTools.length : 0) +
+                    this.additionalToolsByName.size;
                 logger_1.logger.debug(`Filtered ${disabledTools.size} disabled tools, ${tools.length}/${totalAvailableTools} tools available`);
             }
             const clientInfo = this.clientInfo;
@@ -511,7 +544,10 @@ class N8NDocumentationMCPServer {
             try {
                 logger_1.logger.debug(`Executing tool: ${name}`, (0, redaction_1.summarizeToolCallArgs)(processedArgs));
                 const startTime = Date.now();
-                const result = await this.executeTool(name, processedArgs);
+                const additionalTool = this.additionalToolsByName.get(name);
+                const result = additionalTool
+                    ? await additionalTool.handler(processedArgs ?? {}, { instanceContext: this.instanceContext })
+                    : await this.executeTool(name, processedArgs);
                 const duration = Date.now() - startTime;
                 logger_1.logger.debug(`Tool ${name} executed successfully`);
                 telemetry_1.telemetry.trackToolUsage(name, true, duration);
@@ -964,6 +1000,10 @@ class N8NDocumentationMCPServer {
         logger_1.logger.info(`Tool execution: ${name}`, (0, redaction_1.summarizeToolCallArgs)(args));
         if (typeof args !== 'object' || args === null) {
             throw new Error(`Invalid arguments for tool ${name}: expected object, got ${typeof args}`);
+        }
+        const additionalTool = this.additionalToolsByName.get(name);
+        if (additionalTool) {
+            return additionalTool.handler(args, { instanceContext: this.instanceContext });
         }
         switch (name) {
             case 'tools_documentation':

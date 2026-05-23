@@ -826,10 +826,8 @@ export class N8NDocumentationMCPServer {
         // SECURITY (GHSA-wg4g-395p-mqv3): log metadata only, not raw arg values.
         logger.debug(`Executing tool: ${name}`, summarizeToolCallArgs(processedArgs));
         const startTime = Date.now();
-        const additionalTool = this.additionalToolsByName.get(name);
-        const result: CallToolResult | any = additionalTool
-          ? await additionalTool.handler(processedArgs ?? {}, { instanceContext: this.instanceContext } satisfies AdditionalToolContext)
-          : await this.executeTool(name, processedArgs);
+        const isAdditionalTool = this.additionalToolsByName.has(name);
+        const result: CallToolResult | any = await this.executeTool(name, processedArgs);
         const duration = Date.now() - startTime;
         logger.debug(`Tool ${name} executed successfully`);
 
@@ -845,6 +843,10 @@ export class N8NDocumentationMCPServer {
         // Update previous tool tracking
         this.previousTool = name;
         this.previousToolTimestamp = Date.now();
+
+        if (isAdditionalTool) {
+          return result;
+        }
         
         // Ensure the result is properly formatted for MCP
         let responseText: string;
