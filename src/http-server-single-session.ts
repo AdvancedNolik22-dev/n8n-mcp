@@ -28,6 +28,7 @@ import {
 import { InstanceContext, validateInstanceContext } from './types/instance-context';
 import { SessionState } from './types/session-state';
 import { GenerateWorkflowHandler } from './types/generate-workflow';
+import type { AdditionalTool } from './types/additional-tools';
 import { closeSharedDatabase } from './database/shared-database';
 
 dotenv.config();
@@ -92,6 +93,7 @@ function logSecurityEvent(
 
 export interface SingleSessionHTTPServerOptions {
   generateWorkflowHandler?: GenerateWorkflowHandler;
+  additionalTools?: AdditionalTool[];
 }
 
 export class SingleSessionHTTPServer {
@@ -118,9 +120,11 @@ export class SingleSessionHTTPServer {
   private authToken: string | null = null;
   private cleanupTimer: NodeJS.Timeout | null = null;
   private generateWorkflowHandler?: GenerateWorkflowHandler;
+  private additionalTools?: AdditionalTool[];
 
   constructor(options?: SingleSessionHTTPServerOptions) {
     this.generateWorkflowHandler = options?.generateWorkflowHandler;
+    this.additionalTools = options?.additionalTools;
     // Validate environment on construction
     this.validateEnvironment();
     // No longer pre-create session - will be created per initialize request following SDK pattern
@@ -650,6 +654,7 @@ export class SingleSessionHTTPServer {
 
           const server = new N8NDocumentationMCPServer(instanceContext, undefined, {
             generateWorkflowHandler: this.generateWorkflowHandler,
+            additionalTools: this.additionalTools,
           });
 
           transport = new StreamableHTTPServerTransport({
@@ -862,6 +867,7 @@ export class SingleSessionHTTPServer {
     // The SaaS backend uses StreamableHTTP exclusively.
     const server = new N8NDocumentationMCPServer(undefined, undefined, {
       generateWorkflowHandler: this.generateWorkflowHandler,
+      additionalTools: this.additionalTools,
     });
 
     const transport = new SSEServerTransport('/messages', res);

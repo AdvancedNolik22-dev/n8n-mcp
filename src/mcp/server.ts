@@ -8,6 +8,8 @@ import {
   ListResourceTemplatesRequestSchema,
   ReadResourceRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
+import type { Tool } from '@modelcontextprotocol/sdk/types.js';
+import type { ToolDefinition } from '../types';
 import { existsSync, readFileSync, promises as fs } from 'fs';
 import path from 'path';
 import { n8nDocumentationToolsFinal } from './tools';
@@ -46,6 +48,7 @@ import {
 } from '../utils/protocol-version';
 import { InstanceContext } from '../types/instance-context';
 import { GenerateWorkflowHandler, GenerateWorkflowHelpers } from '../types/generate-workflow';
+import type { AdditionalTool, AdditionalToolContext } from '../types/additional-tools';
 import { telemetry } from '../telemetry';
 import { EarlyErrorLogger } from '../telemetry/early-error-logger';
 import { STARTUP_CHECKPOINTS } from '../telemetry/startup-checkpoints';
@@ -161,6 +164,7 @@ type NodeInfoResponse = NodeMinimalInfo | NodeStandardInfo | NodeFullInfo | Vers
 
 interface MCPServerOptions {
   generateWorkflowHandler?: GenerateWorkflowHandler;
+  additionalTools?: AdditionalTool[];
 }
 
 export class N8NDocumentationMCPServer {
@@ -180,11 +184,13 @@ export class N8NDocumentationMCPServer {
   private sharedDbState: SharedDatabaseState | null = null;  // Reference to shared DB state for release
   private isShutdown: boolean = false;  // Prevent double-shutdown
   private generateWorkflowHandler?: GenerateWorkflowHandler;
+  private additionalToolsByName: Map<string, AdditionalTool> = new Map();
 
   constructor(instanceContext?: InstanceContext, earlyLogger?: EarlyErrorLogger, options?: MCPServerOptions) {
     this.instanceContext = instanceContext;
     this.earlyLogger = earlyLogger || null;
     this.generateWorkflowHandler = options?.generateWorkflowHandler;
+    this.registerAdditionalTools(options?.additionalTools || []);
     // Check for test environment first
     const envDbPath = process.env.NODE_DB_PATH;
     let dbPath: string | null = null;
@@ -277,6 +283,49 @@ export class N8NDocumentationMCPServer {
     UIAppRegistry.load();
     SkillResourceRegistry.load();
     this.setupHandlers();
+  }
+
+  private registerAdditionalTools(additionalTools: AdditionalTool[]): void {
+    const builtInToolNames = new Set([
+      ...n8nDocumentationToolsFinal.map(tool => tool.name),
+      ...n8nManagementTools.map(tool => tool.name),
+    ]);
+
+    for (const additionalTool of additionalTools) {
+      const toolName = additionalTool.tool.name;
+      if (builtInToolNames.has(toolName)) {
+        throw new Error(`Additional tool "${toolName}" collides with a built-in tool`);
+      }
+
+      if (this.additionalToolsByName.has(toolName)) {
+        throw new Error(`Duplicate additional tool "${toolName}" provided`);
+      }
+
+      // Defensive deep copy of the tool definition so per-session servers that
+      // share the same engine-level additionalTools array cannot mutate each
+      // other's tool descriptors (cross-tenant isolation).
+      this.additionalToolsByName.set(toolName, {
+        tool: structuredClone(additionalTool.tool),
+        handler: additionalTool.handler,
+      });
+    }
+  }
+
+  private getEnabledAdditionalTools(disabledTools: Set<string>): Tool[] {
+    return Array.from(this.additionalToolsByName.values())
+      .map(toolDef => toolDef.tool)
+      .filter(tool => !disabledTools.has(tool.name));
+  }
+
+  /**
+   * Look up a tool's schema by name across built-in and host-provided tools.
+   * Used by the arg preprocessing pipeline so additional tools receive the
+   * same client-bug coercion and schema validation as built-ins.
+   */
+  private findToolSchema(name: string): { name: string; inputSchema?: any } | undefined {
+    return n8nDocumentationToolsFinal.find(t => t.name === name)
+      ?? n8nManagementTools.find(t => t.name === name)
+      ?? this.additionalToolsByName.get(name)?.tool;
   }
 
   /**
@@ -656,9 +705,14 @@ export class N8NDocumentationMCPServer {
         });
       }
 
+      // Cast: MCP `Tool.description` is optional, `ToolDefinition.description` is required.
+      tools.push(...(this.getEnabledAdditionalTools(disabledTools) as unknown as ToolDefinition[]));
+
       // Log filtered tools count if any tools are disabled
       if (disabledTools.size > 0) {
-        const totalAvailableTools = n8nDocumentationToolsFinal.length + (shouldIncludeManagementTools ? n8nManagementTools.length : 0);
+        const totalAvailableTools = n8nDocumentationToolsFinal.length +
+          (shouldIncludeManagementTools ? n8nManagementTools.length : 0) +
+          this.additionalToolsByName.size;
         logger.debug(`Filtered ${disabledTools.size} disabled tools, ${tools.length}/${totalAvailableTools} tools available`);
       }
       
@@ -778,6 +832,8 @@ export class N8NDocumentationMCPServer {
         processedArgs = JSON.parse(JSON.stringify(processedArgs));
       }
 
+      const isAdditionalTool = this.additionalToolsByName.has(name);
+
       try {
         // SECURITY (GHSA-wg4g-395p-mqv3): log metadata only, not raw arg values.
         logger.debug(`Executing tool: ${name}`, summarizeToolCallArgs(processedArgs));
@@ -798,6 +854,11 @@ export class N8NDocumentationMCPServer {
         // Update previous tool tracking
         this.previousTool = name;
         this.previousToolTimestamp = Date.now();
+
+        if (isAdditionalTool) {
+          // Host controls the response shape.
+          return result;
+        }
         
         // Ensure the result is properly formatted for MCP
         let responseText: string;
@@ -863,6 +924,22 @@ export class N8NDocumentationMCPServer {
         // Update previous tool tracking (even for failed tools)
         this.previousTool = name;
         this.previousToolTimestamp = Date.now();
+
+        if (isAdditionalTool) {
+          // Host controls error response shape. Skip the n8n-specific guidance
+          // and arg-type diagnostic the built-in branch appends — those leak
+          // n8n vocabulary into host tool surfaces. Handlers that want a
+          // structured error response should return one instead of throwing.
+          return {
+            content: [
+              {
+                type: 'text',
+                text: `Error executing tool ${name}: ${errorMessage}`,
+              },
+            ],
+            isError: true,
+          };
+        }
 
         // Provide more helpful error messages for common n8n issues
         let helpfulMessage = `Error executing tool ${name}: ${errorMessage}`;
@@ -1161,9 +1238,9 @@ export class N8NDocumentationMCPServer {
       return false;
     }
 
-    // Get all available tools
-    const allTools = [...n8nDocumentationToolsFinal, ...n8nManagementTools];
-    const tool = allTools.find(t => t.name === toolName);
+    // Look up tool schema across built-in and additional tools so host-injected
+    // tools receive the same schema-driven validation as built-ins.
+    const tool = this.findToolSchema(toolName);
     if (!tool || !tool.inputSchema) {
       return true; // If no schema, assume valid
     }
@@ -1243,8 +1320,10 @@ export class N8NDocumentationMCPServer {
   ): Record<string, any> | undefined {
     if (!args || typeof args !== 'object') return args;
 
-    const allTools = [...n8nDocumentationToolsFinal, ...n8nManagementTools];
-    const tool = allTools.find(t => t.name === toolName);
+    // Look up tool schema across built-in and additional tools so host-injected
+    // tools receive the same client-bug coercion (string→object, string→number,
+    // etc.) that built-ins do.
+    const tool = this.findToolSchema(toolName);
     if (!tool?.inputSchema?.properties) return args;
 
     const properties = tool.inputSchema.properties;
@@ -1360,6 +1439,11 @@ export class N8NDocumentationMCPServer {
     // Validate that args is actually an object
     if (typeof args !== 'object' || args === null) {
       throw new Error(`Invalid arguments for tool ${name}: expected object, got ${typeof args}`);
+    }
+
+    const additionalTool = this.additionalToolsByName.get(name);
+    if (additionalTool) {
+      return additionalTool.handler(args, { instanceContext: this.instanceContext } satisfies AdditionalToolContext);
     }
 
     switch (name) {
