@@ -515,19 +515,19 @@ export const n8nManagementTools: ToolDefinition[] = [
   },
   {
     name: 'n8n_workflow_versions',
-    description: `Manage workflow version history, rollback, and cleanup. Six modes:
+    description: `Manage workflow version history, rollback, and cleanup. Versions are scoped to your n8n instance. Five modes:
 - list: Show version history for a workflow
 - get: Get details of specific version
 - rollback: Restore workflow to previous version (creates backup first)
 - delete: Delete specific version or all versions for a workflow
 - prune: Manually trigger pruning to keep N most recent versions
-- truncate: Delete ALL versions for ALL workflows (requires confirmation)`,
+Old backups are also pruned automatically (10 most recent per workflow, plus an age-based retention window).`,
     inputSchema: {
       type: 'object',
       properties: {
         mode: {
           type: 'string',
-          enum: ['list', 'get', 'rollback', 'delete', 'prune', 'truncate'],
+          enum: ['list', 'get', 'rollback', 'delete', 'prune'],
           description: 'Operation mode'
         },
         workflowId: {
@@ -557,11 +557,6 @@ export const n8nManagementTools: ToolDefinition[] = [
           type: 'number',
           default: 10,
           description: 'Keep N most recent versions (prune mode only)'
-        },
-        confirmTruncate: {
-          type: 'boolean',
-          default: false,
-          description: 'REQUIRED: Must be true to truncate all versions (truncate mode only)'
         }
       },
       required: ['mode']

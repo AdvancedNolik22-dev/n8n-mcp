@@ -32,7 +32,7 @@ import { z } from 'zod';
 import { WorkflowValidator } from '../services/workflow-validator';
 import { EnhancedConfigValidator } from '../services/enhanced-config-validator';
 import { NodeRepository } from '../database/node-repository';
-import { InstanceContext, validateInstanceContext } from '../types/instance-context';
+import { InstanceContext, validateInstanceContext, getInstanceScopeId } from '../types/instance-context';
 import { NodeTypeNormalizer } from '../utils/node-type-normalizer';
 import { WorkflowAutoFixer, AutoFixConfig } from '../services/workflow-auto-fixer';
 import { ExpressionFormatValidator, ExpressionFormatIssue } from '../services/expression-format-validator';
@@ -521,14 +521,13 @@ const listExecutionsSchema = z.object({
 });
 
 const workflowVersionsSchema = z.object({
-  mode: z.enum(['list', 'get', 'rollback', 'delete', 'prune', 'truncate']),
+  mode: z.enum(['list', 'get', 'rollback', 'delete', 'prune']),
   workflowId: z.string().optional(),
   versionId: z.number().optional(),
   limit: z.number().default(10).optional(),
   validateBefore: z.boolean().default(true).optional(),
   deleteAll: z.boolean().default(false).optional(),
   maxVersions: z.number().default(10).optional(),
-  confirmTruncate: z.boolean().default(false).optional(),
 });
 
 // Workflow Management Handlers
@@ -956,7 +955,7 @@ export async function handleUpdateWorkflow(
       // Create backup before modifying workflow (default: true)
       if (createBackup !== false) {
         try {
-          const versioningService = new WorkflowVersioningService(repository, client);
+          const versioningService = new WorkflowVersioningService(repository, client, getInstanceScopeId(context));
           const backupResult = await versioningService.createBackup(id, current, {
             trigger: 'full_update'
           });
@@ -2378,7 +2377,7 @@ export async function handleWorkflowVersions(
   try {
     const input = workflowVersionsSchema.parse(args);
     const client = context ? getN8nApiClient(context) : null;
-    const versioningService = new WorkflowVersioningService(repository, client || undefined);
+    const versioningService = new WorkflowVersioningService(repository, client || undefined, getInstanceScopeId(context));
 
     switch (input.mode) {
       case 'list': {
@@ -2513,25 +2512,6 @@ export async function handleWorkflowVersions(
             pruned: result.pruned,
             remaining: result.remaining,
             message: `Pruned ${result.pruned} old version(s), ${result.remaining} version(s) remaining`
-          }
-        };
-      }
-
-      case 'truncate': {
-        if (!input.confirmTruncate) {
-          return {
-            success: false,
-            error: 'confirmTruncate must be true to truncate all versions. This action cannot be undone.'
-          };
-        }
-
-        const result = await versioningService.truncateAllVersions(true);
-
-        return {
-          success: true,
-          data: {
-            deleted: result.deleted,
-            message: result.message
           }
         };
       }

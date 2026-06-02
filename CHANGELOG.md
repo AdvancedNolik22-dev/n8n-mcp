@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.56.1] - 2026-06-02
+
+### Fixed
+
+- **Workflow version backups are now scoped per n8n instance.** Each `workflow_versions` record is tagged with a derived, non-spoofable instance key (a hash of the instance's API URL and key), and every read, list, get, delete, rollback, and prune is filtered by it. In multi-tenant HTTP deployments this isolates version history per instance, so one tenant can no longer read or delete another tenant's backups; single-instance and stdio deployments are unaffected (one logical scope). A startup migration adds the `instance_id` column to existing databases (pre-existing, un-scoped backups are cleared during the migration) and an age-based retention sweep — configurable via `WORKFLOW_VERSION_RETENTION_DAYS` (default 30) — bounds on-disk growth alongside the existing per-workflow keep-10 pruning.
+
+### Changed
+
+- **Removed the global `truncate` mode from `n8n_workflow_versions`.** Per-workflow `delete`/`prune` plus the automatic retention sweep replace it.
+
+Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+
 ## [2.56.0] - 2026-05-23
 
 ### Added

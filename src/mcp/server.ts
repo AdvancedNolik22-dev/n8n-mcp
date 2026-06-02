@@ -403,6 +403,9 @@ export class N8NDocumentationMCPServer {
       if (dbPath === ':memory:') {
         this.db = await createDatabaseAdapter(dbPath);
         logger.debug('Database adapter created (in-memory mode)');
+        // In-memory schema already includes workflow_versions.instance_id, so no
+        // migration is needed; and being ephemeral, the age-retention sweep that
+        // initializeSharedDatabase() runs would have nothing to prune here.
         await this.initializeInMemorySchema();
         logger.debug('In-memory schema initialized');
         this.repository = new NodeRepository(this.db);

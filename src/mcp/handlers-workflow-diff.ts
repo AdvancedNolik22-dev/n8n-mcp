@@ -11,7 +11,7 @@ import { WorkflowDiffEngine } from '../services/workflow-diff-engine';
 import { getN8nApiClient, tryParseJson } from './handlers-n8n-manager';
 import { N8nApiError, getUserFriendlyErrorMessage } from '../utils/n8n-errors';
 import { logger } from '../utils/logger';
-import { InstanceContext } from '../types/instance-context';
+import { InstanceContext, getInstanceScopeId } from '../types/instance-context';
 import { validateWorkflowStructure } from '../services/n8n-validation';
 import { NodeRepository } from '../database/node-repository';
 import { WorkflowVersioningService } from '../services/workflow-versioning-service';
@@ -194,7 +194,7 @@ export async function handleUpdatePartialWorkflow(
     // Create backup before modifying workflow (default: true)
     if (input.createBackup !== false && !input.validateOnly) {
       try {
-        const versioningService = new WorkflowVersioningService(repository, client);
+        const versioningService = new WorkflowVersioningService(repository, client, getInstanceScopeId(context));
         const backupResult = await versioningService.createBackup(input.id, workflow, {
           trigger: 'partial_update',
           operations: input.operations
