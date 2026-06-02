@@ -1,8 +1,8 @@
 export declare function getN8nApiConfig(): {
-    baseUrl: any;
-    apiKey: any;
-    timeout: any;
-    maxRetries: any;
+    baseUrl: string;
+    apiKey: string;
+    timeout: number;
+    maxRetries: number;
 } | null;
 export declare function isN8nApiConfigured(): boolean;
 export declare function getN8nApiConfigFromContext(context: {
