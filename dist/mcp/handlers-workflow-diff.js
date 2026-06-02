@@ -40,6 +40,7 @@ const workflow_diff_engine_1 = require("../services/workflow-diff-engine");
 const handlers_n8n_manager_1 = require("./handlers-n8n-manager");
 const n8n_errors_1 = require("../utils/n8n-errors");
 const logger_1 = require("../utils/logger");
+const instance_context_1 = require("../types/instance-context");
 const n8n_validation_1 = require("../services/n8n-validation");
 const workflow_versioning_service_1 = require("../services/workflow-versioning-service");
 const workflow_validator_1 = require("../services/workflow-validator");
@@ -170,7 +171,7 @@ async function handleUpdatePartialWorkflow(args, repository, context) {
         }
         if (input.createBackup !== false && !input.validateOnly) {
             try {
-                const versioningService = new workflow_versioning_service_1.WorkflowVersioningService(repository, client);
+                const versioningService = new workflow_versioning_service_1.WorkflowVersioningService(repository, client, (0, instance_context_1.getInstanceScopeId)(context));
                 const backupResult = await versioningService.createBackup(input.id, workflow, {
                     trigger: 'partial_update',
                     operations: input.operations

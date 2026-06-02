@@ -297,14 +297,13 @@ const listExecutionsSchema = zod_1.z.object({
     includeData: zod_1.z.boolean().optional(),
 });
 const workflowVersionsSchema = zod_1.z.object({
-    mode: zod_1.z.enum(['list', 'get', 'rollback', 'delete', 'prune', 'truncate']),
+    mode: zod_1.z.enum(['list', 'get', 'rollback', 'delete', 'prune']),
     workflowId: zod_1.z.string().optional(),
     versionId: zod_1.z.number().optional(),
     limit: zod_1.z.number().default(10).optional(),
     validateBefore: zod_1.z.boolean().default(true).optional(),
     deleteAll: zod_1.z.boolean().default(false).optional(),
     maxVersions: zod_1.z.number().default(10).optional(),
-    confirmTruncate: zod_1.z.boolean().default(false).optional(),
 });
 async function handleCreateWorkflow(args, context) {
     try {
@@ -649,7 +648,7 @@ async function handleUpdateWorkflow(args, repository, context) {
             }
             if (createBackup !== false) {
                 try {
-                    const versioningService = new workflow_versioning_service_1.WorkflowVersioningService(repository, client);
+                    const versioningService = new workflow_versioning_service_1.WorkflowVersioningService(repository, client, (0, instance_context_1.getInstanceScopeId)(context));
                     const backupResult = await versioningService.createBackup(id, current, {
                         trigger: 'full_update'
                     });
@@ -1806,7 +1805,7 @@ async function handleWorkflowVersions(args, repository, context) {
     try {
         const input = workflowVersionsSchema.parse(args);
         const client = context ? getN8nApiClient(context) : null;
-        const versioningService = new workflow_versioning_service_1.WorkflowVersioningService(repository, client || undefined);
+        const versioningService = new workflow_versioning_service_1.WorkflowVersioningService(repository, client || undefined, (0, instance_context_1.getInstanceScopeId)(context));
         switch (input.mode) {
             case 'list': {
                 if (!input.workflowId) {
@@ -1916,22 +1915,6 @@ async function handleWorkflowVersions(args, repository, context) {
                         pruned: result.pruned,
                         remaining: result.remaining,
                         message: `Pruned ${result.pruned} old version(s), ${result.remaining} version(s) remaining`
-                    }
-                };
-            }
-            case 'truncate': {
-                if (!input.confirmTruncate) {
-                    return {
-                        success: false,
-                        error: 'confirmTruncate must be true to truncate all versions. This action cannot be undone.'
-                    };
-                }
-                const result = await versioningService.truncateAllVersions(true);
-                return {
-                    success: true,
-                    data: {
-                        deleted: result.deleted,
-                        message: result.message
                     }
                 };
             }
