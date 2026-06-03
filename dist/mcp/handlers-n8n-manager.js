@@ -2398,8 +2398,8 @@ async function handleDeleteRows(args, context) {
 }
 const listCredentialsSchema = zod_1.z.object({
     includeUsage: zod_1.z.boolean().optional(),
-    cursor: zod_1.z.string().optional(),
-    limit: zod_1.z.number().optional(),
+    cursor: optionalEmptyAware(zod_1.z.string()),
+    limit: zod_1.z.number().min(1).max(100).optional(),
 }).passthrough();
 const getCredentialSchema = zod_1.z.object({
     id: zod_1.z.string({ required_error: 'Credential ID is required' }),
@@ -2456,17 +2456,21 @@ const deleteCredentialSchema = zod_1.z.object({
 const getCredentialSchemaTypeSchema = zod_1.z.object({
     type: zod_1.z.string({ required_error: 'Credential type is required' }),
 });
+function stripCredentialData(credential) {
+    const { data: _sensitiveData, ...safeCred } = credential;
+    return safeCred;
+}
 async function handleListCredentials(args, context) {
     try {
         const client = ensureApiConfigured(context);
         const { includeUsage, cursor, limit } = listCredentialsSchema.parse(args);
-        let usageScanError;
         if (includeUsage) {
             const allCredentials = await client.listAllCredentials();
-            let credentials = allCredentials;
+            let credentials = allCredentials.map(stripCredentialData);
+            let usageScanError;
             try {
                 const usageMap = await buildCredentialUsageMap(client);
-                credentials = allCredentials.map((cred) => {
+                credentials = credentials.map((cred) => {
                     const usedIn = (cred.id ? usageMap.get(cred.id) : undefined) ?? [];
                     return { ...cred, usedIn, usageCount: usedIn.length };
                 });
@@ -2484,11 +2488,12 @@ async function handleListCredentials(args, context) {
             };
         }
         const result = await client.listCredentials({ cursor, limit });
+        const credentials = result.data.map(stripCredentialData);
         return {
             success: true,
             data: {
-                credentials: result.data,
-                count: result.data.length,
+                credentials,
+                count: credentials.length,
                 nextCursor: result.nextCursor || undefined,
             },
         };

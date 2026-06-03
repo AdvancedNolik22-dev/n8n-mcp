@@ -3120,8 +3120,10 @@ export async function handleDeleteRows(args: unknown, context?: InstanceContext)
 
 const listCredentialsSchema = z.object({
   includeUsage: z.boolean().optional(),
-  cursor: z.string().optional(),
-  limit: z.number().optional(),
+  // Mirror listWorkflowsSchema: bound limit and normalize an empty-string cursor
+  // to undefined so an echoed-back empty nextCursor isn't forwarded to the n8n API.
+  cursor: optionalEmptyAware(z.string()),
+  limit: z.number().min(1).max(100).optional(),
 }).passthrough();
 
 const getCredentialSchema = z.object({
@@ -3193,20 +3195,28 @@ type CredentialWithUsage = Credential & {
   usageCount?: number;
 };
 
+// Strip the sensitive `data` field from a credential before returning it.
+// Defense in depth against future n8n versions returning decrypted values.
+function stripCredentialData(credential: Credential): CredentialWithUsage {
+  const { data: _sensitiveData, ...safeCred } = credential;
+  return safeCred;
+}
+
 export async function handleListCredentials(args: unknown, context?: InstanceContext): Promise<McpToolResponse> {
   try {
     const client = ensureApiConfigured(context);
     const { includeUsage, cursor, limit } = listCredentialsSchema.parse(args);
-    let usageScanError: string | undefined;
 
     if (includeUsage) {
       // Full audit: scan ALL credential pages so usage reporting is complete.
       // Cursor/limit paging does not apply here — return every credential at once.
       const allCredentials = await client.listAllCredentials();
-      let credentials: CredentialWithUsage[] = allCredentials;
+      // Strip sensitive data field — defense in depth, consistent with the get path.
+      let credentials: CredentialWithUsage[] = allCredentials.map(stripCredentialData);
+      let usageScanError: string | undefined;
       try {
         const usageMap = await buildCredentialUsageMap(client);
-        credentials = allCredentials.map((cred) => {
+        credentials = credentials.map((cred) => {
           const usedIn = (cred.id ? usageMap.get(cred.id) : undefined) ?? [];
           return { ...cred, usedIn, usageCount: usedIn.length };
         });
@@ -3227,11 +3237,12 @@ export async function handleListCredentials(args: unknown, context?: InstanceCon
 
     // Standard single-page cursor paging (mirrors n8n_list_workflows).
     const result = await client.listCredentials({ cursor, limit });
+    const credentials = result.data.map(stripCredentialData);
     return {
       success: true,
       data: {
-        credentials: result.data,
-        count: result.data.length,
+        credentials,
+        count: credentials.length,
         nextCursor: result.nextCursor || undefined,
       },
     };

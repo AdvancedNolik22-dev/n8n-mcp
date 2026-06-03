@@ -13,7 +13,7 @@ export const n8nManageCredentialsDoc: ToolDocumentation = {
       'Credential data values are never logged for security',
       'Use with n8n_audit_instance to fix security findings',
       'Pass includeUsage:true on list/get to see which workflows reference each credential',
-      'list returns 100 per page - pass the returned nextCursor back as cursor to page further; includeUsage:true scans all pages automatically',
+      'list returns up to 100 per page (limit: 1-100, default 100) - pass the returned nextCursor back as cursor to page further; includeUsage:true scans all pages automatically (capped at 5000 credentials)',
       'Actions: list, get, create, update, delete, getSchema',
     ]
   },
@@ -64,7 +64,7 @@ export const n8nManageCredentialsDoc: ToolDocumentation = {
       includeUsage: {
         type: 'boolean',
         required: false,
-        description: 'For list/get: when true, also return the workflows that reference each credential (workflow id, name, active). On list, this scans ALL credential pages (ignores cursor/limit and returns no nextCursor) so the inventory is complete. Triggers a full workflow scan; slower on large instances. Default: false.',
+        description: 'For list/get: when true, also return the workflows that reference each credential (workflow id, name, active). On list, this scans all credential pages (up to 5000 credentials; ignores cursor/limit and returns no nextCursor) so the inventory is complete. Triggers a full workflow scan; slower on large instances. Default: false.',
       },
       cursor: {
         type: 'string',
@@ -74,7 +74,7 @@ export const n8nManageCredentialsDoc: ToolDocumentation = {
       limit: {
         type: 'number',
         required: false,
-        description: 'For list: maximum number of credentials to return per page. Ignored when includeUsage is true.',
+        description: 'For list: maximum number of credentials to return per page (1-100, default 100 per the n8n API). Ignored when includeUsage is true.',
       },
     },
     returns: `Depends on action:

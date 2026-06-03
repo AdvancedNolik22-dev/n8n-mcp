@@ -2378,5 +2378,35 @@ describe('handlers-n8n-manager', () => {
       expect(result.success).toBe(false);
       expect(result.error).toContain('not found');
     });
+
+    it('normalizes an empty-string cursor to undefined (not forwarded to the API)', async () => {
+      mockApiClient.listCredentials.mockResolvedValue({ data: [credPage1], nextCursor: null });
+
+      await handlers.handleListCredentials({ action: 'list', cursor: '' });
+
+      expect(mockApiClient.listCredentials).toHaveBeenCalledWith({
+        cursor: undefined,
+        limit: undefined,
+      });
+    });
+
+    it('rejects an out-of-range limit rather than forwarding it', async () => {
+      const result = await handlers.handleListCredentials({ action: 'list', limit: 5000 });
+
+      expect(result.success).toBe(false);
+      expect(mockApiClient.listCredentials).not.toHaveBeenCalled();
+    });
+
+    it('strips the sensitive data field from listed credentials (both paths)', async () => {
+      const withSecret = { id: 'cred-secret', name: 'Has data', type: 'httpHeaderAuth', data: { value: 'sk-secret' } };
+
+      mockApiClient.listCredentials.mockResolvedValue({ data: [withSecret], nextCursor: null });
+      const paged = await handlers.handleListCredentials({ action: 'list' });
+      expect(paged.data.credentials[0]).not.toHaveProperty('data');
+
+      mockApiClient.listAllCredentials.mockResolvedValue([withSecret]);
+      const scanned = await handlers.handleListCredentials({ action: 'list', includeUsage: true });
+      expect(scanned.data.credentials[0]).not.toHaveProperty('data');
+    });
   });
 });
