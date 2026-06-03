@@ -2124,6 +2124,8 @@ describe('handlers-n8n-manager', () => {
         data: [credA, credB, credC],
         nextCursor: null,
       });
+      // includeUsage uses the full-scan helper; default it to the same set.
+      mockApiClient.listAllCredentials = vi.fn().mockResolvedValue([credA, credB, credC]);
       mockApiClient.getCredential = vi.fn();
       mockApiClient.listAllWorkflows = vi.fn().mockResolvedValue([
         wfUsesA,
@@ -2284,6 +2286,97 @@ describe('handlers-n8n-manager', () => {
       expect(result.data.id).toBe('cred-A');
       expect(result.data.usageScanError).toBe('boom');
       expect(result.data).not.toHaveProperty('usedIn');
+    });
+  });
+
+  describe('credential pagination (#816)', () => {
+    const credPage1 = { id: 'cred-1', name: 'Page 1 cred', type: 'httpHeaderAuth' };
+    const credPage2 = { id: 'cred-101', name: 'Page 2 cred', type: 'httpHeaderAuth' };
+
+    beforeEach(() => {
+      mockApiClient.listCredentials = vi.fn();
+      mockApiClient.listAllCredentials = vi.fn();
+      mockApiClient.getCredential = vi.fn();
+      mockApiClient.listAllWorkflows = vi.fn().mockResolvedValue([]);
+    });
+
+    it('forwards cursor and limit to the API client on plain list', async () => {
+      mockApiClient.listCredentials.mockResolvedValue({
+        data: [credPage2],
+        nextCursor: null,
+      });
+
+      const result = await handlers.handleListCredentials({
+        action: 'list',
+        cursor: 'cursor-abc',
+        limit: 50,
+      });
+
+      expect(mockApiClient.listCredentials).toHaveBeenCalledWith({
+        cursor: 'cursor-abc',
+        limit: 50,
+      });
+      expect(mockApiClient.listAllCredentials).not.toHaveBeenCalled();
+      expect(result.success).toBe(true);
+      expect(result.data.credentials).toEqual([credPage2]);
+    });
+
+    it('returns nextCursor so callers can page further', async () => {
+      mockApiClient.listCredentials.mockResolvedValue({
+        data: [credPage1],
+        nextCursor: 'next-page-token',
+      });
+
+      const result = await handlers.handleListCredentials({ action: 'list' });
+
+      expect(result.data.nextCursor).toBe('next-page-token');
+    });
+
+    it('includeUsage scans all pages via listAllCredentials and omits nextCursor', async () => {
+      mockApiClient.listAllCredentials.mockResolvedValue([credPage1, credPage2]);
+
+      const result = await handlers.handleListCredentials({
+        action: 'list',
+        includeUsage: true,
+      });
+
+      expect(mockApiClient.listAllCredentials).toHaveBeenCalledTimes(1);
+      expect(mockApiClient.listCredentials).not.toHaveBeenCalled();
+      expect(result.data.credentials).toHaveLength(2);
+      expect(result.data.credentials.map((c: any) => c.id)).toEqual(['cred-1', 'cred-101']);
+      expect(result.data).not.toHaveProperty('nextCursor');
+    });
+
+    it('get fallback finds a credential living beyond the first page', async () => {
+      // Direct GET unsupported -> fall back to paginated list scan.
+      mockApiClient.getCredential.mockRejectedValue(
+        Object.assign(new Error('Method not allowed'), { statusCode: 405 })
+      );
+      mockApiClient.listAllCredentials.mockResolvedValue([credPage1, credPage2]);
+
+      const result = await handlers.handleGetCredential({
+        action: 'get',
+        id: 'cred-101',
+      });
+
+      expect(mockApiClient.listAllCredentials).toHaveBeenCalledTimes(1);
+      expect(result.success).toBe(true);
+      expect(result.data.id).toBe('cred-101');
+    });
+
+    it('get fallback still reports not found for a genuinely absent id', async () => {
+      mockApiClient.getCredential.mockRejectedValue(
+        Object.assign(new Error('Method not allowed'), { statusCode: 405 })
+      );
+      mockApiClient.listAllCredentials.mockResolvedValue([credPage1, credPage2]);
+
+      const result = await handlers.handleGetCredential({
+        action: 'get',
+        id: 'cred-does-not-exist',
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('not found');
     });
   });
 });

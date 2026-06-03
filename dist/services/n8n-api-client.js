@@ -383,6 +383,23 @@ class N8nApiClient {
             throw (0, n8n_errors_1.handleN8nApiError)(error);
         }
     }
+    async listAllCredentials() {
+        const allCredentials = [];
+        let cursor;
+        const seenCursors = new Set();
+        const PAGE_SIZE = 100;
+        const MAX_PAGES = 50;
+        for (let page = 0; page < MAX_PAGES; page++) {
+            const params = { limit: PAGE_SIZE, cursor };
+            const response = await this.listCredentials(params);
+            allCredentials.push(...response.data);
+            if (!response.nextCursor || seenCursors.has(response.nextCursor))
+                break;
+            seenCursors.add(response.nextCursor);
+            cursor = response.nextCursor;
+        }
+        return allCredentials;
+    }
     async getCredential(id) {
         try {
             const response = await this.client.get(`/credentials/${(0, validation_schemas_1.encodeApiPathSegment)(id, 'credentialId')}`);
