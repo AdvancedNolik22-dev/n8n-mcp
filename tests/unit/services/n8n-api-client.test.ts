@@ -1110,10 +1110,54 @@ describe('N8nApiClient', () => {
 
     it('should delete credential', async () => {
       mockAxiosInstance.delete.mockResolvedValue({ data: {} });
-      
+
       await client.deleteCredential('123');
-      
+
       expect(mockAxiosInstance.delete).toHaveBeenCalledWith('/credentials/123');
+    });
+
+    describe('listAllCredentials (pagination, #816)', () => {
+      it('paginates across multiple pages until nextCursor is empty', async () => {
+        mockAxiosInstance.get
+          .mockResolvedValueOnce({ data: { data: [{ id: '1' }, { id: '2' }], nextCursor: 'page2' } })
+          .mockResolvedValueOnce({ data: { data: [{ id: '3' }], nextCursor: null } });
+
+        const result = await client.listAllCredentials();
+
+        expect(result.map((c) => c.id)).toEqual(['1', '2', '3']);
+        expect(mockAxiosInstance.get).toHaveBeenCalledTimes(2);
+        expect(mockAxiosInstance.get).toHaveBeenNthCalledWith(1, '/credentials', {
+          params: { limit: 100, cursor: undefined },
+        });
+        expect(mockAxiosInstance.get).toHaveBeenNthCalledWith(2, '/credentials', {
+          params: { limit: 100, cursor: 'page2' },
+        });
+      });
+
+      it('stops when a cursor repeats to avoid infinite loops', async () => {
+        mockAxiosInstance.get.mockResolvedValue({
+          data: { data: [{ id: 'x' }], nextCursor: 'same' },
+        });
+
+        const result = await client.listAllCredentials();
+
+        // First page accepted, second page returns the same cursor -> stop.
+        expect(result.map((c) => c.id)).toEqual(['x', 'x']);
+        expect(mockAxiosInstance.get).toHaveBeenCalledTimes(2);
+      });
+
+      it('respects the MAX_PAGES safety cap', async () => {
+        // Always return a fresh cursor so only the page cap can stop the loop.
+        let n = 0;
+        mockAxiosInstance.get.mockImplementation(async () => ({
+          data: { data: [{ id: `c${n}` }], nextCursor: `cursor-${n++}` },
+        }));
+
+        const result = await client.listAllCredentials();
+
+        expect(mockAxiosInstance.get).toHaveBeenCalledTimes(50);
+        expect(result).toHaveLength(50);
+      });
     });
   });
 

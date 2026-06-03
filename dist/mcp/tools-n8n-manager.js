@@ -636,7 +636,7 @@ Old backups are also pruned automatically (10 most recent per workflow, plus an 
     },
     {
         name: 'n8n_manage_credentials',
-        description: 'Manage n8n credentials. Actions: list, get, create, update, delete, getSchema. Use getSchema to discover required fields before creating. SECURITY: credential data values are never logged.',
+        description: 'Manage n8n credentials. Actions: list, get, create, update, delete, getSchema. Use getSchema to discover required fields before creating. For list, page beyond 100 results with cursor (from the previous response\'s nextCursor). SECURITY: credential data values are never logged.',
         inputSchema: {
             type: 'object',
             properties: {
@@ -645,7 +645,9 @@ Old backups are also pruned automatically (10 most recent per workflow, plus an 
                 name: { type: 'string', description: 'Credential name (required for create)' },
                 type: { type: 'string', description: 'Credential type e.g. httpHeaderAuth, httpBasicAuth, oAuth2Api (required for create, getSchema)' },
                 data: { type: 'object', description: 'Credential data fields - use getSchema to discover required fields (required for create, optional for update)' },
-                includeUsage: { type: 'boolean', description: 'For list/get: also return workflows that reference each credential (id, name, active). Triggers a full workflow scan, slower on large instances. Default: false.' },
+                includeUsage: { type: 'boolean', description: 'For list/get: also return workflows that reference each credential (id, name, active). On list, triggers a full scan of all credential pages (up to 5000 credentials; ignores cursor/limit, no nextCursor returned). Slower on large instances. Default: false.' },
+                cursor: { type: 'string', description: 'For list: pagination cursor from a previous response\'s nextCursor. Ignored when includeUsage is true.' },
+                limit: { type: 'number', description: 'For list: max results per page (1-100, default 100). Ignored when includeUsage is true.' },
             },
             required: ['action'],
         },

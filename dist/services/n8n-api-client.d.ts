@@ -36,6 +36,7 @@ export declare class N8nApiClient {
     deleteExecution(id: string): Promise<void>;
     triggerWebhook(request: WebhookRequest): Promise<any>;
     listCredentials(params?: CredentialListParams): Promise<CredentialListResponse>;
+    listAllCredentials(): Promise<Credential[]>;
     getCredential(id: string): Promise<Credential>;
     createCredential(credential: Partial<Credential>): Promise<Credential>;
     updateCredential(id: string, credential: Partial<Credential>): Promise<Credential>;

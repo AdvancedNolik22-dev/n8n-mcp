@@ -531,6 +531,25 @@ export class N8nApiClient {
     }
   }
 
+  // Fetch all credentials with pagination (for full inventory / get-by-id fallback)
+  async listAllCredentials(): Promise<Credential[]> {
+    const allCredentials: Credential[] = [];
+    let cursor: string | undefined;
+    const seenCursors = new Set<string>();
+    const PAGE_SIZE = 100;
+    const MAX_PAGES = 50; // Safety limit: 5000 credentials max
+
+    for (let page = 0; page < MAX_PAGES; page++) {
+      const params: CredentialListParams = { limit: PAGE_SIZE, cursor };
+      const response = await this.listCredentials(params);
+      allCredentials.push(...response.data);
+      if (!response.nextCursor || seenCursors.has(response.nextCursor)) break;
+      seenCursors.add(response.nextCursor);
+      cursor = response.nextCursor;
+    }
+    return allCredentials;
+  }
+
   async getCredential(id: string): Promise<Credential> {
     try {
       const response = await this.client.get(`/credentials/${encodeApiPathSegment(id, 'credentialId')}`);

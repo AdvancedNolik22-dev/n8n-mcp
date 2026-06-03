@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.57.1] - 2026-06-03
+
+### Fixed
+
+- **`n8n_manage_credentials` can now paginate past 100 credentials (#816).** The `list` action accepts a `cursor` (and optional `limit`) and returns `nextCursor`, mirroring `n8n_list_workflows`, so callers can page through every credential on instances with more than 100. This also fixes two silent knock-on bugs: `get` by id no longer returns a false "not found" for credentials living beyond the first page (its list-fallback now scans all pages), and `includeUsage: true` on `list` now performs a complete all-pages scan instead of reporting only the first 100, so credential inventory/rotation audits no longer under-report.
+
+Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+
 ## [2.57.0] - 2026-06-02
 
 ### Changed

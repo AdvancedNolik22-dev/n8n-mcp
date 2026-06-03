@@ -2398,6 +2398,8 @@ async function handleDeleteRows(args, context) {
 }
 const listCredentialsSchema = zod_1.z.object({
     includeUsage: zod_1.z.boolean().optional(),
+    cursor: optionalEmptyAware(zod_1.z.string()),
+    limit: zod_1.z.number().min(1).max(100).optional(),
 }).passthrough();
 const getCredentialSchema = zod_1.z.object({
     id: zod_1.z.string({ required_error: 'Credential ID is required' }),
@@ -2454,17 +2456,21 @@ const deleteCredentialSchema = zod_1.z.object({
 const getCredentialSchemaTypeSchema = zod_1.z.object({
     type: zod_1.z.string({ required_error: 'Credential type is required' }),
 });
+function stripCredentialData(credential) {
+    const { data: _sensitiveData, ...safeCred } = credential;
+    return safeCred;
+}
 async function handleListCredentials(args, context) {
     try {
         const client = ensureApiConfigured(context);
-        const { includeUsage } = listCredentialsSchema.parse(args);
-        const result = await client.listCredentials();
-        let credentials = result.data;
-        let usageScanError;
+        const { includeUsage, cursor, limit } = listCredentialsSchema.parse(args);
         if (includeUsage) {
+            const allCredentials = await client.listAllCredentials();
+            let credentials = allCredentials.map(stripCredentialData);
+            let usageScanError;
             try {
                 const usageMap = await buildCredentialUsageMap(client);
-                credentials = result.data.map((cred) => {
+                credentials = credentials.map((cred) => {
                     const usedIn = (cred.id ? usageMap.get(cred.id) : undefined) ?? [];
                     return { ...cred, usedIn, usageCount: usedIn.length };
                 });
@@ -2472,14 +2478,23 @@ async function handleListCredentials(args, context) {
             catch (scanError) {
                 usageScanError = scanError instanceof Error ? scanError.message : String(scanError);
             }
+            return {
+                success: true,
+                data: {
+                    credentials,
+                    count: credentials.length,
+                    ...(usageScanError ? { usageScanError } : {}),
+                },
+            };
         }
+        const result = await client.listCredentials({ cursor, limit });
+        const credentials = result.data.map(stripCredentialData);
         return {
             success: true,
             data: {
                 credentials,
                 count: credentials.length,
                 nextCursor: result.nextCursor || undefined,
-                ...(usageScanError ? { usageScanError } : {}),
             },
         };
     }
@@ -2502,8 +2517,8 @@ async function handleGetCredential(args, context) {
             if (!isUnsupported) {
                 throw getError;
             }
-            const list = await client.listCredentials();
-            credential = list.data.find((c) => c.id === id);
+            const all = await client.listAllCredentials();
+            credential = all.find((c) => c.id === id);
             if (!credential) {
                 return { success: false, error: `Credential ${id} not found` };
             }
