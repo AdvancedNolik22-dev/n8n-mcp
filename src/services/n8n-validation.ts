@@ -3,10 +3,14 @@ import { z } from 'zod';
 import { WorkflowNode, WorkflowConnection, Workflow } from '../types/n8n-api';
 import { isTriggerNode, isActivatableTrigger } from '../utils/node-type-utils';
 import { isNonExecutableNode } from '../utils/node-classification';
+import {
+  normalizeMcpWorkflowConnections,
+  normalizeMcpWorkflowNode,
+} from '../utils/mcp-input-normalizer';
 
 // Zod schemas for n8n API validation
 
-export const workflowNodeSchema = z.object({
+export const workflowNodeSchema = z.preprocess(normalizeMcpWorkflowNode, z.object({
   id: z.string(),
   name: z.string(),
   type: z.string(),
@@ -27,7 +31,7 @@ export const workflowNodeSchema = z.object({
   waitBetweenTries: z.number().optional(),
   alwaysOutputData: z.boolean().optional(),
   executeOnce: z.boolean().optional(),
-});
+}));
 
 // Connection array schema used by all connection types
 const connectionArraySchema = z.array(
@@ -45,7 +49,7 @@ const connectionArraySchema = z.array(
  * Note: 'main' is optional because AI nodes exclusively use AI-specific
  * connection types (ai_languageModel, ai_memory, etc.) without main connections.
  */
-export const workflowConnectionSchema = z.record(
+export const workflowConnectionSchema = z.preprocess(normalizeMcpWorkflowConnections, z.record(
   z.string(), // explicit key schema — see workflowNodeSchema for the Zod 3/4 rationale (#744)
   z.object({
     main: connectionArraySchema.optional(),
@@ -56,7 +60,7 @@ export const workflowConnectionSchema = z.record(
     ai_embedding: connectionArraySchema.optional(),
     ai_vectorStore: connectionArraySchema.optional(),
   }).catchall(connectionArraySchema) // Allow additional AI connection types (ai_outputParser, ai_document, ai_textSplitter, etc.)
-);
+));
 
 export const workflowSettingsSchema = z.object({
   executionOrder: z.enum(['v0', 'v1']).default('v1'),

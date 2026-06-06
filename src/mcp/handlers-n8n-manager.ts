@@ -50,6 +50,11 @@ import {
 } from '../utils/cache-utils';
 import { processExecution } from '../services/execution-processor';
 import { checkNpmVersion, formatVersionMessage } from '../utils/npm-version-checker';
+import {
+  normalizeMcpJsonValue,
+  normalizeMcpWorkflowConnections,
+  normalizeMcpWorkflowNodes,
+} from '../utils/mcp-input-normalizer';
 
 // ========================================================================
 // TypeScript Interfaces for Type Safety
@@ -429,11 +434,11 @@ const optionalEmptyAware = <T extends z.ZodTypeAny>(schema: T) =>
 // Zod schemas for input validation
 const createWorkflowSchema = z.object({
   name: z.string(),
-  nodes: z.preprocess(tryParseJson, z.array(z.any())),
+  nodes: z.preprocess(normalizeMcpWorkflowNodes, z.array(z.any())),
   // Two-arg z.record(keySchema, valueSchema) — see services/n8n-validation.ts for the
   // Zod 3/4 compatibility rationale (#744).
-  connections: z.preprocess(tryParseJson, z.record(z.string(), z.any())),
-  settings: z.preprocess(tryParseJson, z.object({
+  connections: z.preprocess(normalizeMcpWorkflowConnections, z.record(z.string(), z.any())),
+  settings: z.preprocess(normalizeMcpJsonValue, z.object({
     executionOrder: z.enum(['v0', 'v1']).optional(),
     timezone: z.string().optional(),
     saveDataErrorExecution: z.enum(['all', 'none']).optional(),
@@ -449,9 +454,9 @@ const createWorkflowSchema = z.object({
 const updateWorkflowSchema = z.object({
   id: z.string(),
   name: z.string().optional(),
-  nodes: z.preprocess(tryParseJson, z.array(z.any())).optional(),
-  connections: z.preprocess(tryParseJson, z.record(z.string(), z.any())).optional(),
-  settings: z.preprocess(tryParseJson, z.any()).optional(),
+  nodes: z.preprocess(normalizeMcpWorkflowNodes, z.array(z.any())).optional(),
+  connections: z.preprocess(normalizeMcpWorkflowConnections, z.record(z.string(), z.any())).optional(),
+  settings: z.preprocess(normalizeMcpJsonValue, z.any()).optional(),
   createBackup: z.boolean().optional(),
   intent: z.string().optional(),
 });

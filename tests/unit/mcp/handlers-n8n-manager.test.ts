@@ -294,6 +294,60 @@ describe('handlers-n8n-manager', () => {
       expect(n8nValidation.validateWorkflowStructure).toHaveBeenCalledWith(input);
     });
 
+    it('normalizes HTTP MCP serialized workflow fields before validation and create (#814)', async () => {
+      const input = {
+        name: 'Serialized Workflow',
+        nodes: [{
+          id: 'node1',
+          name: 'Set',
+          type: 'n8n-nodes-base.set',
+          typeVersion: '3',
+          position: { '0': 100, '1': 100 },
+          parameters: '{"values":{"0":{"name":"message","value":"Hello"}}}',
+        }],
+        connections: {
+          Set: {
+            main: {
+              '0': {
+                '0': { node: 'Set', type: 'main', index: 0 },
+              },
+            },
+          },
+        },
+      };
+      const normalizedInput = {
+        name: 'Serialized Workflow',
+        nodes: [{
+          id: 'node1',
+          name: 'Set',
+          type: 'n8n-nodes-base.set',
+          typeVersion: 3,
+          position: [100, 100],
+          parameters: {
+            values: [{ name: 'message', value: 'Hello' }],
+          },
+        }],
+        connections: {
+          Set: {
+            main: [[{ node: 'Set', type: 'main', index: 0 }]],
+          },
+        },
+      };
+
+      mockApiClient.createWorkflow.mockResolvedValue(createTestWorkflow({
+        id: 'serialized-workflow-id',
+        name: 'Serialized Workflow',
+        nodes: normalizedInput.nodes,
+        connections: normalizedInput.connections,
+      }));
+
+      const result = await handlers.handleCreateWorkflow(input);
+
+      expect(result.success).toBe(true);
+      expect(n8nValidation.validateWorkflowStructure).toHaveBeenCalledWith(normalizedInput);
+      expect(mockApiClient.createWorkflow).toHaveBeenCalledWith(normalizedInput);
+    });
+
     it('should handle validation errors', async () => {
       const input = { invalid: 'data' };
 

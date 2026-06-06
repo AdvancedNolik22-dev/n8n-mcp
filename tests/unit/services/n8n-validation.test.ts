@@ -68,6 +68,32 @@ describe('n8n-validation', () => {
         expect(result).toEqual(minimalNode);
       });
 
+      it('normalizes HTTP MCP serialized node fields before validation (#814)', () => {
+        const serializedNode = {
+          id: 'node-1',
+          name: 'Test Node',
+          type: 'n8n-nodes-base.set',
+          typeVersion: '3',
+          position: { '0': 100, '1': 200 },
+          parameters: '{"assignments":{"assignments":{"0":{"id":"1","name":"message","value":"Hello","type":"string"}}}}',
+        };
+
+        const result = workflowNodeSchema.parse(serializedNode);
+
+        expect(result.typeVersion).toBe(3);
+        expect(result.position).toEqual([100, 200]);
+        expect(result.parameters).toEqual({
+          assignments: {
+            assignments: [{
+              id: '1',
+              name: 'message',
+              value: 'Hello',
+              type: 'string',
+            }],
+          },
+        });
+      });
+
       it('should reject node with missing required fields', () => {
         const invalidNode = {
           name: 'Test Node',
@@ -95,7 +121,7 @@ describe('n8n-validation', () => {
           id: 'node-1',
           name: 'Test Node',
           type: 'n8n-nodes-base.set',
-          typeVersion: '3', // Should be number
+          typeVersion: 'not-a-number',
           position: [100, 200],
           parameters: {},
         };
@@ -128,6 +154,26 @@ describe('n8n-validation', () => {
         const emptyConnections = {};
         const result = workflowConnectionSchema.parse(emptyConnections);
         expect(result).toEqual(emptyConnections);
+      });
+
+      it('normalizes HTTP MCP serialized connection arrays before validation (#814)', () => {
+        const serializedConnections = {
+          Start: {
+            main: {
+              '0': {
+                '0': { node: 'End', type: 'main', index: 0 },
+              },
+            },
+          },
+        };
+
+        const result = workflowConnectionSchema.parse(serializedConnections);
+
+        expect(result).toEqual({
+          Start: {
+            main: [[{ node: 'End', type: 'main', index: 0 }]],
+          },
+        });
       });
 
       it('should reject invalid connection structure', () => {

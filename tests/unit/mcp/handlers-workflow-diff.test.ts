@@ -180,6 +180,63 @@ describe('handlers-workflow-diff', () => {
       expect(mockApiClient.updateWorkflow).toHaveBeenCalledWith('test-workflow-id', updatedWorkflow);
     });
 
+    it('normalizes HTTP MCP serialized addNode payloads before applying the diff (#814)', async () => {
+      const testWorkflow = createTestWorkflow();
+      const diffRequest = {
+        id: 'test-workflow-id',
+        operations: [
+          {
+            type: 'addNode',
+            node: {
+              id: 'node3',
+              name: 'Set Node',
+              type: 'n8n-nodes-base.set',
+              typeVersion: '3',
+              position: { '0': 500, '1': 100 },
+              parameters: '{"values":{"0":{"name":"message","value":"Hello"}}}',
+            },
+          },
+        ],
+        validateOnly: true,
+      };
+      const normalizedRequest = {
+        id: 'test-workflow-id',
+        operations: [
+          {
+            type: 'addNode',
+            node: {
+              id: 'node3',
+              name: 'Set Node',
+              type: 'n8n-nodes-base.set',
+              typeVersion: 3,
+              position: [500, 100],
+              parameters: {
+                values: [{ name: 'message', value: 'Hello' }],
+              },
+            },
+          },
+        ],
+        validateOnly: true,
+      };
+
+      mockApiClient.getWorkflow.mockResolvedValue(testWorkflow);
+      mockDiffEngine.applyDiff.mockResolvedValue({
+        success: true,
+        workflow: {
+          ...testWorkflow,
+          nodes: [...testWorkflow.nodes, normalizedRequest.operations[0].node],
+        },
+        operationsApplied: 1,
+        message: 'Validation successful',
+        errors: [],
+        warnings: [],
+      });
+
+      await handleUpdatePartialWorkflow(diffRequest, mockRepository);
+
+      expect(mockDiffEngine.applyDiff).toHaveBeenCalledWith(testWorkflow, normalizedRequest);
+    });
+
     it('should handle validation-only mode', async () => {
       const testWorkflow = createTestWorkflow();
       const diffRequest = {

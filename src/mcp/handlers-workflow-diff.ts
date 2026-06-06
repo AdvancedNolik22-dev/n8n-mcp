@@ -17,6 +17,10 @@ import { NodeRepository } from '../database/node-repository';
 import { WorkflowVersioningService } from '../services/workflow-versioning-service';
 import { WorkflowValidator } from '../services/workflow-validator';
 import { EnhancedConfigValidator } from '../services/enhanced-config-validator';
+import {
+  normalizeMcpJsonValue,
+  normalizeMcpWorkflowNode,
+} from '../utils/mcp-input-normalizer';
 
 // Cached validator instance to avoid recreating on every mutation
 let cachedValidator: WorkflowValidator | null = null;
@@ -66,13 +70,13 @@ const workflowDiffSchema = z.object({
     type: z.string(),
     description: z.string().optional(),
     // Node operations
-    node: z.any().optional(),
+    node: z.preprocess(normalizeMcpWorkflowNode, z.any()).optional(),
     nodeId: z.string().optional(),
     nodeName: z.string().optional(),
     updates: z.any().optional(),
     fieldPath: z.string().optional(),
     patches: z.any().optional(),
-    position: z.tuple([z.number(), z.number()]).optional(),
+    position: z.preprocess(normalizeMcpJsonValue, z.tuple([z.number(), z.number()])).optional(),
     // Connection operations
     source: z.string().optional(),
     target: z.string().optional(),
