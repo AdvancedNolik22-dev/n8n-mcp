@@ -144,7 +144,7 @@ export function cleanWorkflowForCreate(workflow: Partial<Workflow>): Partial<Wor
  * name, nodes, connections and settings. The GET response, however, echoes back many
  * server-managed / read-only fields (id, versionId, triggerCount, activeVersion, ...) and —
  * on newer n8n versions — fields that aren't even in the OpenAPI spec (e.g. activeVersionId,
- * versionCounter, and a top-level `availableInMCP` column added for the MCP feature).
+ * versionCounter, nodeGroups, and a top-level `availableInMCP` column added for the MCP feature).
  *
  * When n8n_update_partial_workflow reads a workflow, applies a diff and writes it back, any
  * such echoed field that a denylist doesn't explicitly drop leaks into the payload and

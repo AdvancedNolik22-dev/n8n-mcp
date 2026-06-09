@@ -417,8 +417,9 @@ describe('n8n-validation', () => {
         // Regression: n8n's GET response returns server-managed fields that are not in the
         // PUT write schema (which declares additionalProperties: false). Newer n8n versions
         // add fields not even covered by any denylist (e.g. a top-level availableInMCP column,
-        // activeVersionId, or future fields). Echoing them back triggers
+        // activeVersionId, nodeGroups, or future fields). Echoing them back triggers
         // "request/body must NOT have additional properties". The allowlist must drop them all.
+        // Covers issues #831/#838 (nodeGroups) and the availableInMCP top-level echo.
         const workflow = {
           name: 'Test Workflow',
           nodes: [],
@@ -428,6 +429,7 @@ describe('n8n-validation', () => {
           availableInMCP: true,        // top-level MCP column (n8n 2.x), not in write schema
           activeVersionId: 'av-123',   // not in OpenAPI spec, returned by GET
           versionCounter: 7,
+          nodeGroups: [],              // n8n 2.x top-level field (#831, #838)
           someFutureField: 'whatever',  // any field a future n8n version might start echoing
         } as any;
 
@@ -437,6 +439,7 @@ describe('n8n-validation', () => {
         expect(Object.keys(cleaned).sort()).toEqual(['connections', 'name', 'nodes', 'settings']);
         expect(cleaned).not.toHaveProperty('availableInMCP');
         expect(cleaned).not.toHaveProperty('activeVersionId');
+        expect(cleaned).not.toHaveProperty('nodeGroups');
         expect(cleaned).not.toHaveProperty('someFutureField');
         // availableInMCP remains valid INSIDE settings (it is a writable settings property)
         expect(cleaned.name).toBe('Test Workflow');
