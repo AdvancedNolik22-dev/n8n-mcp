@@ -1855,6 +1855,66 @@ describe('handlers-n8n-manager', () => {
       const sentNodes = getSentNodes();
       expect(sentNodes[0].credentials).toEqual({ postgresApi: { id: 'cred-123', name: 'My Postgres' } });
     });
+
+    it('should preserve name and settings from current workflow when the update omits them', async () => {
+      // Regression: n8n PUT /workflows requires name, nodes, connections AND settings.
+      // n8n_update_full_workflow lists name as optional; without merging from the current
+      // workflow, a nodes-only update would fail with
+      // "request/body must have required property 'name'".
+      const workflow = createTestWorkflow({
+        id: 'wf-1',
+        name: 'Original Name',
+        active: false,
+        nodes: [{ id: 'node-1', name: 'Set', type: 'n8n-nodes-base.set', typeVersion: 3, position: [0, 0], parameters: {} }],
+        settings: { executionOrder: 'v1', timezone: 'Europe/Warsaw' },
+      });
+      mockApiClient.getWorkflow.mockResolvedValue(workflow);
+      mockApiClient.updateWorkflow.mockResolvedValue({ ...workflow, updatedAt: '2024-01-02' });
+
+      await handlers.handleUpdateWorkflow(
+        {
+          id: 'wf-1',
+          // No name, no settings — only nodes/connections provided
+          nodes: [{ id: 'node-1', name: 'Set', type: 'n8n-nodes-base.set', typeVersion: 3, position: [10, 10], parameters: { mode: 'manual' } }],
+          connections: {},
+        },
+        mockRepository,
+      );
+
+      const sentWorkflow = mockApiClient.updateWorkflow.mock.calls[0][1];
+      expect(sentWorkflow.name).toBe('Original Name');
+      expect(sentWorkflow.settings).toMatchObject({ executionOrder: 'v1', timezone: 'Europe/Warsaw' });
+    });
+
+    it('should fetch and merge current workflow even when no nodes/connections are provided', async () => {
+      // Regression: handleUpdateWorkflow used to fetch the current workflow only when
+      // nodes/connections changed. A settings-only update then sent a partial body and
+      // failed the API's required-fields check. It must now always fetch + merge so the
+      // PUT carries name, nodes and connections from the current workflow.
+      const workflow = createTestWorkflow({
+        id: 'wf-1',
+        name: 'Keep Me',
+        active: false,
+        nodes: [{ id: 'node-1', name: 'Set', type: 'n8n-nodes-base.set', typeVersion: 3, position: [0, 0], parameters: {} }],
+        connections: { Set: { main: [[]] } },
+        settings: { executionOrder: 'v1' },
+      });
+      mockApiClient.getWorkflow.mockResolvedValue(workflow);
+      mockApiClient.updateWorkflow.mockResolvedValue({ ...workflow, updatedAt: '2024-01-02' });
+
+      const result = await handlers.handleUpdateWorkflow(
+        { id: 'wf-1', settings: { executionOrder: 'v0' } }, // only settings
+        mockRepository,
+      );
+
+      expect(result.success).toBe(true);
+      expect(mockApiClient.getWorkflow).toHaveBeenCalledWith('wf-1');
+      const sentWorkflow = mockApiClient.updateWorkflow.mock.calls[0][1];
+      expect(sentWorkflow.name).toBe('Keep Me');
+      expect(sentWorkflow.nodes).toHaveLength(1);
+      expect(sentWorkflow.connections).toEqual({ Set: { main: [[]] } });
+      expect(sentWorkflow.settings).toMatchObject({ executionOrder: 'v0' });
+    });
   });
 
   describe('handleAuditInstance — error message surfacing (#736)', () => {

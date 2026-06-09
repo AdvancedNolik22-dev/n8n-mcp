@@ -105,7 +105,16 @@ function cleanWorkflowForCreate(workflow) {
     return cleanedWorkflow;
 }
 function cleanWorkflowForUpdate(workflow) {
-    const { id, createdAt, updatedAt, versionId, versionCounter, meta, staticData, pinData, tags, description, isArchived, usedCredentials, sharedWithProjects, triggerCount, shared, active, activeVersionId, activeVersion, ...cleanedWorkflow } = workflow;
+    const source = workflow;
+    const cleanedWorkflow = {};
+    if (source.name !== undefined)
+        cleanedWorkflow.name = source.name;
+    if (source.nodes !== undefined)
+        cleanedWorkflow.nodes = source.nodes;
+    if (source.connections !== undefined)
+        cleanedWorkflow.connections = source.connections;
+    if (source.settings !== undefined)
+        cleanedWorkflow.settings = source.settings;
     const ALL_KNOWN_SETTINGS_PROPERTIES = new Set([
         'saveExecutionProgress',
         'saveManualExecutions',

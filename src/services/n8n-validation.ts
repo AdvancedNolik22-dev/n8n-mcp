@@ -139,9 +139,21 @@ export function cleanWorkflowForCreate(workflow: Partial<Workflow>): Partial<Wor
 /**
  * Clean workflow data for update operations.
  *
- * This function removes read-only and computed fields that should not be sent
- * in API update requests. It filters settings to known API-accepted properties
- * to prevent "additional properties" errors.
+ * n8n's Public API write schema (workflow.yml, used for PUT /workflows/{id}) declares
+ * `additionalProperties: false` and accepts only a small set of writable top-level fields:
+ * name, nodes, connections and settings. The GET response, however, echoes back many
+ * server-managed / read-only fields (id, versionId, triggerCount, activeVersion, ...) and —
+ * on newer n8n versions — fields that aren't even in the OpenAPI spec (e.g. activeVersionId,
+ * versionCounter, and a top-level `availableInMCP` column added for the MCP feature).
+ *
+ * When n8n_update_partial_workflow reads a workflow, applies a diff and writes it back, any
+ * such echoed field that a denylist doesn't explicitly drop leaks into the payload and
+ * triggers: "Invalid request: request/body must NOT have additional properties".
+ *
+ * We therefore use an ALLOWLIST rather than a denylist: only fields the write schema accepts
+ * are forwarded. This is forward-compatible — new read-only fields n8n adds in future
+ * versions can never break updates. Settings are filtered separately to their own writable
+ * allowlist below.
  *
  * NOTE: This function filters settings to ALL known properties (12 total).
  * For version-specific filtering (compatibility with older n8n versions),
@@ -152,29 +164,17 @@ export function cleanWorkflowForCreate(workflow: Partial<Workflow>): Partial<Wor
  * @returns A cleaned partial workflow suitable for API updates
  */
 export function cleanWorkflowForUpdate(workflow: Workflow): Partial<Workflow> {
-  const {
-    // Remove ALL read-only/computed fields (comprehensive list)
-    id,
-    createdAt,
-    updatedAt,
-    versionId,
-    versionCounter,
-    meta,
-    staticData,
-    pinData,
-    tags,
-    description,
-    isArchived,
-    usedCredentials,
-    sharedWithProjects,
-    triggerCount,
-    shared,
-    active,
-    activeVersionId,
-    activeVersion,
-    // Keep everything else
-    ...cleanedWorkflow
-  } = workflow as any;
+  const source = workflow as any;
+
+  // Allowlist of writable top-level fields accepted by the n8n Public API PUT schema.
+  // `description` is writable per the spec but intentionally omitted (some n8n versions
+  // reject it on update); `staticData`/`pinData` are server-managed and excluded. This
+  // matches the set the previous denylist effectively sent, so behavior is unchanged.
+  const cleanedWorkflow: Record<string, unknown> = {};
+  if (source.name !== undefined) cleanedWorkflow.name = source.name;
+  if (source.nodes !== undefined) cleanedWorkflow.nodes = source.nodes;
+  if (source.connections !== undefined) cleanedWorkflow.connections = source.connections;
+  if (source.settings !== undefined) cleanedWorkflow.settings = source.settings;
 
   // ALL known settings properties accepted by n8n Public API (as of n8n 1.119.0+)
   // This list is the UNION of all properties ever accepted by any n8n version
@@ -200,7 +200,7 @@ export function cleanWorkflowForUpdate(workflow: Workflow): Partial<Workflow> {
   if (cleanedWorkflow.settings && typeof cleanedWorkflow.settings === 'object') {
     // Filter to only known properties (security + prevent garbage)
     const filteredSettings: Record<string, unknown> = {};
-    for (const [key, value] of Object.entries(cleanedWorkflow.settings)) {
+    for (const [key, value] of Object.entries(cleanedWorkflow.settings as Record<string, unknown>)) {
       if (ALL_KNOWN_SETTINGS_PROPERTIES.has(key)) {
         filteredSettings[key] = value;
       }
@@ -218,9 +218,9 @@ export function cleanWorkflowForUpdate(workflow: Workflow): Partial<Workflow> {
     cleanedWorkflow.settings = { executionOrder: 'v1' as const };
   }
 
-  ensureWebhookIds(cleanedWorkflow.nodes);
+  ensureWebhookIds(cleanedWorkflow.nodes as WorkflowNode[] | undefined);
 
-  return cleanedWorkflow;
+  return cleanedWorkflow as Partial<Workflow>;
 }
 
 // Validate workflow structure
