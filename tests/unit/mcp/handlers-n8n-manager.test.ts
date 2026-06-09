@@ -1897,13 +1897,14 @@ describe('handlers-n8n-manager', () => {
         active: false,
         nodes: [{ id: 'node-1', name: 'Set', type: 'n8n-nodes-base.set', typeVersion: 3, position: [0, 0], parameters: {} }],
         connections: { Set: { main: [[]] } },
-        settings: { executionOrder: 'v1' },
+        // Two settings keys: only executionOrder is updated below; timezone must survive.
+        settings: { executionOrder: 'v1', timezone: 'Europe/Warsaw' },
       });
       mockApiClient.getWorkflow.mockResolvedValue(workflow);
       mockApiClient.updateWorkflow.mockResolvedValue({ ...workflow, updatedAt: '2024-01-02' });
 
       const result = await handlers.handleUpdateWorkflow(
-        { id: 'wf-1', settings: { executionOrder: 'v0' } }, // only settings
+        { id: 'wf-1', settings: { executionOrder: 'v0' } }, // partial settings: only executionOrder
         mockRepository,
       );
 
@@ -1913,7 +1914,9 @@ describe('handlers-n8n-manager', () => {
       expect(sentWorkflow.name).toBe('Keep Me');
       expect(sentWorkflow.nodes).toHaveLength(1);
       expect(sentWorkflow.connections).toEqual({ Set: { main: [[]] } });
-      expect(sentWorkflow.settings).toMatchObject({ executionOrder: 'v0' });
+      // Partial settings are merged over current settings, not replaced wholesale:
+      // the updated key changes and the untouched key (timezone) is preserved.
+      expect(sentWorkflow.settings).toEqual({ executionOrder: 'v0', timezone: 'Europe/Warsaw' });
     });
   });
 

@@ -649,6 +649,12 @@ async function handleUpdateWorkflow(args, repository, context) {
             ...current,
             ...updateData
         };
+        if (updateData.settings) {
+            fullWorkflow.settings = {
+                ...(current.settings ?? {}),
+                ...updateData.settings,
+            };
+        }
         if (updateData.nodes || updateData.connections) {
             if (createBackup !== false) {
                 try {

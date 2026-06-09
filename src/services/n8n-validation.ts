@@ -166,10 +166,10 @@ export function cleanWorkflowForCreate(workflow: Partial<Workflow>): Partial<Wor
 export function cleanWorkflowForUpdate(workflow: Workflow): Partial<Workflow> {
   const source = workflow as any;
 
-  // Allowlist of writable top-level fields accepted by the n8n Public API PUT schema.
-  // `description` is writable per the spec but intentionally omitted (some n8n versions
-  // reject it on update); `staticData`/`pinData` are server-managed and excluded. This
-  // matches the set the previous denylist effectively sent, so behavior is unchanged.
+  // Allowlist of top-level fields we send on update. These are exactly the fields the
+  // previous denylist effectively forwarded, so behavior is unchanged — only the mechanism
+  // (keep-known vs drop-known) differs. `description` is omitted because some n8n versions
+  // reject it on update (Issue #431), and `staticData`/`pinData` are server-managed.
   const cleanedWorkflow: Record<string, unknown> = {};
   if (source.name !== undefined) cleanedWorkflow.name = source.name;
   if (source.nodes !== undefined) cleanedWorkflow.nodes = source.nodes;

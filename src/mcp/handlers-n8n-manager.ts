@@ -962,6 +962,16 @@ export async function handleUpdateWorkflow(
       ...updateData
     };
 
+    // Merge settings at the object level. n8n's PUT is a full replace, so a partial settings
+    // payload (e.g. { executionOrder: 'v0' }) would otherwise wipe existing keys like timezone
+    // or errorWorkflow. Layer the caller's settings over the current workflow's settings.
+    if (updateData.settings) {
+      fullWorkflow.settings = {
+        ...((current.settings as Record<string, unknown>) ?? {}),
+        ...(updateData.settings as Record<string, unknown>),
+      };
+    }
+
     // Backup + structure validation only when the graph changed (nodes/connections).
     if (updateData.nodes || updateData.connections) {
       // Create backup before modifying workflow (default: true)
