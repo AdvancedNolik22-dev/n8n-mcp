@@ -957,18 +957,25 @@ export async function handleUpdateWorkflow(
     // Merge the partial update over the current workflow so all API-required fields are
     // present. cleanWorkflowForUpdate() (inside client.updateWorkflow) strips the read-only
     // fields carried in from the GET response.
+    //
+    // Settings are handled separately from the spread: the Zod schema allows `settings` to be
+    // null / any value, and a null (or otherwise non-object) value spread over `current` would
+    // clobber the existing settings and then get reduced to minimal defaults downstream. n8n's
+    // PUT is a full replace and requires settings to be present, so we only override when the
+    // caller supplied a real settings object — and then we merge it over the current settings
+    // so a partial payload (e.g. { executionOrder: 'v0' }) doesn't drop untouched keys like
+    // timezone/errorWorkflow. A missing/null/non-object settings value leaves current settings
+    // untouched.
+    const { settings: settingsUpdate, ...nonSettingsUpdate } = updateData;
     const fullWorkflow = {
       ...current,
-      ...updateData
+      ...nonSettingsUpdate
     };
 
-    // Merge settings at the object level. n8n's PUT is a full replace, so a partial settings
-    // payload (e.g. { executionOrder: 'v0' }) would otherwise wipe existing keys like timezone
-    // or errorWorkflow. Layer the caller's settings over the current workflow's settings.
-    if (updateData.settings) {
+    if (settingsUpdate && typeof settingsUpdate === 'object') {
       fullWorkflow.settings = {
         ...((current.settings as Record<string, unknown>) ?? {}),
-        ...(updateData.settings as Record<string, unknown>),
+        ...(settingsUpdate as Record<string, unknown>),
       };
     }
 

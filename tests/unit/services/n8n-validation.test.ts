@@ -441,8 +441,8 @@ describe('n8n-validation', () => {
         expect(cleaned).not.toHaveProperty('activeVersionId');
         expect(cleaned).not.toHaveProperty('nodeGroups');
         expect(cleaned).not.toHaveProperty('someFutureField');
-        // availableInMCP remains valid INSIDE settings (it is a writable settings property)
         expect(cleaned.name).toBe('Test Workflow');
+        // (availableInMCP *inside* settings is covered by the next test.)
       });
 
       it('should keep availableInMCP inside settings while stripping it at top level', () => {

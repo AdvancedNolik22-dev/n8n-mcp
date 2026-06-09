@@ -1918,6 +1918,32 @@ describe('handlers-n8n-manager', () => {
       // the updated key changes and the untouched key (timezone) is preserved.
       expect(sentWorkflow.settings).toEqual({ executionOrder: 'v0', timezone: 'Europe/Warsaw' });
     });
+
+    it('should not wipe current settings when the update passes a null/non-object settings value', async () => {
+      // The Zod schema allows `settings` to be null/any. A null value must not clobber the
+      // current workflow's settings (which would otherwise be reduced to minimal defaults).
+      const workflow = createTestWorkflow({
+        id: 'wf-1',
+        name: 'Keep Me',
+        active: false,
+        nodes: [{ id: 'node-1', name: 'Set', type: 'n8n-nodes-base.set', typeVersion: 3, position: [0, 0], parameters: {} }],
+        connections: { Set: { main: [[]] } },
+        settings: { executionOrder: 'v1', timezone: 'Europe/Warsaw' },
+      });
+      mockApiClient.getWorkflow.mockResolvedValue(workflow);
+      mockApiClient.updateWorkflow.mockResolvedValue({ ...workflow, updatedAt: '2024-01-02' });
+
+      const result = await handlers.handleUpdateWorkflow(
+        { id: 'wf-1', name: 'Renamed', settings: null } as any,
+        mockRepository,
+      );
+
+      expect(result.success).toBe(true);
+      const sentWorkflow = mockApiClient.updateWorkflow.mock.calls[0][1];
+      expect(sentWorkflow.name).toBe('Renamed');
+      // Current settings are preserved intact, not nulled or reduced to defaults.
+      expect(sentWorkflow.settings).toEqual({ executionOrder: 'v1', timezone: 'Europe/Warsaw' });
+    });
   });
 
   describe('handleAuditInstance — error message surfacing (#736)', () => {

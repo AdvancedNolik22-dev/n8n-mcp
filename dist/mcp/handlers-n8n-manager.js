@@ -645,14 +645,15 @@ async function handleUpdateWorkflow(args, repository, context) {
                 }
             }
         }
+        const { settings: settingsUpdate, ...nonSettingsUpdate } = updateData;
         const fullWorkflow = {
             ...current,
-            ...updateData
+            ...nonSettingsUpdate
         };
-        if (updateData.settings) {
+        if (settingsUpdate && typeof settingsUpdate === 'object') {
             fullWorkflow.settings = {
                 ...(current.settings ?? {}),
-                ...updateData.settings,
+                ...settingsUpdate,
             };
         }
         if (updateData.nodes || updateData.connections) {
