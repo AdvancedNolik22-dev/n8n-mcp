@@ -625,27 +625,38 @@ async function handleUpdateWorkflow(args, repository, context) {
         const input = updateWorkflowSchema.parse(args);
         const { id, createBackup, intent, ...updateData } = input;
         userIntent = intent || 'Full workflow update';
-        if (updateData.nodes || updateData.connections) {
-            const current = await client.getWorkflow(id);
-            workflowBefore = JSON.parse(JSON.stringify(current));
-            if (updateData.nodes && current.nodes) {
-                const currentById = new Map();
-                const currentByName = new Map();
-                for (const node of current.nodes) {
-                    if (node.id)
-                        currentById.set(node.id, node);
-                    currentByName.set(node.name, node);
-                }
-                for (const node of updateData.nodes) {
-                    const hasCredentials = node.credentials && typeof node.credentials === 'object' && Object.keys(node.credentials).length > 0;
-                    if (!hasCredentials) {
-                        const match = (node.id && currentById.get(node.id)) || currentByName.get(node.name);
-                        if (match?.credentials) {
-                            node.credentials = match.credentials;
-                        }
+        const current = await client.getWorkflow(id);
+        workflowBefore = JSON.parse(JSON.stringify(current));
+        if (updateData.nodes && current.nodes) {
+            const currentById = new Map();
+            const currentByName = new Map();
+            for (const node of current.nodes) {
+                if (node.id)
+                    currentById.set(node.id, node);
+                currentByName.set(node.name, node);
+            }
+            for (const node of updateData.nodes) {
+                const hasCredentials = node.credentials && typeof node.credentials === 'object' && Object.keys(node.credentials).length > 0;
+                if (!hasCredentials) {
+                    const match = (node.id && currentById.get(node.id)) || currentByName.get(node.name);
+                    if (match?.credentials) {
+                        node.credentials = match.credentials;
                     }
                 }
             }
+        }
+        const { settings: settingsUpdate, ...nonSettingsUpdate } = updateData;
+        const fullWorkflow = {
+            ...current,
+            ...nonSettingsUpdate
+        };
+        if (settingsUpdate && typeof settingsUpdate === 'object') {
+            fullWorkflow.settings = {
+                ...(current.settings ?? {}),
+                ...settingsUpdate,
+            };
+        }
+        if (updateData.nodes || updateData.connections) {
             if (createBackup !== false) {
                 try {
                     const versioningService = new workflow_versioning_service_1.WorkflowVersioningService(repository, client, (0, instance_context_1.getInstanceScopeId)(context));
@@ -666,10 +677,6 @@ async function handleUpdateWorkflow(args, repository, context) {
                     });
                 }
             }
-            const fullWorkflow = {
-                ...current,
-                ...updateData
-            };
             const errors = (0, n8n_validation_1.validateWorkflowStructure)(fullWorkflow);
             if (errors.length > 0) {
                 return {
@@ -679,7 +686,7 @@ async function handleUpdateWorkflow(args, repository, context) {
                 };
             }
         }
-        const workflow = await client.updateWorkflow(id, updateData);
+        const workflow = await client.updateWorkflow(id, fullWorkflow);
         if (workflowBefore) {
             trackWorkflowMutationForFullUpdate({
                 sessionId,

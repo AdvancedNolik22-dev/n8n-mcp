@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.57.2] - 2026-06-09
+
+### Fixed
+
+- **`n8n_update_partial_workflow` no longer fails with `request/body must NOT have additional properties` on n8n 2.x.** n8n's Public API write schema (`PUT /workflows/{id}`) declares `additionalProperties: false`, but its `GET` response echoes back server-managed fields that the write schema does not accept — including a top-level `availableInMCP` column on n8n 2.x, plus fields not even in the OpenAPI spec (`activeVersionId`, `versionCounter`, `nodeGroups`). The previous payload cleaner used a denylist, so any newly-echoed field leaked into the update request and was rejected. `cleanWorkflowForUpdate` now uses an allowlist (`name`, `nodes`, `connections`, `settings`), which is forward-compatible — fields n8n adds in future versions can no longer break updates. (`availableInMCP` *inside* `settings` remains a valid, writable property and is preserved.) Also resolves the `nodeGroups` reports (#831, #838).
+- **`n8n_update_full_workflow` no longer rejects updates that omit `name` or `settings`.** n8n's `PUT /workflows/{id}` is a full replace and requires `name`, `nodes`, `connections` and `settings` to all be present, but the tool lists them as optional. The handler now always fetches the current workflow and merges the caller's partial update over it, so omitted required fields are preserved from the existing workflow instead of failing with `request/body must have required property 'name'`.
+
+Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+
 ## [2.57.1] - 2026-06-03
 
 ### Fixed

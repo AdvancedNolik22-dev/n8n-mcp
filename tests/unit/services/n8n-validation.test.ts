@@ -413,6 +413,56 @@ describe('n8n-validation', () => {
         expect(cleaned.settings).toEqual({ executionOrder: 'v1' });
       });
 
+      it('should strip unknown top-level fields echoed back on read (allowlist, not denylist)', () => {
+        // Regression: n8n's GET response returns server-managed fields that are not in the
+        // PUT write schema (which declares additionalProperties: false). Newer n8n versions
+        // add fields not even covered by any denylist (e.g. a top-level availableInMCP column,
+        // activeVersionId, nodeGroups, or future fields). Echoing them back triggers
+        // "request/body must NOT have additional properties". The allowlist must drop them all.
+        // Covers issues #831/#838 (nodeGroups) and the availableInMCP top-level echo.
+        const workflow = {
+          name: 'Test Workflow',
+          nodes: [],
+          connections: {},
+          settings: { executionOrder: 'v1' },
+          // Fields n8n returns on read but rejects on write:
+          availableInMCP: true,        // top-level MCP column (n8n 2.x), not in write schema
+          activeVersionId: 'av-123',   // not in OpenAPI spec, returned by GET
+          versionCounter: 7,
+          nodeGroups: [],              // n8n 2.x top-level field (#831, #838)
+          someFutureField: 'whatever',  // any field a future n8n version might start echoing
+        } as any;
+
+        const cleaned = cleanWorkflowForUpdate(workflow);
+
+        // Only the writable allowlist fields survive
+        expect(Object.keys(cleaned).sort()).toEqual(['connections', 'name', 'nodes', 'settings']);
+        expect(cleaned).not.toHaveProperty('availableInMCP');
+        expect(cleaned).not.toHaveProperty('activeVersionId');
+        expect(cleaned).not.toHaveProperty('nodeGroups');
+        expect(cleaned).not.toHaveProperty('someFutureField');
+        expect(cleaned.name).toBe('Test Workflow');
+        // (availableInMCP *inside* settings is covered by the next test.)
+      });
+
+      it('should keep availableInMCP inside settings while stripping it at top level', () => {
+        const workflow = {
+          name: 'Test Workflow',
+          nodes: [],
+          connections: {},
+          availableInMCP: true, // top-level: must be stripped
+          settings: {
+            executionOrder: 'v1',
+            availableInMCP: false, // nested in settings: must be kept (writable per spec)
+          },
+        } as any;
+
+        const cleaned = cleanWorkflowForUpdate(workflow);
+
+        expect(cleaned).not.toHaveProperty('availableInMCP');
+        expect(cleaned.settings).toEqual({ executionOrder: 'v1', availableInMCP: false });
+      });
+
       it('should exclude versionCounter for n8n 1.118.1+ compatibility', () => {
         const workflow = {
           name: 'Test Workflow',

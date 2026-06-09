@@ -924,34 +924,63 @@ export async function handleUpdateWorkflow(
     const { id, createBackup, intent, ...updateData } = input;
     userIntent = intent || 'Full workflow update';
 
-    // If nodes/connections are being updated, validate the structure
-    if (updateData.nodes || updateData.connections) {
-      // Always fetch current workflow for validation (need all fields like name)
-      const current = await client.getWorkflow(id);
-      workflowBefore = JSON.parse(JSON.stringify(current));
+    // n8n's Public API PUT /workflows is a FULL replace: the write schema requires name,
+    // nodes, connections AND settings to all be present. This tool exposes them as optional,
+    // so we always fetch the current workflow and merge the caller's partial update over it.
+    // Without this, omitting e.g. `name` fails with
+    // "request/body must have required property 'name'".
+    const current = await client.getWorkflow(id);
+    workflowBefore = JSON.parse(JSON.stringify(current));
 
-      // Preserve credentials from current workflow for nodes that don't specify them.
-      // AI-generated node updates typically omit credential references because they
-      // aren't included in the context provided to the AI. Without this merge, the
-      // n8n API rejects the PUT with missing credentials.
-      if (updateData.nodes && current.nodes) {
-        const currentById = new Map<string, any>();
-        const currentByName = new Map<string, any>();
-        for (const node of current.nodes) {
-          if (node.id) currentById.set(node.id, node);
-          currentByName.set(node.name, node);
-        }
-        for (const node of updateData.nodes as any[]) {
-          const hasCredentials = node.credentials && typeof node.credentials === 'object' && Object.keys(node.credentials).length > 0;
-          if (!hasCredentials) {
-            const match = (node.id && currentById.get(node.id)) || currentByName.get(node.name);
-            if (match?.credentials) {
-              node.credentials = match.credentials;
-            }
+    // Preserve credentials from current workflow for nodes that don't specify them.
+    // AI-generated node updates typically omit credential references because they
+    // aren't included in the context provided to the AI. Without this merge, the
+    // n8n API rejects the PUT with missing credentials.
+    if (updateData.nodes && current.nodes) {
+      const currentById = new Map<string, any>();
+      const currentByName = new Map<string, any>();
+      for (const node of current.nodes) {
+        if (node.id) currentById.set(node.id, node);
+        currentByName.set(node.name, node);
+      }
+      for (const node of updateData.nodes as any[]) {
+        const hasCredentials = node.credentials && typeof node.credentials === 'object' && Object.keys(node.credentials).length > 0;
+        if (!hasCredentials) {
+          const match = (node.id && currentById.get(node.id)) || currentByName.get(node.name);
+          if (match?.credentials) {
+            node.credentials = match.credentials;
           }
         }
       }
+    }
 
+    // Merge the partial update over the current workflow so all API-required fields are
+    // present. cleanWorkflowForUpdate() (inside client.updateWorkflow) strips the read-only
+    // fields carried in from the GET response.
+    //
+    // Settings are handled separately from the spread: the Zod schema allows `settings` to be
+    // null / any value, and a null (or otherwise non-object) value spread over `current` would
+    // clobber the existing settings and then get reduced to minimal defaults downstream. n8n's
+    // PUT is a full replace and requires settings to be present, so we only override when the
+    // caller supplied a real settings object — and then we merge it over the current settings
+    // so a partial payload (e.g. { executionOrder: 'v0' }) doesn't drop untouched keys like
+    // timezone/errorWorkflow. A missing/null/non-object settings value leaves current settings
+    // untouched.
+    const { settings: settingsUpdate, ...nonSettingsUpdate } = updateData;
+    const fullWorkflow = {
+      ...current,
+      ...nonSettingsUpdate
+    };
+
+    if (settingsUpdate && typeof settingsUpdate === 'object') {
+      fullWorkflow.settings = {
+        ...((current.settings as Record<string, unknown>) ?? {}),
+        ...(settingsUpdate as Record<string, unknown>),
+      };
+    }
+
+    // Backup + structure validation only when the graph changed (nodes/connections).
+    if (updateData.nodes || updateData.connections) {
       // Create backup before modifying workflow (default: true)
       if (createBackup !== false) {
         try {
@@ -975,11 +1004,6 @@ export async function handleUpdateWorkflow(
         }
       }
 
-      const fullWorkflow = {
-        ...current,
-        ...updateData
-      };
-
       // Validate workflow structure (n8n API expects FULL form: n8n-nodes-base.*)
       const errors = validateWorkflowStructure(fullWorkflow);
       if (errors.length > 0) {
@@ -991,8 +1015,8 @@ export async function handleUpdateWorkflow(
       }
     }
 
-    // Update workflow
-    const workflow = await client.updateWorkflow(id, updateData);
+    // Update workflow with the merged full payload
+    const workflow = await client.updateWorkflow(id, fullWorkflow as Partial<Workflow>);
 
     // Track successful mutation
     if (workflowBefore) {
