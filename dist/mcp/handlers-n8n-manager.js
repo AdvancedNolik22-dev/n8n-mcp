@@ -2468,6 +2468,35 @@ function stripCredentialData(credential) {
     const { data: _sensitiveData, ...safeCred } = credential;
     return safeCred;
 }
+function isCredentialReadUnsupported(error) {
+    if (typeof error !== 'object' || error === null) {
+        return false;
+    }
+    const status = error.statusCode;
+    if (status === 405 || status === 403) {
+        return true;
+    }
+    if (status !== undefined) {
+        return false;
+    }
+    const message = error instanceof Error ? error.message.toLowerCase() : '';
+    return message.includes('not allowed');
+}
+function credentialReadUnsupportedResponse(error) {
+    return {
+        success: false,
+        error: 'This n8n instance\'s public API rejected the credential read. On older n8n versions the public API ' +
+            'does not expose GET /credentials at all; on newer ones this can mean the API key or instance settings ' +
+            'do not permit credential reads. The create, delete, and getSchema actions generally still work, and ' +
+            'update does too where the API version supports it (it needs a known credential ID, not list/get). ' +
+            'To find an existing credential\'s ID, open it in the n8n UI — the ID is in the URL.',
+        code: 'NOT_SUPPORTED',
+        details: {
+            statusCode: error.statusCode,
+            cause: error instanceof Error ? error.message : String(error),
+        },
+    };
+}
 async function handleListCredentials(args, context) {
     try {
         const client = ensureApiConfigured(context);
@@ -2507,6 +2536,9 @@ async function handleListCredentials(args, context) {
         };
     }
     catch (error) {
+        if (isCredentialReadUnsupported(error)) {
+            return credentialReadUnsupportedResponse(error);
+        }
         return handleCrudError(error);
     }
 }
@@ -2519,10 +2551,7 @@ async function handleGetCredential(args, context) {
             credential = await client.getCredential(id);
         }
         catch (getError) {
-            const status = getError.statusCode;
-            const msg = getError.message ?? '';
-            const isUnsupported = status === 405 || status === 403 || msg.includes('not allowed');
-            if (!isUnsupported) {
+            if (!isCredentialReadUnsupported(getError)) {
                 throw getError;
             }
             const all = await client.listAllCredentials();
@@ -2550,6 +2579,9 @@ async function handleGetCredential(args, context) {
         };
     }
     catch (error) {
+        if (isCredentialReadUnsupported(error)) {
+            return credentialReadUnsupportedResponse(error);
+        }
         return handleCrudError(error);
     }
 }

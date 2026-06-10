@@ -2536,6 +2536,98 @@ describe('handlers-n8n-manager', () => {
       expect(result.error).toContain('not found');
     });
 
+    it('list explains NOT_SUPPORTED when the instance rejects GET /credentials (#809)', async () => {
+      mockApiClient.listCredentials.mockRejectedValue(
+        new N8nApiError('GET method not allowed', 405)
+      );
+
+      const result = await handlers.handleListCredentials({ action: 'list' });
+
+      expect(result.success).toBe(false);
+      expect(result.code).toBe('NOT_SUPPORTED');
+      expect(result.error).toContain('rejected the credential read');
+      expect(result.error).toContain('create, delete, and getSchema');
+      // The underlying error is preserved for diagnosis (405-version vs 403-permissions).
+      expect(result.details).toEqual({ statusCode: 405, cause: 'GET method not allowed' });
+    });
+
+    it('list explains NOT_SUPPORTED on 403 (API key scope / instance settings) (#809)', async () => {
+      mockApiClient.listCredentials.mockRejectedValue(
+        new N8nApiError('Forbidden', 403)
+      );
+
+      const result = await handlers.handleListCredentials({ action: 'list' });
+
+      expect(result.success).toBe(false);
+      expect(result.code).toBe('NOT_SUPPORTED');
+      expect(result.details).toEqual({ statusCode: 403, cause: 'Forbidden' });
+    });
+
+    it('list detects unsupported reads from unwrapped errors via the reason phrase, case-insensitively (#809)', async () => {
+      mockApiClient.listCredentials.mockRejectedValue(new Error('Method Not Allowed'));
+
+      const result = await handlers.handleListCredentials({ action: 'list' });
+
+      expect(result.success).toBe(false);
+      expect(result.code).toBe('NOT_SUPPORTED');
+    });
+
+    it('list does NOT map other errors to NOT_SUPPORTED (#809)', async () => {
+      // A concrete non-405/403 status wins over a "not allowed" message…
+      mockApiClient.listCredentials.mockRejectedValue(
+        new N8nApiError('Sharing not allowed on this plan', 400)
+      );
+      const badRequest = await handlers.handleListCredentials({ action: 'list' });
+      expect(badRequest.success).toBe(false);
+      expect(badRequest.code).not.toBe('NOT_SUPPORTED');
+
+      // …and a plain server error keeps the handleCrudError shape.
+      mockApiClient.listCredentials.mockRejectedValue(
+        new N8nApiError('Internal server error', 500, 'SERVER_ERROR')
+      );
+      const serverError = await handlers.handleListCredentials({ action: 'list' });
+      expect(serverError.success).toBe(false);
+      expect(serverError.code).not.toBe('NOT_SUPPORTED');
+    });
+
+    it('list with includeUsage explains NOT_SUPPORTED when the full scan is rejected (#809)', async () => {
+      mockApiClient.listAllCredentials.mockRejectedValue(
+        new N8nApiError('GET method not allowed', 405)
+      );
+
+      const result = await handlers.handleListCredentials({ action: 'list', includeUsage: true });
+
+      expect(result.success).toBe(false);
+      expect(result.code).toBe('NOT_SUPPORTED');
+    });
+
+    it('get explains NOT_SUPPORTED when both direct GET and the list fallback are rejected (#809)', async () => {
+      mockApiClient.getCredential.mockRejectedValue(
+        new N8nApiError('GET method not allowed', 405)
+      );
+      mockApiClient.listAllCredentials.mockRejectedValue(
+        new N8nApiError('GET method not allowed', 405)
+      );
+
+      const result = await handlers.handleGetCredential({ action: 'get', id: 'cred-1' });
+
+      expect(result.success).toBe(false);
+      expect(result.code).toBe('NOT_SUPPORTED');
+      expect(result.error).toContain('rejected the credential read');
+    });
+
+    it('get still reports a direct 404 as not found, not NOT_SUPPORTED (#809)', async () => {
+      mockApiClient.getCredential.mockRejectedValue(
+        new N8nApiError('Credential not found', 404, 'NOT_FOUND')
+      );
+
+      const result = await handlers.handleGetCredential({ action: 'get', id: 'cred-1' });
+
+      expect(result.success).toBe(false);
+      expect(result.code).not.toBe('NOT_SUPPORTED');
+      expect(mockApiClient.listAllCredentials).not.toHaveBeenCalled();
+    });
+
     it('normalizes an empty-string cursor to undefined (not forwarded to the API)', async () => {
       mockApiClient.listCredentials.mockResolvedValue({ data: [credPage1], nextCursor: null });
 
