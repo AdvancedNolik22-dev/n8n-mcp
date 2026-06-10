@@ -2487,7 +2487,8 @@ function credentialReadUnsupportedResponse(error) {
         success: false,
         error: 'This n8n instance\'s public API rejected the credential read. On older n8n versions the public API ' +
             'does not expose GET /credentials at all; on newer ones this can mean the API key or instance settings ' +
-            'do not permit credential reads. The create, delete, and getSchema actions generally still work. ' +
+            'do not permit credential reads. The create, delete, and getSchema actions generally still work, and ' +
+            'update does too where the API version supports it (it needs a known credential ID, not list/get). ' +
             'To find an existing credential\'s ID, open it in the n8n UI — the ID is in the URL.',
         code: 'NOT_SUPPORTED',
         details: {
