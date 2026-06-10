@@ -21,7 +21,8 @@ const crypto_1 = __importDefault(require("crypto"));
 const zod_1 = require("zod");
 const node_type_utils_1 = require("../utils/node-type-utils");
 const node_classification_1 = require("../utils/node-classification");
-exports.workflowNodeSchema = zod_1.z.object({
+const mcp_input_normalizer_1 = require("../utils/mcp-input-normalizer");
+exports.workflowNodeSchema = zod_1.z.preprocess(mcp_input_normalizer_1.normalizeMcpWorkflowNode, zod_1.z.object({
     id: zod_1.z.string(),
     name: zod_1.z.string(),
     type: zod_1.z.string(),
@@ -38,13 +39,13 @@ exports.workflowNodeSchema = zod_1.z.object({
     waitBetweenTries: zod_1.z.number().optional(),
     alwaysOutputData: zod_1.z.boolean().optional(),
     executeOnce: zod_1.z.boolean().optional(),
-});
+}));
 const connectionArraySchema = zod_1.z.array(zod_1.z.array(zod_1.z.object({
     node: zod_1.z.string(),
     type: zod_1.z.string(),
     index: zod_1.z.number(),
 })));
-exports.workflowConnectionSchema = zod_1.z.record(zod_1.z.string(), zod_1.z.object({
+exports.workflowConnectionSchema = zod_1.z.preprocess(mcp_input_normalizer_1.normalizeMcpWorkflowConnections, zod_1.z.record(zod_1.z.string(), zod_1.z.object({
     main: connectionArraySchema.optional(),
     error: connectionArraySchema.optional(),
     ai_tool: connectionArraySchema.optional(),
@@ -52,7 +53,7 @@ exports.workflowConnectionSchema = zod_1.z.record(zod_1.z.string(), zod_1.z.obje
     ai_memory: connectionArraySchema.optional(),
     ai_embedding: connectionArraySchema.optional(),
     ai_vectorStore: connectionArraySchema.optional(),
-}).catchall(connectionArraySchema));
+}).catchall(connectionArraySchema)));
 exports.workflowSettingsSchema = zod_1.z.object({
     executionOrder: zod_1.z.enum(['v0', 'v1']).default('v1'),
     timezone: zod_1.z.string().optional(),

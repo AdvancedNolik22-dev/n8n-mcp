@@ -1,3 +1,14 @@
+/**
+ * Repairs workflow payloads mangled by some HTTP MCP clients (issue #814):
+ * JSON-string roots (`parameters: "{}"`), arrays flattened to dense numeric-index
+ * records (`[x, y]` → `{"0": x, "1": y}`), and stringified numbers (`typeVersion: "3"`).
+ *
+ * Deliberate tradeoff: a legitimate user object keyed exactly "0".."n" is
+ * indistinguishable from a mangled array and WILL be converted to one. This is
+ * accepted because n8n itself never produces dense numeric-index objects in node
+ * parameters, and the normalization must run unconditionally — the client-side
+ * mangling is non-deterministic, so there is no reliable signal to gate on.
+ */
 type JsonRecord = Record<string, unknown>;
 
 function isPlainRecord(value: unknown): value is JsonRecord {
@@ -75,15 +86,22 @@ export function normalizeMcpWorkflowNode(value: unknown): unknown {
     return parsed;
   }
 
-  return {
-    ...parsed,
-    typeVersion: normalizeNumberLike(parsed.typeVersion),
-    position: normalizeMcpJsonValue(parsed.position),
-    parameters: normalizeMcpJsonValue(parsed.parameters),
-    credentials: parsed.credentials === undefined
-      ? undefined
-      : normalizeMcpJsonValue(parsed.credentials),
-  };
+  // Only rewrite fields present on the input — adding explicit undefined-valued
+  // keys would change Object.keys()-based consumers downstream.
+  const normalized: JsonRecord = { ...parsed };
+  if ('typeVersion' in parsed) {
+    normalized.typeVersion = normalizeNumberLike(parsed.typeVersion);
+  }
+  if ('position' in parsed) {
+    normalized.position = normalizeMcpJsonValue(parsed.position);
+  }
+  if ('parameters' in parsed) {
+    normalized.parameters = normalizeMcpJsonValue(parsed.parameters);
+  }
+  if ('credentials' in parsed) {
+    normalized.credentials = normalizeMcpJsonValue(parsed.credentials);
+  }
+  return normalized;
 }
 
 export function normalizeMcpWorkflowNodes(value: unknown): unknown {

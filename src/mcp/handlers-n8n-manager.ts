@@ -465,7 +465,7 @@ const listWorkflowsSchema = z.object({
   limit: z.number().min(1).max(100).optional(),
   cursor: optionalEmptyAware(z.string()),
   active: z.boolean().optional(),
-  tags: z.preprocess(tryParseJson, z.array(z.string())).optional(),
+  tags: z.preprocess(normalizeMcpJsonValue, z.array(z.string())).optional(),
   projectId: optionalEmptyAware(z.string()),
   excludePinnedData: z.boolean().optional(),
 });

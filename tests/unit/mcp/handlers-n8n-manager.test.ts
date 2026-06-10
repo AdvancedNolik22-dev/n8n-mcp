@@ -1199,6 +1199,20 @@ describe('handlers-n8n-manager', () => {
       });
     });
 
+    it('normalizes a tags array mangled into a dense-index record (#814)', async () => {
+      mockApiClient.listWorkflows.mockResolvedValue({ data: [], nextCursor: null });
+
+      const result = await handlers.handleListWorkflows({
+        tags: { '0': 'production', '1': 'critical' },
+      });
+
+      expect(result.success).toBe(true);
+      // The handler joins the normalized array into the comma string the n8n API expects
+      expect(mockApiClient.listWorkflows).toHaveBeenCalledWith(
+        expect.objectContaining({ tags: 'production,critical' })
+      );
+    });
+
     it('should handle invalid input with ZodError', async () => {
       const result = await handlers.handleListWorkflows({
         limit: 'invalid',  // Should be a number

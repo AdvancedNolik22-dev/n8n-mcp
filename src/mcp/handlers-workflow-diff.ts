@@ -8,7 +8,7 @@ import { randomUUID } from 'crypto';
 import { McpToolResponse } from '../types/n8n-api';
 import { WorkflowDiffRequest, WorkflowDiffOperation, WorkflowDiffValidationError } from '../types/workflow-diff';
 import { WorkflowDiffEngine } from '../services/workflow-diff-engine';
-import { getN8nApiClient, tryParseJson } from './handlers-n8n-manager';
+import { getN8nApiClient } from './handlers-n8n-manager';
 import { N8nApiError, getUserFriendlyErrorMessage } from '../utils/n8n-errors';
 import { logger } from '../utils/logger';
 import { InstanceContext, getInstanceScopeId } from '../types/instance-context';
@@ -66,16 +66,16 @@ const NODE_TARGETING_OPERATIONS = new Set([
 // Zod schema for the diff request
 const workflowDiffSchema = z.object({
   id: z.string(),
-  operations: z.preprocess(tryParseJson, z.array(z.object({
+  operations: z.preprocess(normalizeMcpJsonValue, z.array(z.object({
     type: z.string(),
     description: z.string().optional(),
     // Node operations
     node: z.preprocess(normalizeMcpWorkflowNode, z.any()).optional(),
     nodeId: z.string().optional(),
     nodeName: z.string().optional(),
-    updates: z.any().optional(),
+    updates: z.preprocess(normalizeMcpJsonValue, z.any()).optional(),
     fieldPath: z.string().optional(),
-    patches: z.any().optional(),
+    patches: z.preprocess(normalizeMcpJsonValue, z.any()).optional(),
     position: z.preprocess(normalizeMcpJsonValue, z.tuple([z.number(), z.number()])).optional(),
     // Connection operations
     source: z.string().optional(),
@@ -92,9 +92,9 @@ const workflowDiffSchema = z.object({
     ignoreErrors: z.boolean().optional(),
     // Connection cleanup operations
     dryRun: z.boolean().optional(),
-    connections: z.any().optional(),
+    connections: z.preprocess(normalizeMcpJsonValue, z.any()).optional(),
     // Metadata operations
-    settings: z.any().optional(),
+    settings: z.preprocess(normalizeMcpJsonValue, z.any()).optional(),
     name: z.string().optional(),
     tag: z.string().optional(),
     // Transfer operation
