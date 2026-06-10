@@ -8,8 +8,16 @@
  * accepted because n8n itself never produces dense numeric-index objects in node
  * parameters, and the normalization must run unconditionally — the client-side
  * mangling is non-deterministic, so there is no reliable signal to gate on.
+ * The conversion can also surface as a validation error instead of silent data
+ * change, e.g. a connections record whose only source node is literally named
+ * "0" becomes an array and is rejected by the schema.
  */
 type JsonRecord = Record<string, unknown>;
+
+// Untrusted inputs can nest arbitrarily deep; beyond this we return the value
+// untouched instead of risking a stack overflow. Real workflows are tens of
+// levels deep at most.
+const MAX_NORMALIZE_DEPTH = 256;
 
 function isPlainRecord(value: unknown): value is JsonRecord {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -46,9 +54,13 @@ function isDenseIndexRecord(record: JsonRecord): boolean {
       .every((key, index) => key === index);
 }
 
-function restoreIndexedArrays(value: unknown): unknown {
+function restoreIndexedArrays(value: unknown, depth = 0): unknown {
+  if (depth >= MAX_NORMALIZE_DEPTH) {
+    return value;
+  }
+
   if (Array.isArray(value)) {
-    return value.map(restoreIndexedArrays);
+    return value.map((entry) => restoreIndexedArrays(entry, depth + 1));
   }
 
   if (!isPlainRecord(value)) {
@@ -56,14 +68,13 @@ function restoreIndexedArrays(value: unknown): unknown {
   }
 
   const normalizedEntries = Object.fromEntries(
-    Object.entries(value).map(([key, entryValue]) => [key, restoreIndexedArrays(entryValue)])
+    Object.entries(value).map(([key, entryValue]) => [key, restoreIndexedArrays(entryValue, depth + 1)])
   );
 
   if (isDenseIndexRecord(normalizedEntries)) {
-    return Object.keys(normalizedEntries)
-      .map(Number)
-      .sort((a, b) => a - b)
-      .map((index) => normalizedEntries[String(index)]);
+    // Keys are guaranteed dense and 0-based here, so index by position directly.
+    const { length } = Object.keys(normalizedEntries);
+    return Array.from({ length }, (_, index) => normalizedEntries[String(index)]);
   }
 
   return normalizedEntries;
@@ -74,7 +85,9 @@ export function normalizeMcpJsonValue(value: unknown): unknown {
 }
 
 function normalizeNumberLike(value: unknown): unknown {
-  if (typeof value !== 'string' || value.trim() === '') {
+  // Canonical decimal form only — bare Number() would also accept "0x10",
+  // "1e3", or padded strings, silently producing values Zod should reject.
+  if (typeof value !== 'string' || !/^-?\d+(\.\d+)?$/.test(value)) {
     return value;
   }
 
@@ -82,8 +95,22 @@ function normalizeNumberLike(value: unknown): unknown {
   return Number.isFinite(parsed) ? parsed : value;
 }
 
-export function normalizeMcpWorkflowNode(value: unknown): unknown {
+export function normalizeMcpWorkflowPosition(value: unknown): unknown {
   const parsed = normalizeMcpJsonValue(value);
+  if (!Array.isArray(parsed)) {
+    return parsed;
+  }
+
+  // The same clients that flatten [x, y] into {"0": x, "1": y} also stringify
+  // the coordinates; de-stringify them so the [number, number] check passes.
+  return parsed.map(normalizeNumberLike);
+}
+
+export function normalizeMcpWorkflowNode(value: unknown): unknown {
+  // Shallow root parse only: a node's own keys are field names, never dense
+  // indices, and recursing from the node root would dense-convert credentials
+  // before the per-field exemption below could protect it.
+  const parsed = tryParseJsonRoot(value);
   if (!isPlainRecord(parsed)) {
     return parsed;
   }
@@ -95,24 +122,35 @@ export function normalizeMcpWorkflowNode(value: unknown): unknown {
     normalized.typeVersion = normalizeNumberLike(parsed.typeVersion);
   }
   if ('position' in parsed) {
-    normalized.position = normalizeMcpJsonValue(parsed.position);
+    normalized.position = normalizeMcpWorkflowPosition(parsed.position);
   }
   if ('parameters' in parsed) {
     normalized.parameters = normalizeMcpJsonValue(parsed.parameters);
   }
   if ('credentials' in parsed) {
-    normalized.credentials = normalizeMcpJsonValue(parsed.credentials);
+    // Credentials are always an object keyed by credential-type name — never an
+    // array — so dense-index conversion could only corrupt them. Parse a JSON
+    // string root, nothing more. (A recursive pass upstream of this function,
+    // e.g. on a diff request's operations root, can still convert dense-keyed
+    // credentials; real credential keys are type names, so that stays theoretical.)
+    normalized.credentials = tryParseJsonRoot(parsed.credentials);
   }
   return normalized;
 }
 
 export function normalizeMcpWorkflowNodes(value: unknown): unknown {
-  const parsed = normalizeMcpJsonValue(value);
-  if (!Array.isArray(parsed)) {
-    return parsed;
+  // Restore only the collection itself here (shallowly) — per-node repair is
+  // normalizeMcpWorkflowNode's job, and a recursive pass from this level would
+  // bypass its credentials exemption.
+  const parsed = tryParseJsonRoot(value);
+  const collection = isPlainRecord(parsed) && isDenseIndexRecord(parsed)
+    ? Array.from({ length: Object.keys(parsed).length }, (_, index) => parsed[String(index)])
+    : parsed;
+  if (!Array.isArray(collection)) {
+    return collection;
   }
 
-  return parsed.map(normalizeMcpWorkflowNode);
+  return collection.map(normalizeMcpWorkflowNode);
 }
 
 export function normalizeMcpWorkflowConnections(value: unknown): unknown {

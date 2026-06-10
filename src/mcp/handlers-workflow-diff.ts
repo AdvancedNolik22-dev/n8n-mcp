@@ -20,6 +20,7 @@ import { EnhancedConfigValidator } from '../services/enhanced-config-validator';
 import {
   normalizeMcpJsonValue,
   normalizeMcpWorkflowNode,
+  normalizeMcpWorkflowPosition,
 } from '../utils/mcp-input-normalizer';
 
 // Cached validator instance to avoid recreating on every mutation
@@ -76,7 +77,7 @@ const workflowDiffSchema = z.object({
     updates: z.preprocess(normalizeMcpJsonValue, z.any()).optional(),
     fieldPath: z.string().optional(),
     patches: z.preprocess(normalizeMcpJsonValue, z.any()).optional(),
-    position: z.preprocess(normalizeMcpJsonValue, z.tuple([z.number(), z.number()])).optional(),
+    position: z.preprocess(normalizeMcpWorkflowPosition, z.tuple([z.number(), z.number()])).optional(),
     // Connection operations
     source: z.string().optional(),
     target: z.string().optional(),

@@ -79,7 +79,7 @@ const workflowDiffSchema = zod_1.z.object({
         updates: zod_1.z.preprocess(mcp_input_normalizer_1.normalizeMcpJsonValue, zod_1.z.any()).optional(),
         fieldPath: zod_1.z.string().optional(),
         patches: zod_1.z.preprocess(mcp_input_normalizer_1.normalizeMcpJsonValue, zod_1.z.any()).optional(),
-        position: zod_1.z.preprocess(mcp_input_normalizer_1.normalizeMcpJsonValue, zod_1.z.tuple([zod_1.z.number(), zod_1.z.number()])).optional(),
+        position: zod_1.z.preprocess(mcp_input_normalizer_1.normalizeMcpWorkflowPosition, zod_1.z.tuple([zod_1.z.number(), zod_1.z.number()])).optional(),
         source: zod_1.z.string().optional(),
         target: zod_1.z.string().optional(),
         from: zod_1.z.string().optional(),

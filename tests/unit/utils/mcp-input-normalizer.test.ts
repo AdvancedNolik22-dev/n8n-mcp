@@ -4,6 +4,7 @@ import {
   normalizeMcpWorkflowNode,
   normalizeMcpWorkflowNodes,
   normalizeMcpWorkflowConnections,
+  normalizeMcpWorkflowPosition,
 } from '@/utils/mcp-input-normalizer';
 
 describe('mcp-input-normalizer', () => {
@@ -57,6 +58,40 @@ describe('mcp-input-normalizer', () => {
       expect(normalizeMcpJsonValue(null)).toBe(null);
       expect(normalizeMcpJsonValue(undefined)).toBe(undefined);
     });
+
+    it('never allocates beyond the input key count for huge sparse indices', () => {
+      expect(normalizeMcpJsonValue({ '0': 'a', '4294967296': 'b' }))
+        .toEqual({ '0': 'a', '4294967296': 'b' });
+    });
+
+    it('does not pollute Object.prototype via __proto__ or constructor keys', () => {
+      normalizeMcpJsonValue('{"__proto__":{"polluted":true},"constructor":{"bad":1}}');
+      normalizeMcpJsonValue({ '0': 'a', __proto__: { polluted: true } });
+      expect(({} as any).polluted).toBeUndefined();
+    });
+
+    it('stops recursing on extremely deep payloads instead of overflowing the stack', () => {
+      let deep: any = { '0': 'leaf' };
+      for (let i = 0; i < 1000; i++) {
+        deep = { nested: deep };
+      }
+      expect(() => normalizeMcpJsonValue(deep)).not.toThrow();
+    });
+  });
+
+  describe('normalizeMcpWorkflowPosition', () => {
+    it('restores a dense record and de-stringifies coordinates', () => {
+      expect(normalizeMcpWorkflowPosition({ '0': '500', '1': '100' })).toEqual([500, 100]);
+      expect(normalizeMcpWorkflowPosition(['250', 300])).toEqual([250, 300]);
+    });
+
+    it('leaves non-canonical coordinate strings for Zod to reject', () => {
+      expect(normalizeMcpWorkflowPosition(['0x10', 100])).toEqual(['0x10', 100]);
+    });
+
+    it('returns non-array input unchanged after root normalization', () => {
+      expect(normalizeMcpWorkflowPosition('not a position')).toBe('not a position');
+    });
   });
 
   describe('normalizeMcpWorkflowNode', () => {
@@ -68,7 +103,7 @@ describe('mcp-input-normalizer', () => {
         typeVersion: '3.4',
         position: { '0': 100, '1': 200 },
         parameters: '{"values":{"0":{"name":"x"}}}',
-        credentials: { '0': { id: 'c1' } },
+        credentials: '{"httpBasicAuth":{"id":"c1","name":"creds"}}',
       });
 
       expect(result).toEqual({
@@ -78,8 +113,28 @@ describe('mcp-input-normalizer', () => {
         typeVersion: 3.4,
         position: [100, 200],
         parameters: { values: [{ name: 'x' }] },
-        credentials: [{ id: 'c1' }],
+        credentials: { httpBasicAuth: { id: 'c1', name: 'creds' } },
       });
+    });
+
+    it('never dense-converts credentials (object keyed by type name, not an array)', () => {
+      const result = normalizeMcpWorkflowNode({ credentials: { '0': { id: 'c1' } } }) as any;
+      expect(result.credentials).toEqual({ '0': { id: 'c1' } });
+    });
+
+    it('de-stringifies position coordinates', () => {
+      const result = normalizeMcpWorkflowNode({ position: { '0': '500', '1': '100' } }) as any;
+      expect(result.position).toEqual([500, 100]);
+    });
+
+    it('is idempotent when applied twice (operations-level + node-level preprocess)', () => {
+      const once = normalizeMcpWorkflowNode({
+        id: 'n1',
+        typeVersion: '3',
+        position: { '0': '100', '1': 200 },
+        parameters: '{"values":{"0":{"name":"x"}}}',
+      });
+      expect(normalizeMcpWorkflowNode(once)).toEqual(once);
     });
 
     it('does not add keys absent from the input', () => {
@@ -87,9 +142,11 @@ describe('mcp-input-normalizer', () => {
       expect(Object.keys(result)).toEqual(['id', 'name']);
     });
 
-    it('leaves non-numeric typeVersion strings for Zod to reject', () => {
-      const result = normalizeMcpWorkflowNode({ typeVersion: 'not-a-number' }) as any;
-      expect(result.typeVersion).toBe('not-a-number');
+    it('leaves non-canonical number strings for Zod to reject', () => {
+      expect((normalizeMcpWorkflowNode({ typeVersion: 'not-a-number' }) as any).typeVersion).toBe('not-a-number');
+      expect((normalizeMcpWorkflowNode({ typeVersion: '0x10' }) as any).typeVersion).toBe('0x10');
+      expect((normalizeMcpWorkflowNode({ typeVersion: '1e3' }) as any).typeVersion).toBe('1e3');
+      expect((normalizeMcpWorkflowNode({ typeVersion: ' 3 ' }) as any).typeVersion).toBe(' 3 ');
     });
 
     it('returns non-record input unchanged', () => {
