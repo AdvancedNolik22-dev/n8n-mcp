@@ -180,6 +180,227 @@ describe('handlers-workflow-diff', () => {
       expect(mockApiClient.updateWorkflow).toHaveBeenCalledWith('test-workflow-id', updatedWorkflow);
     });
 
+    it('normalizes HTTP MCP serialized addNode payloads before applying the diff (#814)', async () => {
+      const testWorkflow = createTestWorkflow();
+      const diffRequest = {
+        id: 'test-workflow-id',
+        operations: [
+          {
+            type: 'addNode',
+            node: {
+              id: 'node3',
+              name: 'Set Node',
+              type: 'n8n-nodes-base.set',
+              typeVersion: '3',
+              position: { '0': 500, '1': 100 },
+              parameters: '{"values":{"0":{"name":"message","value":"Hello"}}}',
+            },
+          },
+        ],
+        validateOnly: true,
+      };
+      const normalizedRequest = {
+        id: 'test-workflow-id',
+        operations: [
+          {
+            type: 'addNode',
+            node: {
+              id: 'node3',
+              name: 'Set Node',
+              type: 'n8n-nodes-base.set',
+              typeVersion: 3,
+              position: [500, 100],
+              parameters: {
+                values: [{ name: 'message', value: 'Hello' }],
+              },
+            },
+          },
+        ],
+        validateOnly: true,
+      };
+
+      mockApiClient.getWorkflow.mockResolvedValue(testWorkflow);
+      mockDiffEngine.applyDiff.mockResolvedValue({
+        success: true,
+        workflow: {
+          ...testWorkflow,
+          nodes: [...testWorkflow.nodes, normalizedRequest.operations[0].node],
+        },
+        operationsApplied: 1,
+        message: 'Validation successful',
+        errors: [],
+        warnings: [],
+      });
+
+      await handleUpdatePartialWorkflow(diffRequest, mockRepository);
+
+      expect(mockDiffEngine.applyDiff).toHaveBeenCalledWith(testWorkflow, normalizedRequest);
+    });
+
+    it('normalizes an operations array mangled into a dense-index record (#814)', async () => {
+      const testWorkflow = createTestWorkflow();
+      const operation = {
+        type: 'updateName',
+        name: 'Renamed Workflow',
+      };
+      const diffRequest = {
+        id: 'test-workflow-id',
+        operations: { '0': operation },
+        validateOnly: true,
+      };
+
+      mockApiClient.getWorkflow.mockResolvedValue(testWorkflow);
+      mockDiffEngine.applyDiff.mockResolvedValue({
+        success: true,
+        workflow: { ...testWorkflow, name: 'Renamed Workflow' },
+        operationsApplied: 1,
+        message: 'Validation successful',
+        errors: [],
+        warnings: [],
+      });
+
+      await handleUpdatePartialWorkflow(diffRequest, mockRepository);
+
+      expect(mockDiffEngine.applyDiff).toHaveBeenCalledWith(testWorkflow, {
+        id: 'test-workflow-id',
+        operations: [operation],
+        validateOnly: true,
+      });
+    });
+
+    it('normalizes mangled nested arrays inside updateNode updates (#814)', async () => {
+      const testWorkflow = createTestWorkflow();
+      const diffRequest = {
+        id: 'test-workflow-id',
+        operations: [
+          {
+            type: 'updateNode',
+            nodeName: 'HTTP Request',
+            updates: {
+              'parameters.assignments.assignments': {
+                '0': { id: '1', name: 'message', value: 'Hello', type: 'string' },
+              },
+            },
+          },
+        ],
+        validateOnly: true,
+      };
+
+      mockApiClient.getWorkflow.mockResolvedValue(testWorkflow);
+      mockDiffEngine.applyDiff.mockResolvedValue({
+        success: true,
+        workflow: testWorkflow,
+        operationsApplied: 1,
+        message: 'Validation successful',
+        errors: [],
+        warnings: [],
+      });
+
+      await handleUpdatePartialWorkflow(diffRequest, mockRepository);
+
+      expect(mockDiffEngine.applyDiff).toHaveBeenCalledWith(testWorkflow, {
+        id: 'test-workflow-id',
+        operations: [
+          {
+            type: 'updateNode',
+            nodeName: 'HTTP Request',
+            updates: {
+              'parameters.assignments.assignments': [
+                { id: '1', name: 'message', value: 'Hello', type: 'string' },
+              ],
+            },
+          },
+        ],
+        validateOnly: true,
+      });
+    });
+
+    it('normalizes a patches array mangled into a dense-index record (#814)', async () => {
+      const testWorkflow = createTestWorkflow();
+      const diffRequest = {
+        id: 'test-workflow-id',
+        operations: [
+          {
+            type: 'patchNodeField',
+            nodeName: 'HTTP Request',
+            fieldPath: 'parameters.url',
+            patches: { '0': { find: 'api.test.com', replace: 'api.example.com' } },
+          },
+        ],
+        validateOnly: true,
+      };
+
+      mockApiClient.getWorkflow.mockResolvedValue(testWorkflow);
+      mockDiffEngine.applyDiff.mockResolvedValue({
+        success: true,
+        workflow: testWorkflow,
+        operationsApplied: 1,
+        message: 'Validation successful',
+        errors: [],
+        warnings: [],
+      });
+
+      await handleUpdatePartialWorkflow(diffRequest, mockRepository);
+
+      expect(mockDiffEngine.applyDiff).toHaveBeenCalledWith(testWorkflow, {
+        id: 'test-workflow-id',
+        operations: [
+          {
+            type: 'patchNodeField',
+            nodeName: 'HTTP Request',
+            fieldPath: 'parameters.url',
+            patches: [{ find: 'api.test.com', replace: 'api.example.com' }],
+          },
+        ],
+        validateOnly: true,
+      });
+    });
+
+    it('normalizes mangled connection arrays in replaceConnections (#814)', async () => {
+      const testWorkflow = createTestWorkflow();
+      const diffRequest = {
+        id: 'test-workflow-id',
+        operations: [
+          {
+            type: 'replaceConnections',
+            connections: {
+              Start: {
+                main: { '0': { '0': { node: 'HTTP Request', type: 'main', index: 0 } } },
+              },
+            },
+          },
+        ],
+        validateOnly: true,
+      };
+
+      mockApiClient.getWorkflow.mockResolvedValue(testWorkflow);
+      mockDiffEngine.applyDiff.mockResolvedValue({
+        success: true,
+        workflow: testWorkflow,
+        operationsApplied: 1,
+        message: 'Validation successful',
+        errors: [],
+        warnings: [],
+      });
+
+      await handleUpdatePartialWorkflow(diffRequest, mockRepository);
+
+      expect(mockDiffEngine.applyDiff).toHaveBeenCalledWith(testWorkflow, {
+        id: 'test-workflow-id',
+        operations: [
+          {
+            type: 'replaceConnections',
+            connections: {
+              Start: {
+                main: [[{ node: 'HTTP Request', type: 'main', index: 0 }]],
+              },
+            },
+          },
+        ],
+        validateOnly: true,
+      });
+    });
+
     it('should handle validation-only mode', async () => {
       const testWorkflow = createTestWorkflow();
       const diffRequest = {

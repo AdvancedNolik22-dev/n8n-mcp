@@ -45,6 +45,7 @@ const n8n_validation_1 = require("../services/n8n-validation");
 const workflow_versioning_service_1 = require("../services/workflow-versioning-service");
 const workflow_validator_1 = require("../services/workflow-validator");
 const enhanced_config_validator_1 = require("../services/enhanced-config-validator");
+const mcp_input_normalizer_1 = require("../utils/mcp-input-normalizer");
 let cachedValidator = null;
 function compareVersions(a, b) {
     if (a.versionId !== undefined && b.versionId !== undefined) {
@@ -69,16 +70,16 @@ const NODE_TARGETING_OPERATIONS = new Set([
 ]);
 const workflowDiffSchema = zod_1.z.object({
     id: zod_1.z.string(),
-    operations: zod_1.z.preprocess(handlers_n8n_manager_1.tryParseJson, zod_1.z.array(zod_1.z.object({
+    operations: zod_1.z.preprocess(mcp_input_normalizer_1.normalizeMcpJsonValue, zod_1.z.array(zod_1.z.object({
         type: zod_1.z.string(),
         description: zod_1.z.string().optional(),
-        node: zod_1.z.any().optional(),
+        node: zod_1.z.preprocess(mcp_input_normalizer_1.normalizeMcpWorkflowNode, zod_1.z.any()).optional(),
         nodeId: zod_1.z.string().optional(),
         nodeName: zod_1.z.string().optional(),
-        updates: zod_1.z.any().optional(),
+        updates: zod_1.z.preprocess(mcp_input_normalizer_1.normalizeMcpJsonValue, zod_1.z.any()).optional(),
         fieldPath: zod_1.z.string().optional(),
-        patches: zod_1.z.any().optional(),
-        position: zod_1.z.tuple([zod_1.z.number(), zod_1.z.number()]).optional(),
+        patches: zod_1.z.preprocess(mcp_input_normalizer_1.normalizeMcpJsonValue, zod_1.z.any()).optional(),
+        position: zod_1.z.preprocess(mcp_input_normalizer_1.normalizeMcpWorkflowPosition, zod_1.z.tuple([zod_1.z.number(), zod_1.z.number()])).optional(),
         source: zod_1.z.string().optional(),
         target: zod_1.z.string().optional(),
         from: zod_1.z.string().optional(),
@@ -91,8 +92,8 @@ const workflowDiffSchema = zod_1.z.object({
         case: zod_1.z.number().optional(),
         ignoreErrors: zod_1.z.boolean().optional(),
         dryRun: zod_1.z.boolean().optional(),
-        connections: zod_1.z.any().optional(),
-        settings: zod_1.z.any().optional(),
+        connections: zod_1.z.preprocess(mcp_input_normalizer_1.normalizeMcpJsonValue, zod_1.z.any()).optional(),
+        settings: zod_1.z.preprocess(mcp_input_normalizer_1.normalizeMcpJsonValue, zod_1.z.any()).optional(),
         name: zod_1.z.string().optional(),
         tag: zod_1.z.string().optional(),
         destinationProjectId: zod_1.z.string().min(1).optional(),

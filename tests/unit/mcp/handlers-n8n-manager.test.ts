@@ -294,6 +294,60 @@ describe('handlers-n8n-manager', () => {
       expect(n8nValidation.validateWorkflowStructure).toHaveBeenCalledWith(input);
     });
 
+    it('normalizes HTTP MCP serialized workflow fields before validation and create (#814)', async () => {
+      const input = {
+        name: 'Serialized Workflow',
+        nodes: [{
+          id: 'node1',
+          name: 'Set',
+          type: 'n8n-nodes-base.set',
+          typeVersion: '3',
+          position: { '0': 100, '1': 100 },
+          parameters: '{"values":{"0":{"name":"message","value":"Hello"}}}',
+        }],
+        connections: {
+          Set: {
+            main: {
+              '0': {
+                '0': { node: 'Set', type: 'main', index: 0 },
+              },
+            },
+          },
+        },
+      };
+      const normalizedInput = {
+        name: 'Serialized Workflow',
+        nodes: [{
+          id: 'node1',
+          name: 'Set',
+          type: 'n8n-nodes-base.set',
+          typeVersion: 3,
+          position: [100, 100],
+          parameters: {
+            values: [{ name: 'message', value: 'Hello' }],
+          },
+        }],
+        connections: {
+          Set: {
+            main: [[{ node: 'Set', type: 'main', index: 0 }]],
+          },
+        },
+      };
+
+      mockApiClient.createWorkflow.mockResolvedValue(createTestWorkflow({
+        id: 'serialized-workflow-id',
+        name: 'Serialized Workflow',
+        nodes: normalizedInput.nodes,
+        connections: normalizedInput.connections,
+      }));
+
+      const result = await handlers.handleCreateWorkflow(input);
+
+      expect(result.success).toBe(true);
+      expect(n8nValidation.validateWorkflowStructure).toHaveBeenCalledWith(normalizedInput);
+      expect(mockApiClient.createWorkflow).toHaveBeenCalledWith(normalizedInput);
+    });
+
     it('should handle validation errors', async () => {
       const input = { invalid: 'data' };
 
@@ -1143,6 +1197,20 @@ describe('handlers-n8n-manager', () => {
           _note: 'More workflows available. Use cursor to get next page.',
         },
       });
+    });
+
+    it('normalizes a tags array mangled into a dense-index record (#814)', async () => {
+      mockApiClient.listWorkflows.mockResolvedValue({ data: [], nextCursor: null });
+
+      const result = await handlers.handleListWorkflows({
+        tags: { '0': 'production', '1': 'critical' },
+      });
+
+      expect(result.success).toBe(true);
+      // The handler joins the normalized array into the comma string the n8n API expects
+      expect(mockApiClient.listWorkflows).toHaveBeenCalledWith(
+        expect.objectContaining({ tags: 'production,critical' })
+      );
     });
 
     it('should handle invalid input with ZodError', async () => {
