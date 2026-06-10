@@ -2468,6 +2468,19 @@ function stripCredentialData(credential) {
     const { data: _sensitiveData, ...safeCred } = credential;
     return safeCred;
 }
+function isCredentialReadUnsupported(error) {
+    const status = error.statusCode;
+    const message = error instanceof Error ? error.message : '';
+    return status === 405 || status === 403 || message.includes('not allowed');
+}
+const CREDENTIAL_READ_UNSUPPORTED = {
+    success: false,
+    error: 'This n8n instance\'s public API does not allow reading credentials (GET /credentials was rejected). ' +
+        'Older n8n versions only support the create, update, delete, and getSchema actions; list and get require ' +
+        'a version that exposes credential reads. To find an existing credential\'s ID, open it in the n8n UI — ' +
+        'the ID is in the URL.',
+    code: 'NOT_SUPPORTED',
+};
 async function handleListCredentials(args, context) {
     try {
         const client = ensureApiConfigured(context);
@@ -2507,6 +2520,9 @@ async function handleListCredentials(args, context) {
         };
     }
     catch (error) {
+        if (isCredentialReadUnsupported(error)) {
+            return CREDENTIAL_READ_UNSUPPORTED;
+        }
         return handleCrudError(error);
     }
 }
@@ -2519,10 +2535,7 @@ async function handleGetCredential(args, context) {
             credential = await client.getCredential(id);
         }
         catch (getError) {
-            const status = getError.statusCode;
-            const msg = getError.message ?? '';
-            const isUnsupported = status === 405 || status === 403 || msg.includes('not allowed');
-            if (!isUnsupported) {
+            if (!isCredentialReadUnsupported(getError)) {
                 throw getError;
             }
             const all = await client.listAllCredentials();
@@ -2550,6 +2563,9 @@ async function handleGetCredential(args, context) {
         };
     }
     catch (error) {
+        if (isCredentialReadUnsupported(error)) {
+            return CREDENTIAL_READ_UNSUPPORTED;
+        }
         return handleCrudError(error);
     }
 }

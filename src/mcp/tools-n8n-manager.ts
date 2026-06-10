@@ -659,7 +659,7 @@ Old backups are also pruned automatically (10 most recent per workflow, plus an 
   },
   {
     name: 'n8n_manage_credentials',
-    description: 'Manage n8n credentials. Actions: list, get, create, update, delete, getSchema. Use getSchema to discover required fields before creating. For list, page beyond 100 results with cursor (from the previous response\'s nextCursor). SECURITY: credential data values are never logged.',
+    description: 'Manage n8n credentials. Actions: list, get, create, update, delete, getSchema. Use getSchema to discover required fields before creating. For list, page beyond 100 results with cursor (from the previous response\'s nextCursor). NOTE: list/get need an n8n version whose public API exposes credential reads — older instances return NOT_SUPPORTED for them (create, update, delete, getSchema still work). SECURITY: credential data values are never logged.',
     inputSchema: {
       type: 'object',
       properties: {

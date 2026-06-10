@@ -3231,6 +3231,26 @@ function stripCredentialData(credential: Credential): CredentialWithUsage {
   return safeCred;
 }
 
+// Not every n8n version exposes credential reads in its public API: older
+// instances reject GET /credentials with 405 (#809), and some deployments
+// block it with 403. Detect that so list/get can explain the limitation
+// instead of surfacing a bare "GET method not allowed".
+function isCredentialReadUnsupported(error: unknown): boolean {
+  const status = (error as { statusCode?: number }).statusCode;
+  const message = error instanceof Error ? error.message : '';
+  return status === 405 || status === 403 || message.includes('not allowed');
+}
+
+const CREDENTIAL_READ_UNSUPPORTED: McpToolResponse = {
+  success: false,
+  error:
+    'This n8n instance\'s public API does not allow reading credentials (GET /credentials was rejected). ' +
+    'Older n8n versions only support the create, update, delete, and getSchema actions; list and get require ' +
+    'a version that exposes credential reads. To find an existing credential\'s ID, open it in the n8n UI — ' +
+    'the ID is in the URL.',
+  code: 'NOT_SUPPORTED',
+};
+
 export async function handleListCredentials(args: unknown, context?: InstanceContext): Promise<McpToolResponse> {
   try {
     const client = ensureApiConfigured(context);
@@ -3276,6 +3296,9 @@ export async function handleListCredentials(args: unknown, context?: InstanceCon
       },
     };
   } catch (error) {
+    if (isCredentialReadUnsupported(error)) {
+      return CREDENTIAL_READ_UNSUPPORTED;
+    }
     return handleCrudError(error);
   }
 }
@@ -3288,14 +3311,13 @@ export async function handleGetCredential(args: unknown, context?: InstanceConte
     try {
       credential = await client.getCredential(id);
     } catch (getError: unknown) {
-      // GET /credentials/:id is not in the n8n public API — fall back to list + filter
-      const status = (getError as { statusCode?: number }).statusCode;
-      const msg = (getError as Error).message ?? '';
-      const isUnsupported = status === 405 || status === 403 || msg.includes('not allowed');
-      if (!isUnsupported) {
+      // GET /credentials/:id is not always in the n8n public API — fall back to list + filter
+      if (!isCredentialReadUnsupported(getError)) {
         throw getError;
       }
       // Paginate through ALL credentials — the target id may live beyond page 1.
+      // If the list endpoint is rejected too, the instance supports no credential
+      // reads at all; the outer catch turns that into the NOT_SUPPORTED response.
       const all = await client.listAllCredentials();
       credential = all.find((c) => c.id === id);
       if (!credential) {
@@ -3320,6 +3342,9 @@ export async function handleGetCredential(args: unknown, context?: InstanceConte
       data: usageScanError ? { ...enriched, usageScanError } : enriched,
     };
   } catch (error) {
+    if (isCredentialReadUnsupported(error)) {
+      return CREDENTIAL_READ_UNSUPPORTED;
+    }
     return handleCrudError(error);
   }
 }

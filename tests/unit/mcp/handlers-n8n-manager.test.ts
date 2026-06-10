@@ -2536,6 +2536,45 @@ describe('handlers-n8n-manager', () => {
       expect(result.error).toContain('not found');
     });
 
+    it('list explains NOT_SUPPORTED when the instance rejects GET /credentials (#809)', async () => {
+      mockApiClient.listCredentials.mockRejectedValue(
+        new N8nApiError('GET method not allowed', 405)
+      );
+
+      const result = await handlers.handleListCredentials({ action: 'list' });
+
+      expect(result.success).toBe(false);
+      expect(result.code).toBe('NOT_SUPPORTED');
+      expect(result.error).toContain('does not allow reading credentials');
+      expect(result.error).toContain('create, update, delete, and getSchema');
+    });
+
+    it('list with includeUsage explains NOT_SUPPORTED when the full scan is rejected (#809)', async () => {
+      mockApiClient.listAllCredentials.mockRejectedValue(
+        new N8nApiError('GET method not allowed', 405)
+      );
+
+      const result = await handlers.handleListCredentials({ action: 'list', includeUsage: true });
+
+      expect(result.success).toBe(false);
+      expect(result.code).toBe('NOT_SUPPORTED');
+    });
+
+    it('get explains NOT_SUPPORTED when both direct GET and the list fallback are rejected (#809)', async () => {
+      mockApiClient.getCredential.mockRejectedValue(
+        new N8nApiError('GET method not allowed', 405)
+      );
+      mockApiClient.listAllCredentials.mockRejectedValue(
+        new N8nApiError('GET method not allowed', 405)
+      );
+
+      const result = await handlers.handleGetCredential({ action: 'get', id: 'cred-1' });
+
+      expect(result.success).toBe(false);
+      expect(result.code).toBe('NOT_SUPPORTED');
+      expect(result.error).toContain('does not allow reading credentials');
+    });
+
     it('normalizes an empty-string cursor to undefined (not forwarded to the API)', async () => {
       mockApiClient.listCredentials.mockResolvedValue({ data: [credPage1], nextCursor: null });
 
