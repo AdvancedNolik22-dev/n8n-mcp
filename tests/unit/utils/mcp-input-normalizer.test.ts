@@ -30,6 +30,11 @@ describe('mcp-input-normalizer', () => {
       expect(normalizeMcpJsonValue({})).toEqual({});
     });
 
+    it('leaves records with non-canonical numeric keys (leading zeros) untouched', () => {
+      expect(normalizeMcpJsonValue({ '00': 'a' })).toEqual({ '00': 'a' });
+      expect(normalizeMcpJsonValue({ '0': 'a', '01': 'b' })).toEqual({ '0': 'a', '01': 'b' });
+    });
+
     it('leaves sparse numeric-key records untouched', () => {
       expect(normalizeMcpJsonValue({ '0': 'a', '2': 'b' })).toEqual({ '0': 'a', '2': 'b' });
     });

@@ -37,7 +37,9 @@ function isDenseIndexRecord(record: JsonRecord): boolean {
     return false;
   }
 
-  return keys.every((key) => /^\d+$/.test(key))
+  // Canonical array-index form only: "00" would pass /^\d+$/ but Number('00') → 0,
+  // and the rebuild looks up the key "0" which doesn't exist, dropping the value.
+  return keys.every((key) => /^(0|[1-9]\d*)$/.test(key))
     && keys
       .map(Number)
       .sort((a, b) => a - b)
