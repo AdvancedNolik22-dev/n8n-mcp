@@ -1335,13 +1335,13 @@ export class SingleSessionHTTPServer {
         const hasUrl = headers['x-n8n-url'];
         const hasKey = headers['x-n8n-key'];
 
-        // SECURITY (GHSA-jxx9-px88-pj69): in multi-tenant mode, both headers
-        // must be present. Falling through with no context would silently use
-        // the operator's process-level N8N_API_KEY for the tenant's request.
-        if (process.env.ENABLE_MULTI_TENANT === 'true' && !hasUrl && !hasKey) {
+        // SECURITY (GHSA-jxx9-px88-pj69, GHSA-2cf7-hpwf-47h9): in multi-tenant
+        // mode both tenant headers are required; an incomplete context is
+        // rejected.
+        if (process.env.ENABLE_MULTI_TENANT === 'true' && (!hasUrl || !hasKey)) {
           logger.warn('Multi-tenant request missing tenant headers', {
-            hasUrl: false,
-            hasKey: false
+            hasUrl: !!hasUrl,
+            hasKey: !!hasKey
           });
           res.status(400).json({
             jsonrpc: '2.0',

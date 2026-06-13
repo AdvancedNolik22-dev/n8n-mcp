@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.57.4] - 2026-06-13
+
+### Security
+
+- Fix incorrect authorization for tenant-scoped workflow version backups in multi-tenant HTTP mode (GHSA-2cf7-hpwf-47h9). Reported by @DavidCarliez.
+
+Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+
 ## [2.57.3] - 2026-06-10
 
 ### Fixed

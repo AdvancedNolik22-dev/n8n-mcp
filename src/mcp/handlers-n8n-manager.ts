@@ -2405,6 +2405,16 @@ export async function handleWorkflowVersions(
 ): Promise<McpToolResponse> {
   try {
     const input = workflowVersionsSchema.parse(args);
+
+    // SECURITY (GHSA-2cf7-hpwf-47h9): multi-tenant requests must resolve a
+    // complete tenant scope; fail closed otherwise.
+    if (process.env.ENABLE_MULTI_TENANT === 'true' && getInstanceScopeId(context) === '') {
+      return {
+        success: false,
+        error: 'Workflow version storage is not available for this tenant context'
+      };
+    }
+
     const client = context ? getN8nApiClient(context) : null;
     const versioningService = new WorkflowVersioningService(repository, client || undefined, getInstanceScopeId(context));
 

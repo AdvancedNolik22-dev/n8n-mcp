@@ -382,7 +382,7 @@ describe('HTTP Server instance URL validation (GHSA-4ggg-h7ph-26qr)', () => {
     });
   });
 
-  describe('GHSA-jxx9-px88-pj69 — multi-tenant header omission', () => {
+  describe('GHSA-jxx9-px88-pj69, GHSA-2cf7-hpwf-47h9 — multi-tenant header omission', () => {
     beforeEach(() => {
       process.env.ENABLE_MULTI_TENANT = 'true';
       // Process-level credentials must not leak to tenants even when set.
@@ -425,6 +425,52 @@ describe('HTTP Server instance URL validation (GHSA-4ggg-h7ph-26qr)', () => {
       await handler(req, res);
 
       expect(res.status).toHaveBeenCalledWith(400);
+    });
+
+    it('rejects request with only the url tenant header', async () => {
+      server = new SingleSessionHTTPServer();
+      await server.start();
+
+      const handler = findHandler('post', '/mcp');
+      const { req, res } = createMockReqRes();
+      req.headers = {
+        authorization: `Bearer ${TEST_AUTH_TOKEN}`,
+        'x-n8n-url': 'https://tenant-n8n.example.com',
+      };
+      await handler(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      const jsonArgs = (res.json as any).mock.calls[0][0];
+      expect(jsonArgs).toMatchObject({
+        jsonrpc: '2.0',
+        error: {
+          code: -32602,
+          message: 'Multi-tenant headers required',
+        },
+      });
+    });
+
+    it('rejects request with only the key tenant header', async () => {
+      server = new SingleSessionHTTPServer();
+      await server.start();
+
+      const handler = findHandler('post', '/mcp');
+      const { req, res } = createMockReqRes();
+      req.headers = {
+        authorization: `Bearer ${TEST_AUTH_TOKEN}`,
+        'x-n8n-key': 'tenant-api-key',
+      };
+      await handler(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      const jsonArgs = (res.json as any).mock.calls[0][0];
+      expect(jsonArgs).toMatchObject({
+        jsonrpc: '2.0',
+        error: {
+          code: -32602,
+          message: 'Multi-tenant headers required',
+        },
+      });
     });
 
     it('allows request with both tenant headers in multi-tenant mode', async () => {

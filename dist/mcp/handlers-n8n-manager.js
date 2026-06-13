@@ -1812,6 +1812,12 @@ async function handleDiagnostic(request, context) {
 async function handleWorkflowVersions(args, repository, context) {
     try {
         const input = workflowVersionsSchema.parse(args);
+        if (process.env.ENABLE_MULTI_TENANT === 'true' && (0, instance_context_1.getInstanceScopeId)(context) === '') {
+            return {
+                success: false,
+                error: 'Workflow version storage is not available for this tenant context'
+            };
+        }
         const client = context ? getN8nApiClient(context) : null;
         const versioningService = new workflow_versioning_service_1.WorkflowVersioningService(repository, client || undefined, (0, instance_context_1.getInstanceScopeId)(context));
         switch (input.mode) {

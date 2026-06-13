@@ -85,3 +85,76 @@ describe('GHSA-j6r7-6fhx-77wx: n8n_workflow_versions cross-tenant isolation', ()
     expect(res.error).toContain('Invalid input');
   });
 });
+
+/**
+ * GHSA-2cf7-hpwf-47h9: in multi-tenant mode the handler must fail closed when
+ * the request-derived context maps to the empty default scope, so default-scope
+ * backups stay unreachable through n8n_workflow_versions.
+ */
+describe('GHSA-2cf7-hpwf-47h9: default-scope fail-closed in multi-tenant mode', () => {
+  // A partial context (url without key) derives the empty default scope.
+  const partialContext: InstanceContext = {
+    n8nApiUrl: 'https://tenant-a.example.com'
+  };
+
+  let testDb: TestDatabase;
+  let repository: NodeRepository;
+  let originalMultiTenant: string | undefined;
+
+  beforeEach(async () => {
+    originalMultiTenant = process.env.ENABLE_MULTI_TENANT;
+    process.env.ENABLE_MULTI_TENANT = 'true';
+    testDb = new TestDatabase({ mode: 'memory' });
+    const db = await testDb.initialize();
+    repository = new NodeRepository(createTestDatabaseAdapter(db));
+  });
+
+  afterEach(async () => {
+    if (originalMultiTenant === undefined) {
+      delete process.env.ENABLE_MULTI_TENANT;
+    } else {
+      process.env.ENABLE_MULTI_TENANT = originalMultiTenant;
+    }
+    await testDb.cleanup();
+  });
+
+  // Seed a backup in the empty default scope.
+  async function seedDefaultScopeBackup(): Promise<number> {
+    const service = new WorkflowVersioningService(repository, undefined, getInstanceScopeId(undefined));
+    const result = await service.createBackup(
+      'wf-default',
+      { name: 'Default-Scope-Backup', nodes: [], connections: {}, settings: {} },
+      { trigger: 'partial_update' }
+    );
+    return result.versionId;
+  }
+
+  it('refuses get for a partial context', async () => {
+    const versionId = await seedDefaultScopeBackup();
+
+    const res = await handleWorkflowVersions({ mode: 'get', versionId }, repository, partialContext);
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('not available for this tenant context');
+  });
+
+  it('refuses list for a partial context', async () => {
+    await seedDefaultScopeBackup();
+
+    const res = await handleWorkflowVersions({ mode: 'list', workflowId: 'wf-default' }, repository, partialContext);
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('not available for this tenant context');
+  });
+
+  it('refuses delete for a partial context and leaves the backup intact', async () => {
+    const versionId = await seedDefaultScopeBackup();
+
+    const res = await handleWorkflowVersions({ mode: 'delete', versionId }, repository, partialContext);
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('not available for this tenant context');
+
+    // The default-scope backup is still present after the refused delete.
+    const service = new WorkflowVersioningService(repository, undefined, getInstanceScopeId(undefined));
+    const version = await service.getVersion(versionId);
+    expect(version).not.toBeNull();
+  });
+});
