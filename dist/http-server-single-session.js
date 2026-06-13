@@ -964,10 +964,10 @@ class SingleSessionHTTPServer {
                 const headers = extractMultiTenantHeaders(req);
                 const hasUrl = headers['x-n8n-url'];
                 const hasKey = headers['x-n8n-key'];
-                if (process.env.ENABLE_MULTI_TENANT === 'true' && !hasUrl && !hasKey) {
+                if (process.env.ENABLE_MULTI_TENANT === 'true' && (!hasUrl || !hasKey)) {
                     logger_1.logger.warn('Multi-tenant request missing tenant headers', {
-                        hasUrl: false,
-                        hasKey: false
+                        hasUrl: !!hasUrl,
+                        hasKey: !!hasKey
                     });
                     res.status(400).json({
                         jsonrpc: '2.0',
