@@ -109,8 +109,8 @@ async function rebuildOptimized() {
     const schemaPath = path.join(__dirname, '../../src/database/schema-optimized.sql');
     const schema = fs.readFileSync(schemaPath, 'utf8');
     db.exec(schema);
-    db.exec('DELETE FROM nodes WHERE is_community = 0 OR is_community IS NULL');
-    console.log('🗑️  Cleared core/base nodes (community nodes preserved)\n');
+    db.exec('DELETE FROM nodes');
+    console.log('🗑️  Cleared existing data\n');
     const nodes = await loader.loadAllNodes();
     console.log(`📦 Loaded ${nodes.length} nodes from packages\n`);
     const stats = {

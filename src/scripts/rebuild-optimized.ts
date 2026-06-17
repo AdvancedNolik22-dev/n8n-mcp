@@ -99,13 +99,12 @@ async function rebuildOptimized() {
   const schema = fs.readFileSync(schemaPath, 'utf8');
   db.exec(schema);
   
-  // Clear existing data, but preserve community nodes (is_community = 1).
-  // Community nodes are fetched separately (npm run fetch:community) and are not
-  // part of the installed n8n packages, so a full wipe would drop them on every
-  // rebuild and force a manual backup/restore. Scoping the delete to core/base
-  // nodes lets them survive the rebuild automatically.
-  db.exec('DELETE FROM nodes WHERE is_community = 0 OR is_community IS NULL');
-  console.log('🗑️  Cleared core/base nodes (community nodes preserved)\n');
+  // Clear existing data.
+  // NOTE: unlike rebuild.ts, this optimized path uses schema-optimized.sql, which
+  // has no is_community column and no community-node support — so there are no
+  // community nodes to preserve here and a full wipe is correct.
+  db.exec('DELETE FROM nodes');
+  console.log('🗑️  Cleared existing data\n');
   
   // Load all nodes
   const nodes = await loader.loadAllNodes();
