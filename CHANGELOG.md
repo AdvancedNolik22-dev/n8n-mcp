@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **`npm run update:n8n` no longer aborts at its validation step.** The post-rebuild validation invoked a `test-nodes` npm script pointing at `dist/scripts/test-nodes.js`, a file removed long ago, so every run ended with `Cannot find module .../test-nodes.js` and `❌ Update failed at validation step` even though the dependency bump and database rebuild had completed. The redundant `test-nodes` step (critical-node checks are already covered by `npm run validate`) and its dangling npm script have been removed.
+- **Published runtime manifest aligned with the build.** `package.runtime.json` (the manifest published to npm) pinned `@modelcontextprotocol/sdk` to `1.20.1` while the code is built and tested against `1.28.0`, and declared `node >=16.0.0` despite depending on `express@^5` (which requires Node ≥18). Both are now corrected (SDK `1.28.0`, engine `>=18.0.0`) so runtime-only installs match the tested build.
 
 Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
 
