@@ -184,7 +184,7 @@ class N8nDependencyUpdater {
   runValidation() {
     console.log('\n🧪 Running validation tests...');
     try {
-      execSync('npm run validate && npm run test-nodes', { 
+      execSync('npm run validate', {
         cwd: path.join(__dirname, '..'),
         stdio: 'inherit'
       });

@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.58.0] - 2026-06-17
+
+### Changed
+
+- **Updated n8n to 2.26.5.** Bumped the four n8n packages this server loads at build time: `n8n-nodes-base` 2.23.0 → 2.26.2, `n8n-core` 2.23.1 → 2.26.2, `n8n-workflow` 2.23.0 → 2.26.2, and `@n8n/n8n-nodes-langchain` 2.23.0 → 2.26.2. The node database was rebuilt from the upgraded packages (816 core nodes, 1,137 AI-capable tool variants, 611 versioned nodes, 271 triggers) and the existing community-node corpus (1,029 nodes) was preserved with its READMEs and AI summaries intact. README badge and node-count copy updated to 1,845 total (816 core + 1,029 community).
+
+### Fixed
+
+- **`npm run update:n8n` no longer aborts at its validation step.** The post-rebuild validation invoked a `test-nodes` npm script pointing at `dist/scripts/test-nodes.js`, a file removed long ago, so every run ended with `Cannot find module .../test-nodes.js` and `❌ Update failed at validation step` even though the dependency bump and database rebuild had completed. The redundant `test-nodes` step (critical-node checks are already covered by `npm run validate`) and its dangling npm script have been removed.
+- **Published runtime manifest aligned with the build.** `package.runtime.json` (the manifest published to npm) pinned `@modelcontextprotocol/sdk` to `1.20.1` while the code is built and tested against `1.28.0`, and declared `node >=16.0.0` despite depending on `express@^5` (which requires Node ≥18). Both are now corrected (SDK `1.28.0`, engine `>=18.0.0`) so runtime-only installs match the tested build.
+
+Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+
 ## [2.57.4] - 2026-06-13
 
 ### Security
