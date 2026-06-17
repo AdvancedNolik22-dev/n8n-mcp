@@ -54,8 +54,8 @@ async function rebuild() {
     const toolVariantGenerator = new tool_variant_generator_1.ToolVariantGenerator();
     const schema = fs.readFileSync(path.join(__dirname, '../../src/database/schema.sql'), 'utf8');
     db.exec(schema);
-    db.exec('DELETE FROM nodes');
-    console.log('🗑️  Cleared existing data\n');
+    db.exec('DELETE FROM nodes WHERE is_community = 0 OR is_community IS NULL');
+    console.log('🗑️  Cleared core/base nodes (community nodes preserved)\n');
     const nodes = await loader.loadAllNodes();
     console.log(`📦 Loaded ${nodes.length} nodes from packages\n`);
     const stats = {
