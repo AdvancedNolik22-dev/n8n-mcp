@@ -1596,6 +1596,10 @@ export class N8NDocumentationMCPServer {
             return n8nHandlers.handleGetWorkflowMinimal(args, this.instanceContext);
           case 'active':
             return n8nHandlers.handleGetWorkflowActive(args, this.instanceContext);
+          case 'filtered':
+            // nodeNames is required for this mode; the handler's Zod schema enforces it
+            // and returns a graceful "Invalid input" response (consistent with the other modes).
+            return n8nHandlers.handleGetWorkflowFiltered(args, this.instanceContext);
           case 'full':
           default:
             return n8nHandlers.handleGetWorkflow(args, this.instanceContext);

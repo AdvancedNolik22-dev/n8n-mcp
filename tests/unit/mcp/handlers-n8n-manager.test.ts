@@ -1087,6 +1087,92 @@ describe('handlers-n8n-manager', () => {
     });
   });
 
+  describe('handleGetWorkflowFiltered', () => {
+    const multiNodeWorkflow = () => createTestWorkflow({
+      nodes: [
+        { id: 'node1', name: 'Start', type: 'n8n-nodes-base.start', typeVersion: 1, position: [100, 100], parameters: {} },
+        { id: 'node2', name: 'Process Data', type: 'n8n-nodes-base.code', typeVersion: 2, position: [300, 100], parameters: { jsCode: 'return items;' } },
+        { id: 'node3', name: 'Save', type: 'n8n-nodes-base.set', typeVersion: 3, position: [500, 100], parameters: { value: 'x' } },
+      ],
+    });
+
+    it('returns only the requested node with its full config', async () => {
+      mockApiClient.getWorkflow.mockResolvedValue(multiNodeWorkflow());
+
+      const result = await handlers.handleGetWorkflowFiltered({ id: 'test-workflow-id', nodeNames: ['Process Data'] });
+
+      expect(result.success).toBe(true);
+      expect(result.data.nodes).toHaveLength(1);
+      expect(result.data.nodes[0].name).toBe('Process Data');
+      expect(result.data.nodes[0].parameters).toEqual({ jsCode: 'return items;' });
+      expect(result.data.nodeCount).toBe(3);
+      expect(result.data.returnedCount).toBe(1);
+      expect(result.data).not.toHaveProperty('notFound');
+    });
+
+    it('matches by node ID as well as node name', async () => {
+      mockApiClient.getWorkflow.mockResolvedValue(multiNodeWorkflow());
+
+      const result = await handlers.handleGetWorkflowFiltered({ id: 'test-workflow-id', nodeNames: ['node3'] });
+
+      expect(result.success).toBe(true);
+      expect(result.data.nodes).toHaveLength(1);
+      expect(result.data.nodes[0].name).toBe('Save');
+    });
+
+    it('returns multiple matched nodes and reports unmatched keys in notFound', async () => {
+      mockApiClient.getWorkflow.mockResolvedValue(multiNodeWorkflow());
+
+      const result = await handlers.handleGetWorkflowFiltered({
+        id: 'test-workflow-id',
+        nodeNames: ['Start', 'Process Data', 'Ghost'],
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.data.returnedCount).toBe(2);
+      expect(result.data.nodes.map((n: any) => n.name)).toEqual(['Start', 'Process Data']);
+      expect(result.data.notFound).toEqual(['Ghost']);
+    });
+
+    it('returns an empty node list (no notFound) is impossible: all-unmatched still reports notFound', async () => {
+      mockApiClient.getWorkflow.mockResolvedValue(multiNodeWorkflow());
+
+      const result = await handlers.handleGetWorkflowFiltered({ id: 'test-workflow-id', nodeNames: ['Nope'] });
+
+      expect(result.success).toBe(true);
+      expect(result.data.returnedCount).toBe(0);
+      expect(result.data.nodes).toEqual([]);
+      expect(result.data.notFound).toEqual(['Nope']);
+    });
+
+    it('rejects an empty nodeNames array via the Zod catch path', async () => {
+      const result = await handlers.handleGetWorkflowFiltered({ id: 'test-workflow-id', nodeNames: [] });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Invalid input');
+      expect(result.details?.errors).toBeDefined();
+    });
+
+    it('rejects a missing nodeNames param', async () => {
+      const result = await handlers.handleGetWorkflowFiltered({ id: 'test-workflow-id' });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Invalid input');
+    });
+
+    it('maps N8nApiError through the friendly-message path', async () => {
+      mockApiClient.getWorkflow.mockRejectedValue(new N8nNotFoundError('Workflow', 'non-existent'));
+
+      const result = await handlers.handleGetWorkflowFiltered({ id: 'non-existent', nodeNames: ['Start'] });
+
+      expect(result).toEqual({
+        success: false,
+        error: 'Workflow with ID non-existent not found',
+        code: 'NOT_FOUND',
+      });
+    });
+  });
+
   describe('handleDeleteWorkflow', () => {
     it('should delete workflow successfully', async () => {
       const testWorkflow = createTestWorkflow();

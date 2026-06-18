@@ -8,12 +8,18 @@ describe('n8n_get_workflow tool definition', () => {
     expect(tool).toBeDefined();
   });
 
-  it('exposes the active mode alongside full/details/structure/minimal', () => {
+  it('exposes the active and filtered modes alongside full/details/structure/minimal', () => {
     const modeSchema = tool!.inputSchema.properties?.mode as { enum?: string[] };
     expect(modeSchema?.enum).toEqual(
-      expect.arrayContaining(['full', 'details', 'structure', 'minimal', 'active'])
+      expect.arrayContaining(['full', 'details', 'structure', 'minimal', 'active', 'filtered'])
     );
-    expect(modeSchema?.enum).toHaveLength(5);
+    expect(modeSchema?.enum).toHaveLength(6);
+  });
+
+  it('declares a nodeNames array param for mode="filtered"', () => {
+    const nodeNamesSchema = tool!.inputSchema.properties?.nodeNames as { type?: string; items?: { type?: string } };
+    expect(nodeNamesSchema?.type).toBe('array');
+    expect(nodeNamesSchema?.items?.type).toBe('string');
   });
 
   it('opts the tool above the Claude Code default per-tool size cap (issue #777)', () => {
