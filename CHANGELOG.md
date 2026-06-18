@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.59.0] - 2026-06-18
+
+### Added
+
+- **`n8n_get_workflow` gains `mode="filtered"`** for reading a single node (or a handful of nodes) without pulling the whole workflow. On large workflows with long Code-node source, `mode="full"`/`mode="active"` can return a payload big enough to be truncated client-side, leaving `jsCode`/`pythonCode` unreadable. The new mode takes a `nodeNames` array (matched against node names *or* node IDs) and returns only those nodes with their full config, plus light metadata (`nodeCount`, `returnedCount`, and a `notFound` list for any keys that matched nothing). Recommended flow: `mode="structure"` to discover node names, then `mode="filtered"` to pull the specific heavy node. Requested by @MiRaIOMeZaSu (#101).
+
+Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+
 ## [2.58.0] - 2026-06-17
 
 ### Changed

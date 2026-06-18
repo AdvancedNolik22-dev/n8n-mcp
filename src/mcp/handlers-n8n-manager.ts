@@ -819,6 +819,71 @@ export async function handleGetWorkflowMinimal(args: unknown, context?: Instance
 }
 
 /**
+ * Returns the full config of only the requested nodes, identified by node name or node ID.
+ * Large workflows with long Code-node source can exceed client-side response limits when
+ * fetched whole (issue #101); this mode lets a caller pull one heavy node's `parameters`
+ * without the rest of the graph. Discover node names cheaply with mode='structure' first.
+ *
+ * `nodeNames` accepts both node names and node IDs; any entries that match nothing are
+ * reported back in `notFound` so the caller knows the lookup was partial.
+ */
+export async function handleGetWorkflowFiltered(args: unknown, context?: InstanceContext): Promise<McpToolResponse> {
+  try {
+    const client = ensureApiConfigured(context);
+    const { id, nodeNames } = z.object({
+      id: z.string(),
+      nodeNames: z.array(z.string()).min(1)
+    }).parse(args);
+
+    const workflow = await client.getWorkflow(id);
+
+    const requested = new Set(nodeNames);
+    const matchedNodes = workflow.nodes.filter(
+      node => requested.has(node.name) || requested.has(node.id)
+    );
+
+    // Report any requested keys that resolved to no node so partial requests are transparent.
+    const matchedKeys = new Set(matchedNodes.flatMap(node => [node.name, node.id]));
+    const notFound = nodeNames.filter(key => !matchedKeys.has(key));
+
+    return {
+      success: true,
+      data: {
+        id: workflow.id,
+        name: workflow.name,
+        active: workflow.active,
+        isArchived: workflow.isArchived,
+        nodes: matchedNodes,
+        nodeCount: workflow.nodes.length,
+        returnedCount: matchedNodes.length,
+        ...(notFound.length > 0 ? { notFound } : {})
+      }
+    };
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return {
+        success: false,
+        error: 'Invalid input',
+        details: { errors: error.errors }
+      };
+    }
+
+    if (error instanceof N8nApiError) {
+      return {
+        success: false,
+        error: getUserFriendlyErrorMessage(error),
+        code: error.code
+      };
+    }
+
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error occurred'
+    };
+  }
+}
+
+/**
  * Returns the workflow's published (active) graph. n8n's draft/publish model exposes
  * the live version under `activeVersion`; this handler surfaces that as a single-shaped
  * response with `nodes`/`connections` populated from the published version. Use this when
