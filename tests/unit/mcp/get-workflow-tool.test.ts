@@ -17,9 +17,11 @@ describe('n8n_get_workflow tool definition', () => {
   });
 
   it('declares a nodeNames array param for mode="filtered"', () => {
-    const nodeNamesSchema = tool!.inputSchema.properties?.nodeNames as { type?: string; items?: { type?: string } };
+    const nodeNamesSchema = tool!.inputSchema.properties?.nodeNames as { type?: string; items?: { type?: string }; minItems?: number };
     expect(nodeNamesSchema?.type).toBe('array');
     expect(nodeNamesSchema?.items?.type).toBe('string');
+    // Mirror the handler's Zod .min(1) so JSON-schema clients validate the same constraint.
+    expect(nodeNamesSchema?.minItems).toBe(1);
   });
 
   it('opts the tool above the Claude Code default per-tool size cap (issue #777)', () => {

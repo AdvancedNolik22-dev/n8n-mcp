@@ -97,6 +97,7 @@ export const n8nManagementTools: ToolDefinition[] = [
         nodeNames: {
           type: 'array',
           items: { type: 'string' },
+          minItems: 1,
           description: "For mode='filtered': node names or node IDs to return with full config. Returns only matching nodes (avoids client-side truncation on large workflows with long Code-node source). Discover names with mode='structure' first."
         }
       },
