@@ -1120,6 +1120,41 @@ describe('handlers-n8n-manager', () => {
       expect(result.data.nodes[0].name).toBe('Save');
     });
 
+    it('resolves a mix of name and id keys in a single call', async () => {
+      mockApiClient.getWorkflow.mockResolvedValue(multiNodeWorkflow());
+
+      // "Start" matches by name, "node2" matches by id - both must resolve and neither
+      // appears in notFound.
+      const result = await handlers.handleGetWorkflowFiltered({
+        id: 'test-workflow-id',
+        nodeNames: ['Start', 'node2'],
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.data.returnedCount).toBe(2);
+      expect(result.data.nodes.map((n: any) => n.name)).toEqual(['Start', 'Process Data']);
+      expect(result.data).not.toHaveProperty('notFound');
+    });
+
+    it('returns every node sharing a duplicated name (returnedCount can exceed the key count)', async () => {
+      // n8n's editor enforces unique names, but imported/API-created workflows can carry
+      // duplicates. Pin the best-effort behavior: a single key returns all matches, so the
+      // caller must disambiguate by id. (Documented as a pitfall on the tool.)
+      mockApiClient.getWorkflow.mockResolvedValue(createTestWorkflow({
+        nodes: [
+          { id: 'a', name: 'Twin', type: 'n8n-nodes-base.set', typeVersion: 1, position: [0, 0], parameters: { v: 1 } },
+          { id: 'b', name: 'Twin', type: 'n8n-nodes-base.set', typeVersion: 1, position: [0, 0], parameters: { v: 2 } },
+        ],
+      }));
+
+      const result = await handlers.handleGetWorkflowFiltered({ id: 'test-workflow-id', nodeNames: ['Twin'] });
+
+      expect(result.success).toBe(true);
+      expect(result.data.returnedCount).toBe(2);
+      expect(result.data.nodes.map((n: any) => n.id)).toEqual(['a', 'b']);
+      expect(result.data).not.toHaveProperty('notFound');
+    });
+
     it('returns multiple matched nodes and reports unmatched keys in notFound', async () => {
       mockApiClient.getWorkflow.mockResolvedValue(multiNodeWorkflow());
 
@@ -1134,7 +1169,7 @@ describe('handlers-n8n-manager', () => {
       expect(result.data.notFound).toEqual(['Ghost']);
     });
 
-    it('returns an empty node list (no notFound) is impossible: all-unmatched still reports notFound', async () => {
+    it('reports every key in notFound when nothing matches', async () => {
       mockApiClient.getWorkflow.mockResolvedValue(multiNodeWorkflow());
 
       const result = await handlers.handleGetWorkflowFiltered({ id: 'test-workflow-id', nodeNames: ['Nope'] });

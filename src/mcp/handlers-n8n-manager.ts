@@ -842,13 +842,9 @@ export async function handleGetWorkflowFiltered(args: unknown, context?: Instanc
       node => requested.has(node.name) || requested.has(node.id)
     );
 
-    // Track which lookup keys actually resolved so partial requests are transparent.
-    const found = new Set<string>();
-    for (const node of matchedNodes) {
-      if (requested.has(node.name)) found.add(node.name);
-      if (requested.has(node.id)) found.add(node.id);
-    }
-    const notFound = nodeNames.filter(key => !found.has(key));
+    // Report any requested keys that resolved to no node so partial requests are transparent.
+    const matchedKeys = new Set(matchedNodes.flatMap(node => [node.name, node.id]));
+    const notFound = nodeNames.filter(key => !matchedKeys.has(key));
 
     return {
       success: true,

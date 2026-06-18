@@ -77,6 +77,7 @@ export const n8nGetWorkflowDoc: ToolDocumentation = {
       'mode="full" no longer carries the nested activeVersion payload — switch to mode="active" if you previously read it from there',
       'mode="active" returns NO_ACTIVE_VERSION for workflows that were never activated',
       'mode="filtered" requires a non-empty nodeNames array; unmatched entries are reported in notFound rather than erroring',
+      'mode="filtered" matches each nodeNames entry against node name OR node id in one namespace, so returnedCount can exceed nodeNames.length when names collide with another node\'s id or when a workflow has duplicate node names — disambiguate by the id on each returned node',
       'mode="details" adds database queries for execution stats',
       'Workflow must exist or returns 404 error',
       'Credentials are referenced by ID but values not included'
