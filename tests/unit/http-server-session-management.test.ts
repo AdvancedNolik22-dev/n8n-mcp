@@ -457,7 +457,9 @@ describe('HTTP Server Session Management', () => {
       };
 
       await server.handleRequest(second.req as any, second.res as any, instanceContext);
-      await new Promise(resolve => setTimeout(resolve, 10));
+      // One macrotask tick drains the mocked onsessioninitialized callback
+      // (scheduled with setTimeout(0)); no real delay is needed.
+      await new Promise(resolve => setTimeout(resolve, 0));
 
       // The pre-existing same-instance session must survive the new initialize.
       expect((server as any).transports['session-a']).toBe(existingTransport);
