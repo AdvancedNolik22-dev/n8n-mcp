@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.59.1] - 2026-06-19
+
+### Security
+
+- **Bumped `uuid` 10 → 14** (`package.json` + `package.runtime.json`). This is the only Dependabot advisory that actually reaches the published runtime artifact: a clean-room `npm install --production` from `package.runtime.json` (the manifest shipped to npm and installed in the Docker runtime stage) flagged exactly one vulnerable package — `uuid@10.0.0` (GHSA-w5hq-g745-h8pq / CVE-2026-41907, missing buffer bounds check in v3/v5/v6 when a caller-supplied output buffer is passed). The fix lands in a major release, so the `^10` pin could not auto-resolve. The server's own usage is unaffected (`v4` random IDs, and one `v5` call that passes no buffer), but the package is bumped to clear the advisory. The `v4`/`v5` named exports are unchanged and verified under the CommonJS build.
+- **Bumped dev/CI test tooling out of the vulnerable ranges**: `vitest` and `@vitest/*` 3.2.4 → 3.2.6 (clears the `vitest` advisory CVE-2026-47429, which only triggers via `vitest --ui` bound to a non-localhost interface — CI runs headless `vitest run`), which also refreshes the transitive `vite` to 7.3.5. These are dev-only dependencies and are never installed in the published package or the Docker runtime image.
+- **Bumped `ui-apps` build tooling**: `vite` ^6.0.0 → ^6.4.3, refreshing the transitive build chain to patched versions (`rollup` 4.62.0, `postcss` 8.5.15, `@babel/core` 7.29.7, `picomatch` 2.3.2/4.0.4). `ui-apps` produces static single-file HTML bundles at build time; none of this tooling ships in `ui-apps/dist/**`.
+
+The remaining open Dependabot advisories are not addressed here because they do not reach a shipped artifact: the bulk are transitive dependencies of the n8n packages (`n8n-core`, `n8n-nodes-base`, `n8n-workflow`, `@n8n/n8n-nodes-langchain`), which are build-time-only (used to generate `data/nodes.db`) and are absent from `package.runtime.json` — they clear on the regular n8n dependency updates. One low-severity `esbuild` advisory (Windows dev-server arbitrary file read, GHSA-g7r4-m6w7-qqqr) remains pinned by `vite`'s `^0.27.0` range and is unreachable in this project (esbuild is an internal Vite/Vitest transform, not an exposed dev server; CI is Linux).
+
+Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+
 ## [2.59.0] - 2026-06-18
 
 ### Added
