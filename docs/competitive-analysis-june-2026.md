@@ -35,7 +35,7 @@ n8n ships a first-party MCP server inside the product (`packages/cli/src/modules
 | Credentials management | **n8n-mcp** | n8n-mcp has CRUD + getSchema; official has read-only `list_credentials` + auto-assign only (HTTP nodes excluded). |
 | Instance audit / security scan | **n8n-mcp** | n8n-mcp ships it; official has none. |
 | Workflow version history & rollback | **n8n-mcp** | n8n-mcp has it; official has only soft-delete `archive_workflow`. |
-| Community-node coverage | **n8n-mcp** | n8n-mcp types ~1,322 nodes (554 core + 768 community). Official can *search* installed community nodes but cannot *type/validate* them (schemas baked to the two built-in packages). |
+| Community-node coverage | **n8n-mcp** | n8n-mcp covers ~1,845 nodes (816 core + 1,029 community). Official can *search* installed community nodes but cannot *type/validate* them (schemas baked to the two built-in packages). |
 | Multi-instance / fleet / SaaS | **n8n-mcp** | n8n-mcp ships a multi-tenant SaaS; official is 1:1 to one n8n. |
 | Drafts / publish lifecycle | **Official** | `publish_workflow` / `unpublish_workflow`; n8n-mcp uses the activate flag. |
 | Project / folder placement on create | **Official** | `create_workflow_from_code` takes `projectId` + `folderId`; n8n-mcp has no folder placement. |
