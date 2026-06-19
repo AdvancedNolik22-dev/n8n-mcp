@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.59.2] - 2026-06-19
+
+### Added
+
+- **`MULTI_TENANT_ALLOW_CONCURRENT_SESSIONS` env flag** (multi-tenant `instance` strategy). By default the instance strategy assumes one MCP session per instance and, on every `initialize`, eagerly evicts all other live sessions for that same instance (`reason: instance_reconnect`). When several MCP clients target the same instance concurrently — e.g. an automation agent, an IDE, and a web client all authenticated as one tenant — each client's `initialize` destroys the others' active sessions, so their next tool call fast-fails with `-32000 "Session not found or expired"` and the client reports a dropped connection. Set `MULTI_TENANT_ALLOW_CONCURRENT_SESSIONS=true` to skip the eager eviction and let concurrent same-instance sessions coexist; sessions are then reclaimed only by their natural lifecycle (transport close, the `SESSION_TIMEOUT_MINUTES` idle sweep, and the `N8N_MCP_MAX_SESSIONS` cap). Default `false` preserves the previous one-session-per-instance behavior. Hosted multi-client deployments should enable it.
+
+Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+
 ## [2.59.1] - 2026-06-19
 
 ### Security
