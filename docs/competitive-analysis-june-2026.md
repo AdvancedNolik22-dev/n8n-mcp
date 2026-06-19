@@ -103,7 +103,7 @@ n8n-mcp's `patchNodeField` does **string find/replace inside a single field** (`
 
 The official `setNodeParameter` (both shipped and in 2.27.0 source) is an RFC 6901 JSON Pointer set: it writes the **entire value** at the pointer and explicitly **does not support array indices** — *"Array indices are NOT supported — to change a value inside an array, set the whole array"* (`workflow-operations.ts:42-47,285`). There is no find/replace anywhere in the official op set. So editing one line of a large `jsCode` requires re-sending the whole field value even after 2.27.x ships. This was confirmed adversarially against both source trees.
 
-n8n-mcp also carries **19 ops vs 14**, plus `validateOnly` (dry-run) and `continueOnError` modes the official tool lacks (it is always atomic-or-throw). The net-new ops beyond the official set: `patchNodeField, moveNode, activateWorkflow, deactivateWorkflow, transferWorkflow` (plus finer `updateName`/`addTag`/`removeTag` granularity).
+n8n-mcp also carries **19 ops vs 14**, plus `validateOnly` (dry-run) and `continueOnError` modes the official tool lacks (it is always atomic-or-throw). Notable additional capabilities vs the official op set include `patchNodeField`, `rewireConnection`, `cleanStaleConnections`, and `replaceConnections` (plus `validateOnly`/best-effort modes).
 
 ### 3.4 Why iteration matters (usage context, 2026-04-30 telemetry — not re-queried)
 
