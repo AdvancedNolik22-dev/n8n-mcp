@@ -1674,8 +1674,10 @@ export class SingleSessionHTTPServer {
    * point the transport and server will be initialized normally.
    *
    * @security Restored contexts are validated synchronously via
-   * validateInstanceContext. Embedders are responsible for not persisting
-   * hostnames they do not trust. See GHSA-4ggg-h7ph-26qr.
+   * validateInstanceContext, and must additionally carry BOTH n8nApiUrl and
+   * n8nApiKey — partial tenant contexts are rejected (GHSA-2cf7-hpwf-47h9
+   * hardening, #844). Embedders are responsible for not persisting hostnames
+   * they do not trust. See GHSA-4ggg-h7ph-26qr.
    *
    * @param sessions - Array of session state objects from exportSessionState()
    * @returns Number of sessions successfully restored
@@ -1744,6 +1746,25 @@ export class SingleSessionHTTPServer {
           const reason = validation.errors?.join(', ') || 'invalid context';
           logger.warn(
             `Skipping session ${sessionState.sessionId} - invalid context: ${reason}`
+          );
+          logSecurityEvent('session_restore_failed', {
+            sessionId: sessionState.sessionId,
+            reason
+          });
+          continue;
+        }
+
+        // SECURITY (GHSA-2cf7-hpwf-47h9 hardening, #844): require BOTH tenant
+        // credentials, mirroring the export-side guard. validateInstanceContext
+        // checks each field only when it is !== undefined, so a partial context
+        // carrying only one of n8nApiUrl/n8nApiKey passes validation and would
+        // restore as a partial tenant identity. The earlier no-context check
+        // above already skips sessions that carry no context at all, so this
+        // guard only applies to sessions whose context is present but incomplete.
+        if (!sessionState.context.n8nApiUrl || !sessionState.context.n8nApiKey) {
+          const reason = 'restored context missing required tenant credentials (both n8nApiUrl and n8nApiKey are required)';
+          logger.warn(
+            `Skipping session ${sessionState.sessionId} - ${reason}`
           );
           logSecurityEvent('session_restore_failed', {
             sessionId: sessionState.sessionId,
