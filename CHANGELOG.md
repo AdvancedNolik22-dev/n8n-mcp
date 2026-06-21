@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.59.3] - 2026-06-21
+
+### Fixed
+
+- **IF node and AI Agent example/template configs now validate against n8n** (#374). The static example and task-template generators emitted configs that n8n rejects. IF (`nodes-base.if`) examples were missing the `conditions.options` block (`version`/`leftValue`/`caseSensitive`/`typeValidation`), the filter `combinator`, and per-condition `id`s — so the generated node rendered empty and failed the validators. The AI Agent task templates used `nodes-langchain.agent` (missing the `@n8n/` package prefix) with a flat `text`/`outputType`/`systemMessage` shape instead of the current `promptType` + `options.systemMessage` structure. Both are corrected to the shapes the bundled node schema actually expects, and a regression test now runs the generated configs through `EnhancedConfigValidator` (the validator users hit) so the shapes cannot silently drift again. Reported by @FelipeLuz01.
+- **Windows: the MCP server no longer crashes on graceful shutdown** (#383, #385). Calling `process.stdin.destroy()` during shutdown triggered a fatal libuv assertion (`!(handle->flags & UV_HANDLE_CLOSING)`, `src/win/async.c:76`) on Windows, crashing the server on exit/disconnect — including via the published `npx n8n-mcp` stdio bin, which the earlier proposed fix missed. stdin teardown is now platform-aware (always `pause()`, only `destroy()` off `win32`) via a shared `tearDownStdin()` helper applied to both stdio entrypoints, with an explicit `win32` exit path so shutdown can't hang. Reported by @libragik.
+
+### Security
+
+- **Session restore now requires a complete tenant context in multi-tenant mode** (#844). Defense-in-depth follow-up to GHSA-2cf7-hpwf-47h9. `restoreSessionState()` validated a restored `InstanceContext` only via `validateInstanceContext`, which checks each field only when it is present, so a persisted context carrying just one of `n8nApiUrl`/`n8nApiKey` could be restored as a partial tenant identity — an asymmetry with the export side, which already refuses to persist a partial context. A presence guard mirroring the export-side check now rejects partial contexts on restore and emits a `session_restore_failed` security event; sessions with no context at all (single-tenant/stdio) are unaffected.
+
+### Documentation
+
+- **Railway deployment guide gains an upfront `AUTH_TOKEN` callout** (#152). Added a "Before You Deploy" section near the top of `docs/RAILWAY_DEPLOYMENT.md` covering both deploy paths — the one-click template (which pre-sets a placeholder `AUTH_TOKEN` you must replace) and a self-hosted repo/Dockerfile deploy (where Railway does not auto-create the variable, so the server won't start until you add it). Reported by @gthay.
+
+Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+
 ## [2.59.2] - 2026-06-19
 
 ### Added
