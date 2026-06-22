@@ -265,6 +265,46 @@ jobs:
           echo "id=$RELEASE_ID" >> $GITHUB_OUTPUT
           echo "upload_url=https://uploads.github.com/repos/${{ github.repository }}/releases/$RELEASE_ID/assets{?name,label}" >> $GITHUB_OUTPUT
 
+  package-mcpb:
+    name: Package MCPB Bundle
+    runs-on: ubuntu-latest
+    needs: [detect-version-change, create-release]
+    if: needs.detect-version-change.outputs.version-changed == 'true'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        # See test.yml for the --legacy-peer-deps rationale (mappersmith / diff conflict).
+        run: npm ci --legacy-peer-deps
+
+      # Build so dist/mcp/index.js exists at pack time: `mcpb pack` runs existsSync
+      # on the manifest entry_point against the source dir, and dist/ is gitignored.
+      - name: Build project
+        run: npm run build
+
+      - name: Generate MCPB manifest from package.json + tool registry
+        run: npm run generate:mcpb-manifest
+
+      - name: Validate and pack MCPB bundle
+        run: |
+          VERSION="${{ needs.detect-version-change.outputs.new-version }}"
+          npx -y @anthropic-ai/mcpb validate manifest.json
+          npx -y @anthropic-ai/mcpb pack . "n8n-mcp-${VERSION}.mcpb"
+
+      - name: Upload MCPB bundle to GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ needs.detect-version-change.outputs.new-version }}"
+          gh release upload "v$VERSION" "n8n-mcp-${VERSION}.mcpb" --clobber
+
   build-and-verify:
     name: Build and Verify
     runs-on: ubuntu-latest

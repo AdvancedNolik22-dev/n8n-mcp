@@ -19,6 +19,8 @@
     "build:ui": "cd ui-apps && npm install && npm run build",
     "build:all": "npm run sync:skills && npm run build:ui && npm run build",
     "sync:skills": "npx tsx scripts/sync-skills.ts",
+    "generate:mcpb-manifest": "node scripts/generate-mcpb-manifest.js",
+    "build:mcpb": "npm run build && npm run generate:mcpb-manifest && npx -y @anthropic-ai/mcpb validate manifest.json && npx -y @anthropic-ai/mcpb pack .",
     "rebuild": "node dist/scripts/rebuild.js",
     "rebuild:optimized": "node dist/scripts/rebuild-optimized.js",
     "validate": "node dist/scripts/validate.js",
