@@ -1985,6 +1985,67 @@ return [{"json": {"result": result}}]
         expect(primitiveErrors).toHaveLength(0);
       });
 
+      it('should not error on primitive return inside object-method shorthand', () => {
+        context.config = {
+          language: 'javaScript',
+          jsCode: 'const o = { foo() { return 1; } };\nreturn [{json: o}];'
+        };
+
+        NodeSpecificValidators.validateCode(context);
+
+        const primitiveErrors = context.errors.filter(e => e.message === 'Cannot return primitive values directly');
+        expect(primitiveErrors).toHaveLength(0);
+      });
+
+      it('should not error on primitive return inside class methods', () => {
+        context.config = {
+          language: 'javaScript',
+          jsCode: 'class A { m() { return false; } }\nreturn [{json: {}}];'
+        };
+
+        NodeSpecificValidators.validateCode(context);
+
+        const primitiveErrors = context.errors.filter(e => e.message === 'Cannot return primitive values directly');
+        expect(primitiveErrors).toHaveLength(0);
+      });
+
+      it('should not error on primitive return inside generator functions', () => {
+        context.config = {
+          language: 'javaScript',
+          jsCode: 'function* gen() { return 1; }\nreturn [{json: {}}];'
+        };
+
+        NodeSpecificValidators.validateCode(context);
+
+        const primitiveErrors = context.errors.filter(e => e.message === 'Cannot return primitive values directly');
+        expect(primitiveErrors).toHaveLength(0);
+      });
+
+      it('should not error when a helper uses a regex literal containing braces', () => {
+        context.config = {
+          language: 'javaScript',
+          jsCode: "const clean = (s) => { s = s.replace(/[/{}]/g, ''); return false; };\nreturn [{json: {ok: clean('x')}}];"
+        };
+
+        NodeSpecificValidators.validateCode(context);
+
+        const primitiveErrors = context.errors.filter(e => e.message === 'Cannot return primitive values directly');
+        expect(primitiveErrors).toHaveLength(0);
+      });
+
+      it('should still error on a real primitive return when a regex literal is present', () => {
+        context.config = {
+          language: 'javaScript',
+          jsCode: "const m = 'a'.match(/b/);\nreturn 7;"
+        };
+
+        NodeSpecificValidators.validateCode(context);
+
+        expect(context.errors).toContainEqual(
+          expect.objectContaining({ message: 'Cannot return primitive values directly' })
+        );
+      });
+
       it('should still error on primitive top-level return when helper functions exist', () => {
         context.config = {
           language: 'javaScript',

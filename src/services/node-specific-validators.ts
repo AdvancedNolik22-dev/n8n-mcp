@@ -1484,7 +1484,10 @@ export class NodeSpecificValidators {
     let result = '';
     let braceDepth = 0;
     const functionBodyDepths: number[] = [];
-    let state: 'code' | 'single' | 'double' | 'template' | 'lineComment' | 'blockComment' = 'code';
+    let state: 'code' | 'single' | 'double' | 'template' | 'lineComment' | 'blockComment' | 'regex' = 'code';
+    // Tracks whether we are inside a `[...]` character class while in regex state,
+    // so an unescaped `/` inside the class does not prematurely end the literal.
+    let inRegexClass = false;
 
     for (let i = 0; i < code.length; i++) {
       const char = code[i];
@@ -1526,6 +1529,28 @@ export class NodeSpecificValidators {
         continue;
       }
 
+      if (state === 'regex') {
+        // A real regex literal never spans a raw newline; hitting one means we
+        // misclassified a division operator — bail back to code on this line.
+        if (char === '\n') {
+          state = 'code';
+          result += '\n';
+          continue;
+        }
+        result += ' ';
+        if (char === '\\') {
+          if (next !== undefined) {
+            result += ' ';
+            i++;
+          }
+          continue;
+        }
+        if (char === '[') inRegexClass = true;
+        else if (char === ']') inRegexClass = false;
+        else if (char === '/' && !inRegexClass) state = 'code';
+        continue;
+      }
+
       if (char === '/' && next === '/') {
         result += '  ';
         i++;
@@ -1537,6 +1562,15 @@ export class NodeSpecificValidators {
         result += '  ';
         i++;
         state = 'blockComment';
+        continue;
+      }
+
+      // Regex literal (not division). Blank its contents so `{`/`}` inside it
+      // (e.g. str.replace(/}/g, '')) do not skew brace depth.
+      if (char === '/' && this.regexLiteralStartsHere(code, i)) {
+        result += ' ';
+        inRegexClass = false;
+        state = 'regex';
         continue;
       }
 
@@ -1582,10 +1616,58 @@ export class NodeSpecificValidators {
     return result;
   }
 
+  // Identifiers that look like `name(...) {` but are control flow, not function bodies.
+  private static readonly NON_FUNCTION_HEADS = new Set([
+    'if', 'for', 'while', 'switch', 'catch', 'with',
+  ]);
+
   private static startsJavaScriptFunctionBody(code: string, openBraceIndex: number): boolean {
     const prefix = code.slice(Math.max(0, openBraceIndex - 500), openBraceIndex);
-    return /=>\s*$/.test(prefix)
-      || /(?:^|[^\w$])(?:async\s+)?function(?:\s+[\w$]+)?\s*\([^)]*\)\s*$/.test(prefix);
+
+    // Arrow function: ... => {
+    if (/=>\s*$/.test(prefix)) return true;
+
+    // function declaration/expression, incl. generators: function* gen(...) {, async function(...) {
+    if (/(?:^|[^\w$])(?:async\s+)?function\s*\*?(?:\s+[\w$]+)?\s*\([^)]*\)\s*$/.test(prefix)) return true;
+
+    // Method shorthand / class method / getter-setter / (async) generator method:
+    //   foo(...) {, async foo(...) {, *gen(...) {, get foo() {, set foo(v) {
+    // Exclude control-flow keywords whose head also looks like `name(...)`.
+    const methodHead = /(?:^|[^\w$.])(?:(?:async|get|set)\s+)?\*?\s*([\w$]+)\s*\([^)]*\)\s*$/.exec(prefix);
+    if (methodHead && !this.NON_FUNCTION_HEADS.has(methodHead[1])) return true;
+
+    return false;
+  }
+
+  // Keywords after which a `/` begins a regex literal rather than division.
+  private static readonly REGEX_PRECEDING_KEYWORDS = new Set([
+    'return', 'typeof', 'instanceof', 'in', 'of', 'new', 'delete', 'void',
+    'do', 'else', 'yield', 'await', 'case', 'throw',
+  ]);
+
+  /**
+   * Decide whether a `/` at `slashIndex` (already known not to start `//` or `/*`)
+   * begins a regex literal vs. a division operator, by inspecting the previous
+   * significant token. Used only to keep brace counting balanced, so erring toward
+   * "regex" is bounded by the newline bail-out in the scanner.
+   */
+  private static regexLiteralStartsHere(code: string, slashIndex: number): boolean {
+    let j = slashIndex - 1;
+    while (j >= 0 && /\s/.test(code[j])) j--;
+    if (j < 0) return true; // start of input → regex
+    const c = code[j];
+    // After a value (identifier/number/`)`/`]`/`.`), `/` is division...
+    if (/[\w$)\].]/.test(c)) {
+      // ...unless the trailing word is a keyword that precedes a regex.
+      if (/[\w$]/.test(c)) {
+        let k = j;
+        while (k >= 0 && /[\w$]/.test(code[k])) k--;
+        const word = code.slice(k + 1, j + 1);
+        return this.REGEX_PRECEDING_KEYWORDS.has(word);
+      }
+      return false;
+    }
+    return true; // after ( , = : [ ! & | ? { } ; etc. → regex
   }
   
   private static validateN8nVariables(
