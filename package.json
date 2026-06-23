@@ -42,7 +42,7 @@
     "test:ci": "vitest run --coverage --coverage.thresholds.lines=0 --coverage.thresholds.functions=0 --coverage.thresholds.branches=0 --coverage.thresholds.statements=0 --reporter=default --reporter=junit",
     "test:watch": "vitest watch",
     "test:unit": "vitest run tests/unit",
-    "test:cjs-runtime": "node --no-experimental-require-module -e \"require('./dist/index.js'); console.log('CJS runtime load OK')\"",
+    "test:cjs-runtime": "node scripts/smoke-cjs-runtime.js",
     "test:integration": "vitest run --config vitest.config.integration.ts",
     "test:integration:n8n": "vitest run tests/integration/n8n-api",
     "test:cleanup:orphans": "tsx tests/integration/n8n-api/scripts/cleanup-orphans.ts",
