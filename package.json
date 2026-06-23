@@ -1,6 +1,6 @@
 {
   "name": "n8n-mcp",
-  "version": "2.59.3",
+  "version": "2.59.4",
   "description": "Integration between n8n workflow automation and Model Context Protocol (MCP)",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -42,6 +42,7 @@
     "test:ci": "vitest run --coverage --coverage.thresholds.lines=0 --coverage.thresholds.functions=0 --coverage.thresholds.branches=0 --coverage.thresholds.statements=0 --reporter=default --reporter=junit",
     "test:watch": "vitest watch",
     "test:unit": "vitest run tests/unit",
+    "test:cjs-runtime": "node --no-experimental-require-module -e \"require('./dist/index.js'); console.log('CJS runtime load OK')\"",
     "test:integration": "vitest run --config vitest.config.integration.ts",
     "test:integration:n8n": "vitest run tests/integration/n8n-api",
     "test:cleanup:orphans": "tsx tests/integration/n8n-api/scripts/cleanup-orphans.ts",
@@ -173,7 +174,7 @@
     "openai": "^4.77.0",
     "sql.js": "^1.13.0",
     "tslib": "^2.6.2",
-    "uuid": "^14.0.0",
+    "uuid": "^11.1.1",
     "zod": "3.25.67"
   },
   "optionalDependencies": {

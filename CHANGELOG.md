@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.59.4] - 2026-06-23
+
+### Fixed
+
+- **Server no longer crashes on startup with `ERR_REQUIRE_ESM`** (#864). v2.59.1's `uuid` 10 → 14 bump (#850) moved the dependency to an ESM-only build (`"type": "module"`, no `require` export condition), but the shipped artifact is compiled to CommonJS and calls `require('uuid')`. On the supported minimum Node (`>=18`) — and any Node 20.x before 20.19 or 22.x before 22.12, including the reporter's 22.11 — Node's CommonJS loader throws `ERR_REQUIRE_ESM` at module load, before any config is read, so every MCP client (Claude Code, Cursor, etc.) just saw `MCP error -32000: Connection closed`. It slipped through release verification because `tsc` only type-checks, the Vitest suite runs under an ESM transform pipeline, and CI/Docker/local dev all ran Node ≥ 20.19/22.12 where `require()` of an ESM module is silently tolerated. `uuid` is now pinned to `^11.1.1`, which ships a CommonJS build (a `node.require` export condition) and still clears the original advisory (GHSA-w5hq-g745-h8pq / CVE-2026-41907 does not affect v11), so the security fix from #850 is preserved with no source changes — `v4`/`v5` named exports are API-identical across v10/v11/v14. Reported by @anpe-efficy (André Pereira).
+- **Added a CommonJS runtime smoke test** (`npm run test:cjs-runtime` and a dedicated `cjs-runtime` CI job) that loads the compiled `dist/` under `node --no-experimental-require-module`. The flag forces the strict pre-22.12 CommonJS loader behavior, so a CJS/ESM mismatch in any shipped dependency fails CI regardless of the runner's Node version — the gap that let #864 reach three releases.
+
+Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+
 ## [2.59.3] - 2026-06-21
 
 ### Fixed
