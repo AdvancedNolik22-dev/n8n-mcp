@@ -249,6 +249,32 @@ jobs:
           path: test-metadata.json
           retention-days: 30
 
+  # Verify the compiled CommonJS artifact loads under Node's CJS loader (regression guard for #864).
+  # Node 20.19+/22.12+ silently tolerate require() of ESM-only deps; scripts/smoke-cjs-runtime.js
+  # forces the strict loader (--no-experimental-require-module) when the running Node supports it,
+  # so a CJS/ESM mismatch in a shipped dependency (e.g. uuid@14) fails here regardless of the
+  # runner's Node version. The unit suite runs under Vitest's ESM pipeline and cannot catch this;
+  # tsc only type-checks.
+  cjs-runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Build
+        run: npm run build
+
+      - name: Load compiled CommonJS artifact under strict CJS loader
+        run: npm run test:cjs-runtime
+
   # Publish test results as checks
   publish-results:
     needs: test
