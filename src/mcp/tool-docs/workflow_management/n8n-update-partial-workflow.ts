@@ -201,7 +201,7 @@ Please choose a different name.
 
 ## Removing Properties with null
 
-To remove a property from a node, set its value to \`null\` in the updates object. This is essential when migrating from deprecated properties or cleaning up optional configuration fields. \`undefined\` is also accepted and behaves identically — both delete the property from the node.
+To remove a property from a node, set its value to \`null\` in the updates object. This is essential when migrating from deprecated properties or cleaning up optional configuration fields. Over the MCP/JSON-RPC API always use \`null\` — an \`undefined\` value is dropped by JSON serialization before it reaches the server, so it would be a silent no-op. (Internally, in-process callers such as the workflow auto-fixer may pass \`undefined\`, which the diff engine now treats the same as \`null\`.)
 
 ### Why Use null?
 - **Property removal**: Setting a property to \`null\` removes it completely from the node object
