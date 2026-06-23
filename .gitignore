@@ -23,6 +23,9 @@ out/
 .cache/
 .parcel-cache/
 
+# MCPB bundle (built artifact — produced by `mcpb pack`, attached to releases)
+*.mcpb
+
 # IDE and editor files
 .vscode/
 .idea/
