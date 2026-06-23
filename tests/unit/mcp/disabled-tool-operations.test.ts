@@ -64,7 +64,7 @@ describe('Disabled Tool Operations Feature (Issue #714)', () => {
     });
 
     it('should parse single tool with multiple operations', () => {
-      process.env.DISABLED_TOOL_OPERATIONS = 'n8n_workflow_versions:delete,rollback,prune,truncate';
+      process.env.DISABLED_TOOL_OPERATIONS = 'n8n_workflow_versions:delete,rollback,prune';
       server = new TestableN8NMCPServer();
       const ops = server.testGetDisabledToolOperations();
 
@@ -73,17 +73,26 @@ describe('Disabled Tool Operations Feature (Issue #714)', () => {
       expect(versionOps.has('delete')).toBe(true);
       expect(versionOps.has('rollback')).toBe(true);
       expect(versionOps.has('prune')).toBe(true);
-      expect(versionOps.has('truncate')).toBe(true);
-      expect(versionOps.size).toBe(4);
+      expect(versionOps.size).toBe(3);
+    });
+
+    it('should parse operation names case-insensitively', () => {
+      process.env.DISABLED_TOOL_OPERATIONS = 'n8n_workflow_versions:Delete,ROLLBACK';
+      server = new TestableN8NMCPServer();
+      const ops = server.testGetDisabledToolOperations();
+
+      const versionOps = ops.get('n8n_workflow_versions')!;
+      expect(versionOps.has('delete')).toBe(true);
+      expect(versionOps.has('rollback')).toBe(true);
     });
 
     it('should parse multiple tools separated by semicolons', () => {
-      process.env.DISABLED_TOOL_OPERATIONS = 'n8n_workflow_versions:delete,rollback,prune,truncate;n8n_executions:delete';
+      process.env.DISABLED_TOOL_OPERATIONS = 'n8n_workflow_versions:delete,rollback,prune;n8n_executions:delete';
       server = new TestableN8NMCPServer();
       const ops = server.testGetDisabledToolOperations();
 
       expect(ops.size).toBe(2);
-      expect(ops.get('n8n_workflow_versions')!.size).toBe(4);
+      expect(ops.get('n8n_workflow_versions')!.size).toBe(3);
       expect(ops.get('n8n_executions')).toEqual(new Set(['delete']));
     });
 
@@ -226,11 +235,11 @@ describe('Disabled Tool Operations Feature (Issue #714)', () => {
   // ---------------------------------------------------------------------------
 
   describe('executeTool() - Dispatch Enforcement for n8n_workflow_versions', () => {
-    it('should block all four destructive operations', async () => {
-      process.env.DISABLED_TOOL_OPERATIONS = 'n8n_workflow_versions:delete,rollback,prune,truncate';
+    it('should block all destructive operations', async () => {
+      process.env.DISABLED_TOOL_OPERATIONS = 'n8n_workflow_versions:delete,rollback,prune';
       server = new TestableN8NMCPServer();
 
-      for (const mode of ['delete', 'rollback', 'prune', 'truncate']) {
+      for (const mode of ['delete', 'rollback', 'prune']) {
         await expect(
           server.testExecuteTool('n8n_workflow_versions', { mode })
         ).rejects.toThrow(`Operation '${mode}' on tool 'n8n_workflow_versions' is disabled by server policy`);
@@ -238,7 +247,7 @@ describe('Disabled Tool Operations Feature (Issue #714)', () => {
     });
 
     it('should not block read operations when destructive ops are disabled', async () => {
-      process.env.DISABLED_TOOL_OPERATIONS = 'n8n_workflow_versions:delete,rollback,prune,truncate';
+      process.env.DISABLED_TOOL_OPERATIONS = 'n8n_workflow_versions:delete,rollback,prune';
       server = new TestableN8NMCPServer();
 
       for (const mode of ['list', 'get']) {
@@ -322,7 +331,7 @@ describe('Disabled Tool Operations Feature (Issue #714)', () => {
 
     it('should remove disabled operations from n8n_workflow_versions mode enum', () => {
       const disabledOps = new Map([
-        ['n8n_workflow_versions', new Set(['delete', 'rollback', 'prune', 'truncate'])]
+        ['n8n_workflow_versions', new Set(['delete', 'rollback', 'prune'])]
       ]);
       server = new TestableN8NMCPServer();
       const cache = server.testBuildFilteredToolDefinitions(disabledOps);
@@ -332,7 +341,6 @@ describe('Disabled Tool Operations Feature (Issue #714)', () => {
       expect(enumValues).not.toContain('delete');
       expect(enumValues).not.toContain('rollback');
       expect(enumValues).not.toContain('prune');
-      expect(enumValues).not.toContain('truncate');
       expect(enumValues).toContain('list');
       expect(enumValues).toContain('get');
     });
@@ -406,12 +414,11 @@ describe('Disabled Tool Operations Feature (Issue #714)', () => {
       const result = getToolDocumentation(
         'n8n_workflow_versions',
         'essentials',
-        new Set(['delete', 'rollback', 'prune', 'truncate'])
+        new Set(['delete', 'rollback', 'prune'])
       );
       expect(result).toContain('delete');
       expect(result).toContain('rollback');
       expect(result).toContain('prune');
-      expect(result).toContain('truncate');
     });
   });
 });

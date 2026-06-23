@@ -668,8 +668,26 @@ export class N8NDocumentationMCPServer {
       if (ops.length === 0) continue;
 
       const existing = result.get(toolName) ?? new Set<string>();
-      ops.forEach(op => existing.add(op.toLowerCase()));
+      ops.forEach(op => existing.add(op));
       result.set(toolName, existing);
+    }
+
+    // Warn (don't fail) on entries that can never match, so a typo such as
+    // `n8n_execution:delete` (wrong tool) or `n8n_executions:remove` (wrong op)
+    // is visible rather than silently leaving an operation enabled.
+    for (const [toolName, ops] of result) {
+      const paramName = TOOL_OPERATION_PARAM[toolName];
+      if (!paramName) {
+        logger.warn(`DISABLED_TOOL_OPERATIONS: unknown tool '${toolName}' — no per-operation filtering applied. Eligible tools: ${Object.keys(TOOL_OPERATION_PARAM).join(', ')}`);
+        continue;
+      }
+      const tool = n8nManagementTools.find(t => t.name === toolName);
+      const enumValues: string[] = (tool?.inputSchema as any)?.properties?.[paramName]?.enum ?? [];
+      for (const op of ops) {
+        if (enumValues.length > 0 && !enumValues.includes(op)) {
+          logger.warn(`DISABLED_TOOL_OPERATIONS: '${op}' is not a valid ${paramName} for '${toolName}' (valid: ${enumValues.join(', ')}); it will have no effect.`);
+        }
+      }
     }
 
     if (result.size > 0) {

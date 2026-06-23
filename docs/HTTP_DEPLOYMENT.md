@@ -892,7 +892,7 @@ DISABLED_TOOLS=n8n_create_workflow,n8n_update_full_workflow,n8n_update_partial_w
 Two tools bundle read and write operations under a single name. Use `DISABLED_TOOL_OPERATIONS` to block only their destructive branches while keeping `list` and `get`:
 
 ```bash
-DISABLED_TOOL_OPERATIONS=n8n_workflow_versions:delete,rollback,prune,truncate;n8n_executions:delete
+DISABLED_TOOL_OPERATIONS=n8n_workflow_versions:delete,rollback,prune;n8n_executions:delete
 ```
 
 The operation parameter enum in the tool schema is updated to exclude disabled values, reducing the likelihood the model attempts them. Any attempt that does reach the server is rejected at dispatch before the handler runs.
