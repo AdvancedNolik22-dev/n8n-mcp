@@ -317,13 +317,15 @@ describe('NodeSpecificValidators', () => {
 
         NodeSpecificValidators.validateGoogleSheets(context);
 
-        // NOTE: sheetId validation was removed because it's provided by credentials, not configuration
-        // The actual error is missing range, which is checked first
+        // sheetId is provided by credentials, not configuration — so it must NOT be flagged
+        const sheetIdErrors = context.errors.filter(e => e.property === 'sheetId');
+        expect(sheetIdErrors).toHaveLength(0);
+        // The actual error is the missing range/columns mapping, which is checked first
         expect(context.errors).toContainEqual({
           type: 'missing_required',
           property: 'range',
-          message: 'Range is required for read operation',
-          fix: 'Specify range like "Sheet1!A:B" or "Sheet1!A1:B10"'
+          message: 'Range or columns mapping is required for read operation',
+          fix: 'Specify range like "Sheet1!A:B" OR use columns with mappingMode'
         });
       });
 

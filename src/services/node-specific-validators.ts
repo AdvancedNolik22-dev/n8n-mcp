@@ -310,12 +310,22 @@ export class NodeSpecificValidators {
     errors.push(...filteredErrors);
   }
   
+  /**
+   * In Google Sheets v4+, the `columns` resourceMapper (mappingMode "defineBelow" /
+   * "autoMapInputData") carries the range/values via matchingColumns + schema, so the
+   * legacy range/values fields are not required. An empty `columns: {}` object does not
+   * count — a real mapping has at least a mappingMode or a value.
+   */
+  private static hasColumnsMapping(config: any): boolean {
+    return !!(config.columns && (config.columns.mappingMode || config.columns.value));
+  }
+
   private static validateGoogleSheetsAppend(context: NodeValidationContext): void {
     const { config, errors, warnings, autofix } = context;
 
     // In Google Sheets v4+, range is only required if NOT using the columns resourceMapper
     // The columns parameter is a resourceMapper introduced in v4 that handles range automatically
-    if (!config.range && !config.columns) {
+    if (!config.range && !this.hasColumnsMapping(config)) {
       errors.push({
         type: 'missing_required',
         property: 'range',
@@ -341,7 +351,7 @@ export class NodeSpecificValidators {
 
     // In Google Sheets v4+, range is only required if NOT using the columns resourceMapper
     // (same semantics as append operation)
-    if (!config.range && !config.columns) {
+    if (!config.range && !this.hasColumnsMapping(config)) {
       errors.push({
         type: 'missing_required',
         property: 'range',
@@ -362,7 +372,7 @@ export class NodeSpecificValidators {
     // In Google Sheets v4+, the columns resourceMapper (mappingMode: "defineBelow" / "autoMapInputData")
     // handles both range and values automatically via matchingColumns + schema.
     // Range/values are only required when NOT using columns mapping.
-    const hasColumnsMapping = !!(config.columns && (config.columns.mappingMode || config.columns.value));
+    const hasColumnsMapping = this.hasColumnsMapping(config);
 
     if (!config.range && !hasColumnsMapping) {
       errors.push({
