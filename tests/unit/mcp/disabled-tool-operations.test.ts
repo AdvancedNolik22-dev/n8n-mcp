@@ -345,6 +345,32 @@ describe('Disabled Tool Operations Feature (Issue #714)', () => {
       expect(enumValues).toContain('get');
     });
 
+    it('should recompute annotations to read-only when all destructive ops are disabled', () => {
+      const disabledOps = new Map([
+        ['n8n_workflow_versions', new Set(['delete', 'rollback', 'prune'])]
+      ]);
+      server = new TestableN8NMCPServer();
+      const cache = server.testBuildFilteredToolDefinitions(disabledOps);
+
+      const filtered = cache.get('n8n_workflow_versions');
+      // Only read modes (list/get) remain → tool is effectively read-only.
+      expect(filtered.annotations.readOnlyHint).toBe(true);
+      expect(filtered.annotations.destructiveHint).toBe(false);
+    });
+
+    it('should keep destructiveHint when a destructive op remains', () => {
+      // Only 'delete' disabled; 'rollback'/'prune' still available → still destructive.
+      const disabledOps = new Map([
+        ['n8n_workflow_versions', new Set(['delete'])]
+      ]);
+      server = new TestableN8NMCPServer();
+      const cache = server.testBuildFilteredToolDefinitions(disabledOps);
+
+      const filtered = cache.get('n8n_workflow_versions');
+      expect(filtered.annotations.destructiveHint).toBe(true);
+      expect(filtered.annotations.readOnlyHint).toBe(false);
+    });
+
     it('should NOT mutate the original n8nManagementTools definitions', () => {
       const originalExec = n8nManagementTools.find(t => t.name === 'n8n_executions')!;
       const originalEnum = [...(originalExec.inputSchema as any).properties.action.enum];

@@ -15,7 +15,7 @@ import path from 'path';
 import { n8nDocumentationToolsFinal } from './tools';
 import { UIAppRegistry } from './ui';
 import { SkillResourceRegistry } from './skills';
-import { n8nManagementTools, TOOL_OPERATION_PARAM } from './tools-n8n-manager';
+import { n8nManagementTools, TOOL_OPERATION_PARAM, DESTRUCTIVE_TOOL_OPERATIONS } from './tools-n8n-manager';
 import { makeToolsN8nFriendly } from './tools-n8n-friendly';
 import { getWorkflowExampleString } from './workflow-examples';
 import { logger } from '../utils/logger';
@@ -737,6 +737,19 @@ export class N8NDocumentationMCPServer {
 
       const disabledList = [...ops].join(', ');
       cloned.description = `${cloned.description}\n\n> Operations disabled by server policy: ${disabledList}`;
+
+      // If filtering removed every destructive operation, the tool is now
+      // read-only — recompute its MCP annotations so hosts that honor them
+      // (e.g. to gate/hide destructive tools) don't keep restricting the
+      // remaining read paths, which would defeat the read-only deployment use case.
+      const destructive = DESTRUCTIVE_TOOL_OPERATIONS[toolName];
+      if (destructive && cloned.annotations) {
+        const remaining = (param?.enum as string[] | undefined) ?? [];
+        const stillDestructive = remaining.some(v => destructive.has(String(v).toLowerCase()));
+        if (!stillDestructive) {
+          cloned.annotations = { ...cloned.annotations, readOnlyHint: true, destructiveHint: false };
+        }
+      }
 
       cache.set(toolName, cloned);
     }
