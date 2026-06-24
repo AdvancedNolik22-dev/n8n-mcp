@@ -2033,6 +2033,30 @@ return [{"json": {"result": result}}]
         expect(primitiveErrors).toHaveLength(0);
       });
 
+      it('should not error on a helper whose params contain nested parentheses', () => {
+        context.config = {
+          language: 'javaScript',
+          jsCode: 'function normalize(item = $input.first()) { return null; }\nreturn [{json: {v: normalize()}}];'
+        };
+
+        NodeSpecificValidators.validateCode(context);
+
+        const primitiveErrors = context.errors.filter(e => e.message === 'Cannot return primitive values directly');
+        expect(primitiveErrors).toHaveLength(0);
+      });
+
+      it('should not error on an arrow helper with a function-call default param', () => {
+        context.config = {
+          language: 'javaScript',
+          jsCode: 'const pick = (x = Math.max(1, 2)) => { return false; };\nreturn [{json: {v: pick()}}];'
+        };
+
+        NodeSpecificValidators.validateCode(context);
+
+        const primitiveErrors = context.errors.filter(e => e.message === 'Cannot return primitive values directly');
+        expect(primitiveErrors).toHaveLength(0);
+      });
+
       it('should still error on a real primitive return when a regex literal is present', () => {
         context.config = {
           language: 'javaScript',

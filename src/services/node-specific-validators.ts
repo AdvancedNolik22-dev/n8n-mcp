@@ -1622,18 +1622,39 @@ export class NodeSpecificValidators {
   ]);
 
   private static startsJavaScriptFunctionBody(code: string, openBraceIndex: number): boolean {
-    const prefix = code.slice(Math.max(0, openBraceIndex - 500), openBraceIndex);
-
     // Arrow function: ... => {
+    const prefix = code.slice(Math.max(0, openBraceIndex - 500), openBraceIndex);
     if (/=>\s*$/.test(prefix)) return true;
 
-    // function declaration/expression, incl. generators: function* gen(...) {, async function(...) {
-    if (/(?:^|[^\w$])(?:async\s+)?function\s*\*?(?:\s+[\w$]+)?\s*\([^)]*\)\s*$/.test(prefix)) return true;
+    // function declarations/expressions and method shorthand look like
+    // `<keyword/name>(<params>) {`. The param list can contain nested parens
+    // (e.g. a default value that calls another function:
+    // `function f(x = a.b()) {`), so locate the matching `(` by scanning
+    // backward with a paren counter rather than a greedy `\([^)]*\)` regex
+    // that stops at the first inner `)`.
+    let i = openBraceIndex - 1;
+    while (i >= 0 && /\s/.test(code[i])) i--;
+    if (i < 0 || code[i] !== ')') return false;
 
-    // Method shorthand / class method / getter-setter / (async) generator method:
-    //   foo(...) {, async foo(...) {, *gen(...) {, get foo() {, set foo(v) {
-    // Exclude control-flow keywords whose head also looks like `name(...)`.
-    const methodHead = /(?:^|[^\w$.])(?:(?:async|get|set)\s+)?\*?\s*([\w$]+)\s*\([^)]*\)\s*$/.exec(prefix);
+    let depth = 0;
+    let j = i;
+    for (; j >= 0; j--) {
+      const c = code[j];
+      if (c === ')') depth++;
+      else if (c === '(') { depth--; if (depth === 0) break; }
+    }
+    if (j < 0) return false; // unbalanced — bail
+
+    // `head` is the text immediately before the matching `(` (the name area).
+    const head = code.slice(Math.max(0, j - 60), j);
+
+    // function declaration/expression, incl. generators: function, function*,
+    // async function, function gen.
+    if (/(?:^|[^\w$])(?:async\s+)?function\s*\*?(?:\s+[\w$]+)?\s*$/.test(head)) return true;
+
+    // Method shorthand / class method / getter-setter / (async) generator method.
+    // Exclude control-flow keywords whose head also looks like `name(`.
+    const methodHead = /(?:^|[^\w$.])(?:(?:async|get|set)\s+)?\*?\s*([\w$]+)\s*$/.exec(head);
     if (methodHead && !this.NON_FUNCTION_HEADS.has(methodHead[1])) return true;
 
     return false;
