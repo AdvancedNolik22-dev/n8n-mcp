@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.60.0] - 2026-06-24
+
+### Added
+
+- **Per-operation tool filtering via `DISABLED_TOOL_OPERATIONS`** (#714). A finer-grained companion to `DISABLED_TOOLS`: instead of removing an entire tool, operators can now disable individual operations within a tool — for example `DISABLED_TOOL_OPERATIONS=n8n_executions:delete` keeps `n8n_executions` available for read/list while blocking deletes — making it practical to stand up read-only or least-privilege deployments. Operation names are normalised to lowercase at parse time and at both enforcement points (the request guard and the executor's defense-in-depth check), so a client sending `action:"DELETE"` cannot slip past a lowercase rule. When every operation of a tool is disabled, the server warns the operator to use `DISABLED_TOOLS` instead, and the tool's destructive-operation annotations are recomputed so the advertised hints stay accurate. Thanks to @mahmoudnaif for the feature (#719).
+
+### Fixed
+
+- **Diff engine now removes a property when a patch sets it to `undefined`** (#292). `setNestedProperty` in `WorkflowDiffEngine` only treated `null` as a deletion marker, but `workflow-auto-fixer.ts` already removes properties with `{onError: undefined}` (carrying a literal `// This will remove the property` comment). The engine was assigning `undefined` to the key rather than deleting it, so `hasOwnProperty(key)` stayed true and the "removed" property still reached n8n. `undefined` is now honored as a removal marker alongside `null`. Thanks to @justadityaraj (Aditya Raj Singh) for the fix (#794).
+- **Version-summary cache TTL was 1000× too long** (#804). The node version-summary cache passed its TTL to `SimpleCache.set(key, data, ttlSeconds)` in milliseconds (`86400000`), but the API treats the third argument as seconds and multiplies by 1000 internally — so the entry was scheduled to live ~1,000 days instead of the intended 24 hours, and stale version summaries would never expire within a normal process lifetime. The TTL is now passed in seconds (`86400`). Thanks to @linda-ai-bot for the fix.
+- **Google Sheets `update` validator accepts the `columns` resourceMapper** (#730). `validateGoogleSheetsUpdate` raised false-positive `missing_required` errors (for both `range` and `values`) on valid Google Sheets v4+ configurations that map data with the `columns` resourceMapper (`mappingMode: "defineBelow"` / `"autoMapInputData"`) instead of the legacy `range` + `values` fields; `update` now treats a real `columns` mapping as satisfying both requirements. The `append` validator already accepted `columns` and was only tightened so an empty `columns: {}` no longer passes, and `read` is unchanged — it has no `columns` parameter and still requires `range`. Thanks to @infobewaize for the fix.
+- **Code node return validator is no longer fooled by helper functions** (#795). The earlier helper-function fix suppressed the "Code node must return data" check whenever *any* helper function was present, so a snippet whose only primitive `return` lived inside a nested helper — with no real top-level return — could slip through. The scanner now strips nested function/method bodies before looking for a top-level return, so primitive returns inside helpers, methods, generators, regex literals, comments, strings, and `for await` blocks are no longer mistaken for the node's actual return value; the backward function-head scan is also bounded to avoid quadratic blow-up on large source. Thanks to @AjTheSpidey (Aadi Jai Gupta) for the fix.
+
+### Changed
+
+- **Hardened the Dependabot configuration** (#874). The n8n packages (`n8n`, `n8n-core`, `n8n-workflow`, `n8n-nodes-base`, `@n8n/*`) are now excluded from Dependabot, because they are updated via `npm run update:n8n` — which also rebuilds `data/nodes.db` while preserving community nodes — so a plain Dependabot bump would ship a stale node catalog. A dedicated `/ui-apps` npm entry was added (it has its own lockfile and is not a root workspace, so Dependabot could not otherwise see it), and `rebase-strategy: auto` was set across all ecosystems.
+- **Bumped dev/build and CI tooling.** `ui-apps` build tooling — `vite` 6 → 8, `typescript` 5 → 6, `@vitejs/plugin-react` 4 → 6 (#876, #877, #878) — and the GitHub Actions used by CI: `docker/login-action` 3 → 4, `actions/upload-artifact` 4 → 7, `actions/download-artifact` 4 → 8, `actions/checkout` 4 → 7, `actions/setup-node` 4 → 6 (#869–#873). The `ui-apps` toolchain is dev-only: it produces the static single-file HTML bundles in `ui-apps/dist/**` at build time and none of it ships in the published runtime. The combined `ui-apps` upgrade was verified end-to-end (clean install, all five UI apps build); Vite 8 requires Node `^20.19 || >=22.12`, which the release build (Node 20.x) satisfies.
+
+### Documentation
+
+- **Documented npm cache contention for multi-client `npx` setups** (#866). Added guidance to `docs/SELF_HOSTING.md` for running several `npx n8n-mcp` clients on one machine: give each client a unique `npm_config_cache` to avoid concurrent-extraction races, and keep `DISABLE_CONSOLE_OUTPUT` set for stdio clients.
+
+Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+
 ## [2.59.4] - 2026-06-23
 
 ### Fixed
