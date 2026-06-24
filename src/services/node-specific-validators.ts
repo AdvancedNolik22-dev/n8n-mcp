@@ -27,6 +27,21 @@ const MAX_CODE_LENGTH = 200_000;
  */
 const MAX_SHORT_INPUT_LENGTH = 2_000;
 
+/**
+ * Max distance the function-head detector scans backward from a `{` to find the
+ * matching `(`. A real parameter list is short; capping the walk keeps brace
+ * scanning linear on adversarial input (e.g. many unmatched `) {`).
+ */
+const MAX_PARAM_SCAN = 2_000;
+
+/**
+ * Detects a top-level primitive return in a JS Code node. Keyword literals
+ * require a trailing word boundary so identifiers that merely start with one
+ * (e.g. `return trueItems`) are not misflagged. Module-level + flagless so it
+ * can be reused without `lastIndex` state.
+ */
+const JS_PRIMITIVE_RETURN_RE = /return\s+(?:(?:true|false|null|undefined)\b|\d+|['"`])/m;
+
 export interface NodeValidationContext {
   config: Record<string, any>;
   errors: ValidationError[];
@@ -1404,8 +1419,15 @@ export class NodeSpecificValidators {
     suggestions: string[],
     mode: string = 'runOnceForAllItems'
   ): void {
-    const hasReturn = /return\s+/.test(code);
-    
+    // Detect a *real* top-level return. For JS, scan the stripped view so a
+    // return that only appears inside a comment, string, or nested function
+    // body (e.g. `// return "x"`) does not satisfy the "must return data" check.
+    // Skip the strip for very large code (mirrors hasTopLevelPrimitiveReturn).
+    const returnScanCode = (language === 'javaScript' && code.length <= MAX_CODE_LENGTH)
+      ? this.stripNestedJavaScriptFunctionBodies(code)
+      : code;
+    const hasReturn = /return\s+/.test(returnScanCode);
+
     if (!hasReturn) {
       errors.push({
         type: 'missing_required',
@@ -1435,14 +1457,7 @@ export class NodeSpecificValidators {
         });
       }
 
-      // Skip primitive return check when helper functions are present,
-      // since we can't distinguish top-level vs nested returns without AST.
-      // Matches: function name(), const/let/var name = [async] function/arrow.
-      // Length guard caps CodeQL polynomial-ReDoS exposure on the
-      // alternation with nested `[^)]*` groups.
-      const hasHelperFunctions = code.length <= MAX_CODE_LENGTH
-        && /(?:function\s+\w+\s*\(|(?:const|let|var)\s+\w+\s*=\s*(?:async\s+)?(?:function|\([^)]*\)\s*=>|\w+\s*=>))/.test(code);
-      if (!isRunOncePerItem && !hasHelperFunctions && /return\s+(true|false|null|undefined|\d+|['"`])/m.test(code)) {
+      if (!isRunOncePerItem && this.hasTopLevelPrimitiveReturn(code)) {
         errors.push({
           type: 'invalid_value',
           property: 'jsCode',
@@ -1494,6 +1509,243 @@ export class NodeSpecificValidators {
         });
       }
     }
+  }
+
+  private static hasTopLevelPrimitiveReturn(code: string): boolean {
+    if (code.length > MAX_CODE_LENGTH) {
+      return JS_PRIMITIVE_RETURN_RE.test(code);
+    }
+
+    const topLevelCode = this.stripNestedJavaScriptFunctionBodies(code);
+    return JS_PRIMITIVE_RETURN_RE.test(topLevelCode);
+  }
+
+  private static stripNestedJavaScriptFunctionBodies(code: string): string {
+    let result = '';
+    let braceDepth = 0;
+    const functionBodyDepths: number[] = [];
+    let state: 'code' | 'single' | 'double' | 'template' | 'lineComment' | 'blockComment' | 'regex' = 'code';
+    // Tracks whether we are inside a `[...]` character class while in regex state,
+    // so an unescaped `/` inside the class does not prematurely end the literal.
+    let inRegexClass = false;
+
+    for (let i = 0; i < code.length; i++) {
+      const char = code[i];
+      const next = code[i + 1];
+      const inFunctionBody = functionBodyDepths.length > 0;
+
+      if (state === 'lineComment') {
+        result += char === '\n' ? '\n' : ' ';
+        if (char === '\n') state = 'code';
+        continue;
+      }
+
+      if (state === 'blockComment') {
+        result += char === '\n' ? '\n' : ' ';
+        if (char === '*' && next === '/') {
+          result += ' ';
+          i++;
+          state = 'code';
+        }
+        continue;
+      }
+
+      if (state === 'single' || state === 'double' || state === 'template') {
+        result += char === '\n' ? '\n' : ' ';
+        if (char === '\\') {
+          if (next) {
+            result += next === '\n' ? '\n' : ' ';
+            i++;
+          }
+          continue;
+        }
+        if (
+          (state === 'single' && char === "'") ||
+          (state === 'double' && char === '"') ||
+          (state === 'template' && char === '`')
+        ) {
+          state = 'code';
+        }
+        continue;
+      }
+
+      if (state === 'regex') {
+        // A real regex literal never spans a raw newline; hitting one means we
+        // misclassified a division operator — bail back to code on this line.
+        if (char === '\n') {
+          state = 'code';
+          result += '\n';
+          continue;
+        }
+        result += ' ';
+        if (char === '\\') {
+          if (next !== undefined) {
+            result += ' ';
+            i++;
+          }
+          continue;
+        }
+        if (char === '[') inRegexClass = true;
+        else if (char === ']') inRegexClass = false;
+        else if (char === '/' && !inRegexClass) state = 'code';
+        continue;
+      }
+
+      if (char === '/' && next === '/') {
+        result += '  ';
+        i++;
+        state = 'lineComment';
+        continue;
+      }
+
+      if (char === '/' && next === '*') {
+        result += '  ';
+        i++;
+        state = 'blockComment';
+        continue;
+      }
+
+      // Regex literal (not division). Blank its contents so `{`/`}` inside it
+      // (e.g. str.replace(/}/g, '')) do not skew brace depth.
+      if (char === '/' && this.regexLiteralStartsHere(code, i)) {
+        result += ' ';
+        inRegexClass = false;
+        state = 'regex';
+        continue;
+      }
+
+      if (char === "'") {
+        result += inFunctionBody ? ' ' : char;
+        state = 'single';
+        continue;
+      }
+
+      if (char === '"') {
+        result += inFunctionBody ? ' ' : char;
+        state = 'double';
+        continue;
+      }
+
+      if (char === '`') {
+        result += inFunctionBody ? ' ' : char;
+        state = 'template';
+        continue;
+      }
+
+      if (char === '{') {
+        if (this.startsJavaScriptFunctionBody(code, i)) {
+          functionBodyDepths.push(braceDepth + 1);
+        }
+        braceDepth++;
+        result += functionBodyDepths.length > 0 ? ' ' : char;
+        continue;
+      }
+
+      if (char === '}') {
+        result += inFunctionBody ? ' ' : char;
+        if (functionBodyDepths[functionBodyDepths.length - 1] === braceDepth) {
+          functionBodyDepths.pop();
+        }
+        braceDepth = Math.max(0, braceDepth - 1);
+        continue;
+      }
+
+      result += inFunctionBody ? (char === '\n' ? '\n' : ' ') : char;
+    }
+
+    return result;
+  }
+
+  // Identifiers that look like `name(...) {` but are control flow, not function bodies.
+  // `await` covers `for await (... of ...) {` (the head's trailing word is `await`).
+  private static readonly NON_FUNCTION_HEADS = new Set([
+    'if', 'for', 'while', 'switch', 'catch', 'with', 'await',
+  ]);
+
+  private static startsJavaScriptFunctionBody(code: string, openBraceIndex: number): boolean {
+    // Arrow function: ... => {
+    const prefix = code.slice(Math.max(0, openBraceIndex - 500), openBraceIndex);
+    if (/=>\s*$/.test(prefix)) return true;
+
+    // function declarations/expressions and method shorthand look like
+    // `<keyword/name>(<params>) {`. The param list can contain nested parens
+    // (e.g. a default value that calls another function:
+    // `function f(x = a.b()) {`), so locate the matching `(` by scanning
+    // backward with a paren counter rather than a greedy `\([^)]*\)` regex
+    // that stops at the first inner `)`.
+    let i = openBraceIndex - 1;
+    // Skip whitespace and any block comment between the `)` and the `{`
+    // (e.g. `function f() /* note */ {`).
+    while (i >= 0) {
+      if (/\s/.test(code[i])) { i--; continue; }
+      if (code[i] === '/' && i > 0 && code[i - 1] === '*') {
+        i -= 2; // step onto the char before the closing `*/`
+        while (i >= 1 && !(code[i - 1] === '/' && code[i] === '*')) i--;
+        i -= 2; // step before the opening `/*`
+        continue;
+      }
+      break;
+    }
+    if (i < 0 || code[i] !== ')') return false;
+
+    // Bound the backward walk: a real parameter list is short, so cap the scan
+    // distance. Without this, adversarial input (many unmatched `) {`) would
+    // make each brace walk to the start of the file — quadratic overall.
+    const scanFloor = Math.max(0, i - MAX_PARAM_SCAN);
+    let depth = 0;
+    let j = i;
+    for (; j >= scanFloor; j--) {
+      const c = code[j];
+      if (c === ')') depth++;
+      else if (c === '(') { depth--; if (depth === 0) break; }
+    }
+    if (depth !== 0) return false; // unbalanced, or matching '(' beyond the scan window
+
+    // `head` is the text immediately before the matching `(` (the name area).
+    const head = code.slice(Math.max(0, j - 60), j);
+
+    // function declaration/expression, incl. generators: function, function*,
+    // async function, function gen.
+    if (/(?:^|[^\w$])(?:async\s+)?function\s*\*?(?:\s+[\w$]+)?\s*$/.test(head)) return true;
+
+    // Method shorthand / class method / getter-setter / (async) generator method.
+    // Exclude control-flow keywords whose head also looks like `name(`.
+    const methodHead = /(?:^|[^\w$.])(?:(?:async|get|set)\s+)?\*?\s*([\w$]+)\s*$/.exec(head);
+    if (methodHead && !this.NON_FUNCTION_HEADS.has(methodHead[1])) return true;
+
+    return false;
+  }
+
+  // Keywords after which a `/` begins a regex literal rather than division.
+  private static readonly REGEX_PRECEDING_KEYWORDS = new Set([
+    'return', 'typeof', 'instanceof', 'in', 'of', 'new', 'delete', 'void',
+    'do', 'else', 'yield', 'await', 'case', 'throw',
+  ]);
+
+  /**
+   * Decide whether a `/` at `slashIndex` (already known not to start `//` or `/*`)
+   * begins a regex literal vs. a division operator, by inspecting the previous
+   * significant token. Used only to keep brace counting balanced, so erring toward
+   * "regex" is bounded by the newline bail-out in the scanner.
+   */
+  private static regexLiteralStartsHere(code: string, slashIndex: number): boolean {
+    let j = slashIndex - 1;
+    while (j >= 0 && /\s/.test(code[j])) j--;
+    if (j < 0) return true; // start of input → regex
+    const c = code[j];
+    // After a value (identifier / number / `)` / `]` / `.` / a closing string or
+    // template quote), `/` is division...
+    if (/[\w$)\].'"`]/.test(c)) {
+      // ...unless the trailing word is a keyword that precedes a regex.
+      if (/[\w$]/.test(c)) {
+        let k = j;
+        while (k >= 0 && /[\w$]/.test(code[k])) k--;
+        const word = code.slice(k + 1, j + 1);
+        return this.REGEX_PRECEDING_KEYWORDS.has(word);
+      }
+      return false;
+    }
+    return true; // after ( , = : [ ! & | ? { } ; etc. → regex
   }
   
   private static validateN8nVariables(
