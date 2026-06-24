@@ -1656,7 +1656,18 @@ export class NodeSpecificValidators {
     // backward with a paren counter rather than a greedy `\([^)]*\)` regex
     // that stops at the first inner `)`.
     let i = openBraceIndex - 1;
-    while (i >= 0 && /\s/.test(code[i])) i--;
+    // Skip whitespace and any block comment between the `)` and the `{`
+    // (e.g. `function f() /* note */ {`).
+    while (i >= 0) {
+      if (/\s/.test(code[i])) { i--; continue; }
+      if (code[i] === '/' && i > 0 && code[i - 1] === '*') {
+        i -= 2; // step onto the char before the closing `*/`
+        while (i >= 1 && !(code[i - 1] === '/' && code[i] === '*')) i--;
+        i -= 2; // step before the opening `/*`
+        continue;
+      }
+      break;
+    }
     if (i < 0 || code[i] !== ')') return false;
 
     // Bound the backward walk: a real parameter list is short, so cap the scan
@@ -1704,8 +1715,9 @@ export class NodeSpecificValidators {
     while (j >= 0 && /\s/.test(code[j])) j--;
     if (j < 0) return true; // start of input → regex
     const c = code[j];
-    // After a value (identifier/number/`)`/`]`/`.`), `/` is division...
-    if (/[\w$)\].]/.test(c)) {
+    // After a value (identifier / number / `)` / `]` / `.` / a closing string or
+    // template quote), `/` is division...
+    if (/[\w$)\].'"`]/.test(c)) {
       // ...unless the trailing word is a keyword that precedes a regex.
       if (/[\w$]/.test(c)) {
         let k = j;

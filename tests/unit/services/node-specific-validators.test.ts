@@ -2120,6 +2120,30 @@ return [{"json": {"result": result}}]
         expect(primitiveErrors).toHaveLength(0);
       });
 
+      it('should treat division after a string literal as division, not a regex', () => {
+        context.config = {
+          language: 'javaScript',
+          jsCode: 'const ratio = "10" / 2;\nreturn [{json: {ratio}}];'
+        };
+
+        NodeSpecificValidators.validateCode(context);
+
+        const missing = context.errors.filter(e => e.message === 'Code must return data for the next node');
+        expect(missing).toHaveLength(0);
+      });
+
+      it('should recognize a helper body when a block comment sits before its brace', () => {
+        context.config = {
+          language: 'javaScript',
+          jsCode: 'function normalize() /* note */ { return null; }\nreturn [{json: {v: normalize()}}];'
+        };
+
+        NodeSpecificValidators.validateCode(context);
+
+        const primitiveErrors = context.errors.filter(e => e.message === 'Cannot return primitive values directly');
+        expect(primitiveErrors).toHaveLength(0);
+      });
+
       it('should still error on primitive top-level return when helper functions exist', () => {
         context.config = {
           language: 'javaScript',
