@@ -2057,6 +2057,44 @@ return [{"json": {"result": result}}]
         expect(primitiveErrors).toHaveLength(0);
       });
 
+      it('should flag a primitive return inside a for-await block (not treat it as a function body)', () => {
+        context.config = {
+          language: 'javaScript',
+          jsCode: 'for await (const item of source) { return "bad"; }'
+        };
+
+        NodeSpecificValidators.validateCode(context);
+
+        expect(context.errors).toContainEqual(
+          expect.objectContaining({ message: 'Cannot return primitive values directly' })
+        );
+      });
+
+      it('should not flag a valid for-await loop with a top-level array return', () => {
+        context.config = {
+          language: 'javaScript',
+          jsCode: 'const results = [];\nfor await (const x of items) { results.push(x); }\nreturn [{json: {results}}];'
+        };
+
+        NodeSpecificValidators.validateCode(context);
+
+        const primitiveErrors = context.errors.filter(e => e.message === 'Cannot return primitive values directly');
+        expect(primitiveErrors).toHaveLength(0);
+      });
+
+      it('should report missing return when the only return is in a comment or string', () => {
+        context.config = {
+          language: 'javaScript',
+          jsCode: '// return "bad"\nconst x = 1;'
+        };
+
+        NodeSpecificValidators.validateCode(context);
+
+        expect(context.errors).toContainEqual(
+          expect.objectContaining({ message: 'Code must return data for the next node' })
+        );
+      });
+
       it('should still error on a real primitive return when a regex literal is present', () => {
         context.config = {
           language: 'javaScript',

@@ -1386,8 +1386,14 @@ export class NodeSpecificValidators {
     suggestions: string[],
     mode: string = 'runOnceForAllItems'
   ): void {
-    const hasReturn = /return\s+/.test(code);
-    
+    // Detect a *real* top-level return. For JS, scan the stripped view so a
+    // return that only appears inside a comment, string, or nested function
+    // body (e.g. `// return "x"`) does not satisfy the "must return data" check.
+    const returnScanCode = language === 'javaScript'
+      ? this.stripNestedJavaScriptFunctionBodies(code)
+      : code;
+    const hasReturn = /return\s+/.test(returnScanCode);
+
     if (!hasReturn) {
       errors.push({
         type: 'missing_required',
@@ -1617,8 +1623,9 @@ export class NodeSpecificValidators {
   }
 
   // Identifiers that look like `name(...) {` but are control flow, not function bodies.
+  // `await` covers `for await (... of ...) {` (the head's trailing word is `await`).
   private static readonly NON_FUNCTION_HEADS = new Set([
-    'if', 'for', 'while', 'switch', 'catch', 'with',
+    'if', 'for', 'while', 'switch', 'catch', 'with', 'await',
   ]);
 
   private static startsJavaScriptFunctionBody(code: string, openBraceIndex: number): boolean {
