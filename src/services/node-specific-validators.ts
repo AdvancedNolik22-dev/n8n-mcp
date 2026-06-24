@@ -310,12 +310,22 @@ export class NodeSpecificValidators {
     errors.push(...filteredErrors);
   }
   
+  /**
+   * In Google Sheets v4+, the `columns` resourceMapper (mappingMode "defineBelow" /
+   * "autoMapInputData") carries the range/values via matchingColumns + schema, so the
+   * legacy range/values fields are not required. An empty `columns: {}` object does not
+   * count — a real mapping has at least a mappingMode or a value.
+   */
+  private static hasColumnsMapping(config: any): boolean {
+    return !!(config.columns && (config.columns.mappingMode || config.columns.value));
+  }
+
   private static validateGoogleSheetsAppend(context: NodeValidationContext): void {
     const { config, errors, warnings, autofix } = context;
 
     // In Google Sheets v4+, range is only required if NOT using the columns resourceMapper
     // The columns parameter is a resourceMapper introduced in v4 that handles range automatically
-    if (!config.range && !config.columns) {
+    if (!config.range && !this.hasColumnsMapping(config)) {
       errors.push({
         type: 'missing_required',
         property: 'range',
@@ -338,7 +348,10 @@ export class NodeSpecificValidators {
   
   private static validateGoogleSheetsRead(context: NodeValidationContext): void {
     const { config, errors, suggestions } = context;
-    
+
+    // The `columns` resourceMapper exists only for write operations
+    // (append/update/appendOrUpdate); the read operation has no `columns`
+    // parameter, so it does not satisfy a read's data-location requirement.
     if (!config.range) {
       errors.push({
         type: 'missing_required',
@@ -347,31 +360,36 @@ export class NodeSpecificValidators {
         fix: 'Specify range like "Sheet1!A:B" or "Sheet1!A1:B10"'
       });
     }
-    
+
     // Suggest data structure options
     if (!config.options?.dataStructure) {
       suggestions.push('Consider setting options.dataStructure to "object" for easier data manipulation');
     }
   }
-  
+
   private static validateGoogleSheetsUpdate(context: NodeValidationContext): void {
     const { config, errors } = context;
-    
-    if (!config.range) {
+
+    // In Google Sheets v4+, the columns resourceMapper (mappingMode: "defineBelow" / "autoMapInputData")
+    // handles both range and values automatically via matchingColumns + schema.
+    // Range/values are only required when NOT using columns mapping.
+    const hasColumnsMapping = this.hasColumnsMapping(config);
+
+    if (!config.range && !hasColumnsMapping) {
       errors.push({
         type: 'missing_required',
         property: 'range',
-        message: 'Range is required for update operation',
-        fix: 'Specify the exact range to update like "Sheet1!A1:B10"'
+        message: 'Range or columns mapping is required for update operation',
+        fix: 'Specify range like "Sheet1!A1:B10" OR use columns with mappingMode (e.g. defineBelow)'
       });
     }
-    
-    if (!config.values && !config.rawData) {
+
+    if (!config.values && !config.rawData && !hasColumnsMapping) {
       errors.push({
         type: 'missing_required',
         property: 'values',
-        message: 'Values are required for update operation',
-        fix: 'Provide the data to write to the spreadsheet'
+        message: 'Values or columns mapping is required for update operation',
+        fix: 'Provide data via values/rawData OR use columns.value with defineBelow mapping'
       });
     }
   }

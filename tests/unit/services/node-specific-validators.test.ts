@@ -317,8 +317,10 @@ describe('NodeSpecificValidators', () => {
 
         NodeSpecificValidators.validateGoogleSheets(context);
 
-        // NOTE: sheetId validation was removed because it's provided by credentials, not configuration
-        // The actual error is missing range, which is checked first
+        // sheetId is provided by credentials, not configuration — so it must NOT be flagged
+        const sheetIdErrors = context.errors.filter(e => e.property === 'sheetId');
+        expect(sheetIdErrors).toHaveLength(0);
+        // The actual error is the missing range, which is checked first
         expect(context.errors).toContainEqual({
           type: 'missing_required',
           property: 'range',
@@ -388,7 +390,7 @@ describe('NodeSpecificValidators', () => {
 
       it('should require range for read', () => {
         NodeSpecificValidators.validateGoogleSheets(context);
-        
+
         expect(context.errors).toContainEqual({
           type: 'missing_required',
           property: 'range',
@@ -397,11 +399,24 @@ describe('NodeSpecificValidators', () => {
         });
       });
 
+      it('should still require range for read even when a columns object is present (read has no columns resourceMapper)', () => {
+        context.config.columns = {
+          mappingMode: 'defineBelow',
+          value: { Email: '={{ $json.email }}' },
+          matchingColumns: ['Email']
+        };
+
+        NodeSpecificValidators.validateGoogleSheets(context);
+
+        const rangeErrors = context.errors.filter(e => e.property === 'range');
+        expect(rangeErrors).toHaveLength(1);
+      });
+
       it('should suggest data structure option', () => {
         context.config.range = 'Sheet1!A:B';
-        
+
         NodeSpecificValidators.validateGoogleSheets(context);
-        
+
         expect(context.suggestions).toContain('Consider setting options.dataStructure to "object" for easier data manipulation');
       });
     });
@@ -414,37 +429,55 @@ describe('NodeSpecificValidators', () => {
         };
       });
 
-      it('should require range for update', () => {
+      it('should require range or columns for update', () => {
         NodeSpecificValidators.validateGoogleSheets(context);
-        
+
         expect(context.errors).toContainEqual({
           type: 'missing_required',
           property: 'range',
-          message: 'Range is required for update operation',
-          fix: 'Specify the exact range to update like "Sheet1!A1:B10"'
+          message: 'Range or columns mapping is required for update operation',
+          fix: 'Specify range like "Sheet1!A1:B10" OR use columns with mappingMode (e.g. defineBelow)'
         });
       });
 
-      it('should require values for update', () => {
+      it('should require values or columns for update', () => {
         context.config.range = 'Sheet1!A1:B10';
-        
+
         NodeSpecificValidators.validateGoogleSheets(context);
-        
+
         expect(context.errors).toContainEqual({
           type: 'missing_required',
           property: 'values',
-          message: 'Values are required for update operation',
-          fix: 'Provide the data to write to the spreadsheet'
+          message: 'Values or columns mapping is required for update operation',
+          fix: 'Provide data via values/rawData OR use columns.value with defineBelow mapping'
         });
       });
 
       it('should accept rawData as alternative to values', () => {
         context.config.range = 'Sheet1!A1:B10';
         context.config.rawData = [[1, 2], [3, 4]];
-        
+
         NodeSpecificValidators.validateGoogleSheets(context);
-        
+
         const valuesErrors = context.errors.filter(e => e.property === 'values');
+        expect(valuesErrors).toHaveLength(0);
+      });
+
+      it('should accept columns resourceMapper as alternative to range + values (v4+ defineBelow)', () => {
+        context.config.columns = {
+          mappingMode: 'defineBelow',
+          value: {
+            Email: '={{ $json.email }}',
+            Status: 'active'
+          },
+          matchingColumns: ['Email']
+        };
+
+        NodeSpecificValidators.validateGoogleSheets(context);
+
+        const rangeErrors = context.errors.filter(e => e.property === 'range');
+        const valuesErrors = context.errors.filter(e => e.property === 'values');
+        expect(rangeErrors).toHaveLength(0);
         expect(valuesErrors).toHaveLength(0);
       });
     });
