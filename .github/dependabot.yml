@@ -5,7 +5,7 @@ version: 2
 updates:
   # Monitor root npm dependencies
   #
-  # NOTE: package.runtime.json (the slim manifest the Docker/npm runtime images
+  # NOTE: package.runtime.json (the slim manifest the published runtime images
   # install from) is a non-standard file Dependabot cannot manage directly. When
   # bumping a runtime dependency here, mirror the change into package.runtime.json
   # so the published images pick it up.
@@ -89,6 +89,7 @@ updates:
       - "dependencies"
     reviewers:
       - "czlonkowski"
+    rebase-strategy: "auto"
 
   # Monitor Docker base images
   - package-ecosystem: "docker"
@@ -107,3 +108,4 @@ updates:
       - "dependencies"
     reviewers:
       - "czlonkowski"
+    rebase-strategy: "auto"
