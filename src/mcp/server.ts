@@ -3281,8 +3281,8 @@ Full documentation is being prepared. For now, use get_node_essentials for confi
       hasVersionHistory: versions.length > 0
     };
 
-    // Cache for 24 hours (86400000 ms)
-    this.cache.set(cacheKey, summary, 86400000);
+    // Cache for 24 hours. SimpleCache.set() takes a TTL in seconds, not ms.
+    this.cache.set(cacheKey, summary, 86400);
 
     return summary;
   }
