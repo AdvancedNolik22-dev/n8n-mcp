@@ -2108,6 +2108,18 @@ return [{"json": {"result": result}}]
         );
       });
 
+      it('should not flag an identifier that merely starts with a primitive keyword', () => {
+        context.config = {
+          language: 'javaScript',
+          jsCode: 'function f(x){ return x; }\nconst trueItems = [{json: {}}];\nreturn trueItems;'
+        };
+
+        NodeSpecificValidators.validateCode(context);
+
+        const primitiveErrors = context.errors.filter(e => e.message === 'Cannot return primitive values directly');
+        expect(primitiveErrors).toHaveLength(0);
+      });
+
       it('should still error on primitive top-level return when helper functions exist', () => {
         context.config = {
           language: 'javaScript',

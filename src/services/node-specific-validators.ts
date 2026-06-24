@@ -27,6 +27,21 @@ const MAX_CODE_LENGTH = 200_000;
  */
 const MAX_SHORT_INPUT_LENGTH = 2_000;
 
+/**
+ * Max distance the function-head detector scans backward from a `{` to find the
+ * matching `(`. A real parameter list is short; capping the walk keeps brace
+ * scanning linear on adversarial input (e.g. many unmatched `) {`).
+ */
+const MAX_PARAM_SCAN = 2_000;
+
+/**
+ * Detects a top-level primitive return in a JS Code node. Keyword literals
+ * require a trailing word boundary so identifiers that merely start with one
+ * (e.g. `return trueItems`) are not misflagged. Module-level + flagless so it
+ * can be reused without `lastIndex` state.
+ */
+const JS_PRIMITIVE_RETURN_RE = /return\s+(?:(?:true|false|null|undefined)\b|\d+|['"`])/m;
+
 export interface NodeValidationContext {
   config: Record<string, any>;
   errors: ValidationError[];
@@ -1389,7 +1404,8 @@ export class NodeSpecificValidators {
     // Detect a *real* top-level return. For JS, scan the stripped view so a
     // return that only appears inside a comment, string, or nested function
     // body (e.g. `// return "x"`) does not satisfy the "must return data" check.
-    const returnScanCode = language === 'javaScript'
+    // Skip the strip for very large code (mirrors hasTopLevelPrimitiveReturn).
+    const returnScanCode = (language === 'javaScript' && code.length <= MAX_CODE_LENGTH)
       ? this.stripNestedJavaScriptFunctionBodies(code)
       : code;
     const hasReturn = /return\s+/.test(returnScanCode);
@@ -1479,11 +1495,11 @@ export class NodeSpecificValidators {
 
   private static hasTopLevelPrimitiveReturn(code: string): boolean {
     if (code.length > MAX_CODE_LENGTH) {
-      return /return\s+(true|false|null|undefined|\d+|['"`])/m.test(code);
+      return JS_PRIMITIVE_RETURN_RE.test(code);
     }
 
     const topLevelCode = this.stripNestedJavaScriptFunctionBodies(code);
-    return /return\s+(true|false|null|undefined|\d+|['"`])/m.test(topLevelCode);
+    return JS_PRIMITIVE_RETURN_RE.test(topLevelCode);
   }
 
   private static stripNestedJavaScriptFunctionBodies(code: string): string {
@@ -1643,14 +1659,18 @@ export class NodeSpecificValidators {
     while (i >= 0 && /\s/.test(code[i])) i--;
     if (i < 0 || code[i] !== ')') return false;
 
+    // Bound the backward walk: a real parameter list is short, so cap the scan
+    // distance. Without this, adversarial input (many unmatched `) {`) would
+    // make each brace walk to the start of the file — quadratic overall.
+    const scanFloor = Math.max(0, i - MAX_PARAM_SCAN);
     let depth = 0;
     let j = i;
-    for (; j >= 0; j--) {
+    for (; j >= scanFloor; j--) {
       const c = code[j];
       if (c === ')') depth++;
       else if (c === '(') { depth--; if (depth === 0) break; }
     }
-    if (j < 0) return false; // unbalanced — bail
+    if (depth !== 0) return false; // unbalanced, or matching '(' beyond the scan window
 
     // `head` is the text immediately before the matching `(` (the name area).
     const head = code.slice(Math.max(0, j - 60), j);
