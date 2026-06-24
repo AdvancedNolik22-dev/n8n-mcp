@@ -3,7 +3,12 @@
 
 version: 2
 updates:
-  # Monitor npm dependencies
+  # Monitor root npm dependencies
+  #
+  # NOTE: package.runtime.json (the slim manifest the Docker/npm runtime images
+  # install from) is a non-standard file Dependabot cannot manage directly. When
+  # bumping a runtime dependency here, mirror the change into package.runtime.json
+  # so the published images pick it up.
   - package-ecosystem: "npm"
     directory: "/"
     schedule:
@@ -35,6 +40,36 @@ updates:
       - "security"
     allow:
       - dependency-type: "all"
+    ignore:
+      # The n8n packages are updated via `npm run update:n8n`, which also rebuilds
+      # data/nodes.db while preserving community nodes (see scripts/update-n8n-deps.js).
+      # A plain Dependabot bump would ship a stale node catalog, so exclude them here.
+      - dependency-name: "n8n"
+      - dependency-name: "n8n-core"
+      - dependency-name: "n8n-workflow"
+      - dependency-name: "n8n-nodes-base"
+      - dependency-name: "@n8n/*"
+    rebase-strategy: "auto"
+
+  # Monitor the UI apps package (its own lockfile; built by `npm run build:ui`).
+  # Not a root npm workspace, so Dependabot needs a separate entry to see it.
+  - package-ecosystem: "npm"
+    directory: "/ui-apps"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "czlonkowski"
+    commit-message:
+      prefix: "deps(ui)"
+      prefix-development: "deps-dev(ui)"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "ui"
     rebase-strategy: "auto"
 
   # Monitor GitHub Actions
