@@ -320,12 +320,12 @@ describe('NodeSpecificValidators', () => {
         // sheetId is provided by credentials, not configuration — so it must NOT be flagged
         const sheetIdErrors = context.errors.filter(e => e.property === 'sheetId');
         expect(sheetIdErrors).toHaveLength(0);
-        // The actual error is the missing range/columns mapping, which is checked first
+        // The actual error is the missing range, which is checked first
         expect(context.errors).toContainEqual({
           type: 'missing_required',
           property: 'range',
-          message: 'Range or columns mapping is required for read operation',
-          fix: 'Specify range like "Sheet1!A:B" OR use columns with mappingMode'
+          message: 'Range is required for read operation',
+          fix: 'Specify range like "Sheet1!A:B" or "Sheet1!A1:B10"'
         });
       });
 
@@ -388,18 +388,18 @@ describe('NodeSpecificValidators', () => {
         };
       });
 
-      it('should require range or columns for read', () => {
+      it('should require range for read', () => {
         NodeSpecificValidators.validateGoogleSheets(context);
 
         expect(context.errors).toContainEqual({
           type: 'missing_required',
           property: 'range',
-          message: 'Range or columns mapping is required for read operation',
-          fix: 'Specify range like "Sheet1!A:B" OR use columns with mappingMode'
+          message: 'Range is required for read operation',
+          fix: 'Specify range like "Sheet1!A:B" or "Sheet1!A1:B10"'
         });
       });
 
-      it('should accept columns resourceMapper as alternative to range for read', () => {
+      it('should still require range for read even when a columns object is present (read has no columns resourceMapper)', () => {
         context.config.columns = {
           mappingMode: 'defineBelow',
           value: { Email: '={{ $json.email }}' },
@@ -409,7 +409,7 @@ describe('NodeSpecificValidators', () => {
         NodeSpecificValidators.validateGoogleSheets(context);
 
         const rangeErrors = context.errors.filter(e => e.property === 'range');
-        expect(rangeErrors).toHaveLength(0);
+        expect(rangeErrors).toHaveLength(1);
       });
 
       it('should suggest data structure option', () => {

@@ -349,14 +349,15 @@ export class NodeSpecificValidators {
   private static validateGoogleSheetsRead(context: NodeValidationContext): void {
     const { config, errors, suggestions } = context;
 
-    // In Google Sheets v4+, range is only required if NOT using the columns resourceMapper
-    // (same semantics as append operation)
-    if (!config.range && !this.hasColumnsMapping(config)) {
+    // The `columns` resourceMapper exists only for write operations
+    // (append/update/appendOrUpdate); the read operation has no `columns`
+    // parameter, so it does not satisfy a read's data-location requirement.
+    if (!config.range) {
       errors.push({
         type: 'missing_required',
         property: 'range',
-        message: 'Range or columns mapping is required for read operation',
-        fix: 'Specify range like "Sheet1!A:B" OR use columns with mappingMode'
+        message: 'Range is required for read operation',
+        fix: 'Specify range like "Sheet1!A:B" or "Sheet1!A1:B10"'
       });
     }
 
