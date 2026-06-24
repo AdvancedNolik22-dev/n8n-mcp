@@ -48,7 +48,11 @@ updates:
       - dependency-name: "n8n-core"
       - dependency-name: "n8n-workflow"
       - dependency-name: "n8n-nodes-base"
+      # The "@n8n/*" wildcard covers current and future scoped packages
+      # (dependency-name supports "*" globs); the explicit entry is listed too
+      # so the intent is unambiguous for the package we actually depend on.
       - dependency-name: "@n8n/*"
+      - dependency-name: "@n8n/n8n-nodes-langchain"
     rebase-strategy: "auto"
 
   # Monitor the UI apps package (its own lockfile; built by `npm run build:ui`).
@@ -67,6 +71,17 @@ updates:
       prefix: "deps(ui)"
       prefix-development: "deps-dev(ui)"
       include: "scope"
+    groups:
+      production-dependencies:
+        dependency-type: "production"
+        update-types:
+          - "minor"
+          - "patch"
+      development-dependencies:
+        dependency-type: "development"
+        update-types:
+          - "minor"
+          - "patch"
     labels:
       - "dependencies"
       - "ui"
