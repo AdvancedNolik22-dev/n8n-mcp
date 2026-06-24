@@ -768,3 +768,25 @@ Old backups are also pruned automatically (10 most recent per workflow, plus an 
     },
   },
 ];
+
+/**
+ * Maps tool names to the argument key that carries the operation/mode selector.
+ * Only tools listed here are eligible for DISABLED_TOOL_OPERATIONS filtering.
+ * Add an entry here when introducing a new tool that bundles multiple operations.
+ */
+export const TOOL_OPERATION_PARAM: Record<string, string> = {
+  'n8n_executions': 'action',
+  'n8n_workflow_versions': 'mode',
+};
+
+/**
+ * The write/destructive operation values per multi-operation tool. Used by
+ * DISABLED_TOOL_OPERATIONS filtering: when every destructive value has been
+ * disabled, the filtered tool is effectively read-only and its MCP annotations
+ * are recomputed (readOnlyHint/destructiveHint) so hosts that honor them don't
+ * keep gating the remaining read paths. Values are lowercase to match parsing.
+ */
+export const DESTRUCTIVE_TOOL_OPERATIONS: Record<string, Set<string>> = {
+  'n8n_executions': new Set(['delete']),
+  'n8n_workflow_versions': new Set(['delete', 'rollback', 'prune']),
+};

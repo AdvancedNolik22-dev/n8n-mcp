@@ -15,7 +15,7 @@ import path from 'path';
 import { n8nDocumentationToolsFinal } from './tools';
 import { UIAppRegistry } from './ui';
 import { SkillResourceRegistry } from './skills';
-import { n8nManagementTools } from './tools-n8n-manager';
+import { n8nManagementTools, TOOL_OPERATION_PARAM, DESTRUCTIVE_TOOL_OPERATIONS } from './tools-n8n-manager';
 import { makeToolsN8nFriendly } from './tools-n8n-friendly';
 import { getWorkflowExampleString } from './workflow-examples';
 import { logger } from '../utils/logger';
@@ -180,6 +180,8 @@ export class N8NDocumentationMCPServer {
   private previousToolTimestamp: number = Date.now();
   private earlyLogger: EarlyErrorLogger | null = null;
   private disabledToolsCache: Set<string> | null = null;
+  private disabledToolOperationsCache: Map<string, Set<string>> | null = null;
+  private filteredToolDefinitionsCache: Map<string, any> | null = null;
   private useSharedDatabase: boolean = false;  // Track if using shared DB for cleanup
   private sharedDbState: SharedDatabaseState | null = null;  // Reference to shared DB state for release
   private isShutdown: boolean = false;  // Prevent double-shutdown
@@ -612,6 +614,149 @@ export class N8NDocumentationMCPServer {
     return this.disabledToolsCache;
   }
 
+  /**
+   * Parse and cache per-operation disabled rules from DISABLED_TOOL_OPERATIONS env var.
+   *
+   * Format: semicolon-separated list of <tool_name>:<comma_separated_operations>
+   * Example: DISABLED_TOOL_OPERATIONS=n8n_workflow_versions:delete,rollback,prune,truncate;n8n_executions:delete
+   *
+   * Cached after first call. Also pre-builds filteredToolDefinitionsCache so
+   * ListTools requests pay no per-request cloning cost.
+   *
+   * Safety limits mirror DISABLED_TOOLS: max 10KB env var, max 50 entries.
+   *
+   * @returns Map of toolName -> Set of disabled operation names
+   */
+  private getDisabledToolOperations(): Map<string, Set<string>> {
+    if (this.disabledToolOperationsCache !== null) {
+      return this.disabledToolOperationsCache;
+    }
+
+    const result = new Map<string, Set<string>>();
+    let envVal = process.env.DISABLED_TOOL_OPERATIONS || '';
+
+    if (!envVal) {
+      this.disabledToolOperationsCache = result;
+      this.filteredToolDefinitionsCache = new Map();
+      return result;
+    }
+
+    if (envVal.length > 10000) {
+      logger.warn(`DISABLED_TOOL_OPERATIONS environment variable too long (${envVal.length} chars), truncating to 10000`);
+      envVal = envVal.substring(0, 10000);
+    }
+
+    let entries = envVal.split(';').map(e => e.trim()).filter(Boolean);
+
+    if (entries.length > 50) {
+      logger.warn(`DISABLED_TOOL_OPERATIONS contains ${entries.length} entries, limiting to first 50`);
+      entries = entries.slice(0, 50);
+    }
+
+    for (const entry of entries) {
+      const colonIdx = entry.indexOf(':');
+      if (colonIdx === -1) continue;
+
+      const toolName = entry.substring(0, colonIdx).trim();
+      const opsStr = entry.substring(colonIdx + 1).trim();
+
+      if (!toolName || !opsStr) continue;
+
+      // Lowercase ops so matching is case-insensitive and consistent with the
+      // (lowercase) operation enum values used for schema stripping and dispatch.
+      const ops = opsStr.split(',').map(o => o.trim().toLowerCase()).filter(Boolean);
+      if (ops.length === 0) continue;
+
+      const existing = result.get(toolName) ?? new Set<string>();
+      ops.forEach(op => existing.add(op));
+      result.set(toolName, existing);
+    }
+
+    // Warn (don't fail) on entries that can never match, so a typo such as
+    // `n8n_execution:delete` (wrong tool) or `n8n_executions:remove` (wrong op)
+    // is visible rather than silently leaving an operation enabled.
+    for (const [toolName, ops] of result) {
+      const paramName = TOOL_OPERATION_PARAM[toolName];
+      if (!paramName) {
+        logger.warn(`DISABLED_TOOL_OPERATIONS: unknown tool '${toolName}' — no per-operation filtering applied. Eligible tools: ${Object.keys(TOOL_OPERATION_PARAM).join(', ')}`);
+        continue;
+      }
+      const tool = n8nManagementTools.find(t => t.name === toolName);
+      const enumValues: string[] = (tool?.inputSchema as any)?.properties?.[paramName]?.enum ?? [];
+      for (const op of ops) {
+        if (enumValues.length > 0 && !enumValues.includes(op)) {
+          logger.warn(`DISABLED_TOOL_OPERATIONS: '${op}' is not a valid ${paramName} for '${toolName}' (valid: ${enumValues.join(', ')}); it will have no effect.`);
+        }
+      }
+    }
+
+    if (result.size > 0) {
+      const summary = [...result.entries()]
+        .map(([t, ops]) => `${t}: [${[...ops].join(', ')}]`)
+        .join('; ');
+      logger.info(`Disabled tool operations configured: ${summary}`);
+    }
+
+    this.disabledToolOperationsCache = result;
+    this.filteredToolDefinitionsCache = this.buildFilteredToolDefinitions(result);
+    return result;
+  }
+
+  /**
+   * Builds deep-cloned, operation-filtered tool definitions for every tool that
+   * has disabled operations. Called once on the first getDisabledToolOperations()
+   * invocation and cached — subsequent ListTools requests pay no cloning cost.
+   */
+  private buildFilteredToolDefinitions(disabledOps: Map<string, Set<string>>): Map<string, any> {
+    const cache = new Map<string, any>();
+
+    for (const [toolName, ops] of disabledOps) {
+      const paramName = TOOL_OPERATION_PARAM[toolName];
+      if (!paramName) continue;
+
+      const original = n8nManagementTools.find(t => t.name === toolName);
+      if (!original) continue;
+
+      const cloned = JSON.parse(JSON.stringify(original));
+
+      const param = cloned.inputSchema?.properties?.[paramName];
+      if (param?.enum) {
+        param.enum = (param.enum as string[]).filter(v => !ops.has(v.toLowerCase()));
+        if (param.enum.length === 0) {
+          logger.warn(
+            `DISABLED_TOOL_OPERATIONS: all operations for '${toolName}' are disabled ` +
+            `but the tool still appears in ListTools. ` +
+            `Consider adding '${toolName}' to DISABLED_TOOLS instead.`
+          );
+        }
+        if (param.description) {
+          const disabledList = [...ops].join(', ');
+          param.description = `${param.description} (disabled by server policy: ${disabledList})`;
+        }
+      }
+
+      const disabledList = [...ops].join(', ');
+      cloned.description = `${cloned.description}\n\n> Operations disabled by server policy: ${disabledList}`;
+
+      // If filtering removed every destructive operation, the tool is now
+      // read-only — recompute its MCP annotations so hosts that honor them
+      // (e.g. to gate/hide destructive tools) don't keep restricting the
+      // remaining read paths, which would defeat the read-only deployment use case.
+      const destructive = DESTRUCTIVE_TOOL_OPERATIONS[toolName];
+      if (destructive && cloned.annotations) {
+        const remaining = (param?.enum as string[] | undefined) ?? [];
+        const stillDestructive = remaining.some(v => destructive.has(String(v).toLowerCase()));
+        if (!stillDestructive) {
+          cloned.annotations = { ...cloned.annotations, readOnlyHint: true, destructiveHint: false };
+        }
+      }
+
+      cache.set(toolName, cloned);
+    }
+
+    return cache;
+  }
+
   private setupHandlers(): void {
     // Handle initialization
     this.server.setRequestHandler(InitializeRequestSchema, async (request) => {
@@ -740,6 +885,12 @@ export class N8NDocumentationMCPServer {
         });
       });
       
+      // Apply per-operation filtered definitions (lazily built on first call, cached for all subsequent calls)
+      const disabledToolOps = this.getDisabledToolOperations();
+      if (disabledToolOps.size > 0 && this.filteredToolDefinitionsCache) {
+        tools = tools.map(tool => this.filteredToolDefinitionsCache!.get(tool.name) ?? tool);
+      }
+
       UIAppRegistry.injectToolMeta(tools);
       return { tools };
     });
@@ -768,7 +919,8 @@ export class N8NDocumentationMCPServer {
               message: `Tool '${name}' is not available in this deployment. It has been disabled via DISABLED_TOOLS environment variable.`,
               tool: name
             }, null, 2)
-          }]
+          }],
+          isError: true
         };
       }
 
@@ -833,6 +985,34 @@ export class N8NDocumentationMCPServer {
       // Removing them makes Zod treat them as missing (which .optional() allows).
       if (processedArgs) {
         processedArgs = JSON.parse(JSON.stringify(processedArgs));
+      }
+
+      // Check if the requested operation is disabled via DISABLED_TOOL_OPERATIONS.
+      // Runs after argument normalization so clients that send args as a JSON string
+      // are handled correctly regardless of serialization quirks.
+      const disabledToolOps = this.getDisabledToolOperations();
+      const disabledOpsForTool = disabledToolOps.get(name);
+      if (disabledOpsForTool && disabledOpsForTool.size > 0) {
+        const paramName = TOOL_OPERATION_PARAM[name];
+        if (paramName) {
+          const requestedOp = processedArgs?.[paramName];
+          if (requestedOp && disabledOpsForTool.has(String(requestedOp).toLowerCase())) {
+            logger.warn(`Attempted to call disabled operation: ${name}.${requestedOp}`);
+            return {
+              content: [{
+                type: 'text',
+                text: JSON.stringify({
+                  error: 'OPERATION_DISABLED',
+                  message: `Operation '${requestedOp}' on tool '${name}' is disabled by server policy.`,
+                  tool: name,
+                  operation: requestedOp,
+                  disabledOperations: [...disabledOpsForTool]
+                }, null, 2)
+              }],
+              isError: true
+            };
+          }
+        }
       }
 
       const isAdditionalTool = this.additionalToolsByName.has(name);
@@ -1434,6 +1614,19 @@ export class N8NDocumentationMCPServer {
     const disabledTools = this.getDisabledTools();
     if (disabledTools.has(name)) {
       throw new Error(`Tool '${name}' is disabled via DISABLED_TOOLS environment variable`);
+    }
+
+    // Defense in depth: operation-level check
+    const disabledToolOps = this.getDisabledToolOperations();
+    const disabledOpsForTool = disabledToolOps.get(name);
+    if (disabledOpsForTool && disabledOpsForTool.size > 0) {
+      const paramName = TOOL_OPERATION_PARAM[name];
+      if (paramName) {
+        const requestedOp = args[paramName];
+        if (requestedOp && disabledOpsForTool.has(String(requestedOp).toLowerCase())) {
+          throw new Error(`Operation '${requestedOp}' on tool '${name}' is disabled by server policy`);
+        }
+      }
     }
 
     // SECURITY (GHSA-wg4g-395p-mqv3): log metadata only, not raw arg values.
@@ -4082,11 +4275,14 @@ Full documentation is being prepared. For now, use get_node_essentials for confi
   // Method removed - replaced by getToolsDocumentation
 
   private async getToolsDocumentation(topic?: string, depth: 'essentials' | 'full' = 'essentials'): Promise<string> {
+    const disabledToolOps = this.getDisabledToolOperations();
+
     if (!topic || topic === 'overview') {
-      return getToolsOverview(depth);
+      return getToolsOverview(depth, disabledToolOps.size > 0 ? disabledToolOps : undefined);
     }
-    
-    return getToolDocumentation(topic, depth);
+
+    const toolDisabledOps = disabledToolOps.get(topic);
+    return getToolDocumentation(topic, depth, toolDisabledOps);
   }
 
   // Add connect method to accept any transport
