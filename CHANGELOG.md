@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.61.0] - 2026-06-26
+
+### Changed
+
+- **Updated n8n to 2.27.4.** Bumped the bundled n8n dependencies — `n8n-nodes-base` 2.26.2 → 2.27.4, `n8n-core` 2.26.2 → 2.27.3, `n8n-workflow` 2.26.2 → 2.27.2, and `@n8n/n8n-nodes-langchain` 2.26.2 → 2.27.4 — and rebuilt `data/nodes.db` (community nodes preserved). The node catalog now covers **2,063 nodes** (816 core + 1,247 community, 1,113 verified). Community nodes were refreshed (1,120 verified + 61 npm) and documentation regenerated incrementally: READMEs at 1,239/1,247 and AI summaries at 1,239/1,247.
+
+### Fixed
+
+- **Community-docs generator now works with OpenAI-compatible cloud LLMs.** The summary generator unconditionally sent the vLLM-only `chat_template_kwargs: { enable_thinking: false }` body field, which OpenAI and Azure OpenAI reject with HTTP 400 (`Unknown parameter`). The field is now gated to local/vLLM servers, Azure (`*.openai.azure.com`) hosts are correctly classified as cloud, and `max_completion_tokens` (already in use) keeps the generator compatible with reasoning models. This makes `generate:docs:summary-only` usable against cloud endpoints.
+
 ## [2.60.0] - 2026-06-24
 
 ### Added
