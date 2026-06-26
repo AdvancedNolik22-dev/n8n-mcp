@@ -59,6 +59,12 @@ export interface DocumentationGeneratorConfig {
   maxTokens?: number;
   /** Temperature for generation (default: 0.3, set to undefined to omit) */
   temperature?: number;
+  /**
+   * Send the vLLM-only `chat_template_kwargs: { enable_thinking: false }` body
+   * field (default: true). Must be false for OpenAI-compatible cloud APIs
+   * (OpenAI, Azure OpenAI) which reject unknown parameters with HTTP 400.
+   */
+  sendThinkingKwargs?: boolean;
 }
 
 /**
@@ -69,6 +75,7 @@ const DEFAULT_CONFIG: Required<Omit<DocumentationGeneratorConfig, 'baseUrl' | 't
   apiKey: 'not-needed',
   timeout: 60000,
   maxTokens: 2000,
+  sendThinkingKwargs: true,
 };
 
 /**
@@ -83,6 +90,7 @@ export class DocumentationGenerator {
   private maxTokens: number;
   private timeout: number;
   private temperature?: number;
+  private sendThinkingKwargs: boolean;
 
   constructor(config: DocumentationGeneratorConfig) {
     const fullConfig = { ...DEFAULT_CONFIG, ...config };
@@ -98,6 +106,7 @@ export class DocumentationGenerator {
     this.maxTokens = fullConfig.maxTokens;
     this.timeout = fullConfig.timeout;
     this.temperature = fullConfig.temperature;
+    this.sendThinkingKwargs = fullConfig.sendThinkingKwargs;
   }
 
   /**
@@ -356,7 +365,9 @@ Guidelines:
           messages,
           max_completion_tokens: maxTokens,
           ...(this.temperature !== undefined ? { temperature: this.temperature } : {}),
-          chat_template_kwargs: { enable_thinking: false },
+          // vLLM thinking models accept this to disable reasoning output; cloud
+          // OpenAI-compatible APIs (OpenAI, Azure) reject unknown params (HTTP 400).
+          ...(this.sendThinkingKwargs ? { chat_template_kwargs: { enable_thinking: false } } : {}),
         }),
         signal: controller.signal,
       });
@@ -395,6 +406,7 @@ export function createDocumentationGenerator(): DocumentationGenerator {
     const host = new URL(baseUrl).hostname;
     const isCloud =
       host === 'openai.com' || host.endsWith('.openai.com') ||
+      host.endsWith('.openai.azure.com') || host.endsWith('.azure.com') ||
       host === 'anthropic.com' || host.endsWith('.anthropic.com');
     isLocalServer = !isCloud;
   } catch {
@@ -407,5 +419,7 @@ export function createDocumentationGenerator(): DocumentationGenerator {
     timeout,
     ...(apiKey ? { apiKey } : {}),
     ...(isLocalServer ? { temperature: 0.3 } : {}),
+    // Only vLLM/local servers understand chat_template_kwargs; cloud APIs reject it.
+    sendThinkingKwargs: isLocalServer,
   });
 }
