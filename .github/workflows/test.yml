@@ -41,6 +41,14 @@ jobs:
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 15  # Increased from 10 to accommodate larger database with community nodes
+    env:
+      # A boolean flag (not the secrets themselves) recording whether a live n8n
+      # instance is configured, so the live-integration step can gate on it without
+      # the N8N_API_* values being exposed to every step in the job. The live tests
+      # need BOTH the URL and the key (getN8nCredentials() throws if either is
+      # missing), and both are empty on Dependabot/fork PRs — so require both here,
+      # otherwise a partially-configured instance would run the step and then fail.
+      HAS_N8N_INSTANCE: ${{ secrets.N8N_API_URL != '' && secrets.N8N_API_KEY != '' }}
     steps:
       - uses: actions/checkout@v7
       
@@ -82,9 +90,24 @@ jobs:
         timeout-minutes: 8
         continue-on-error: true
 
-      # Run integration tests separately (with MSW setup)
-      - name: Run integration tests
-        run: npm run test:integration -- --reporter=default --reporter=junit
+      # Offline integration suites (database, security, mcp-protocol, workflow-diff,
+      # templates, docker, …). These need no live instance, so they always run and
+      # stay a blocking gate on every PR — Dependabot and forks included. Only the
+      # live n8n-api / ai-validation suites are excluded here (they run in the next
+      # step). MSW setup applies as configured.
+      - name: Run integration tests (offline suites)
+        run: npm run test:integration -- --exclude 'tests/integration/n8n-api/**' --exclude 'tests/integration/ai-validation/**' --reporter=default --reporter=junit
+        env:
+          CI: true
+
+      # Live n8n-API + AI-validation suites hit a real instance via the N8N_API_*
+      # secrets, which are unavailable on Dependabot and fork PRs (there every file
+      # here fails outright, turning the required `test` check permanently red). Skip
+      # them when no instance is configured; on in-repo PRs the secret is present so
+      # they run and remain a blocking gate. Secrets are scoped to this step only.
+      - name: Run integration tests (live n8n instance)
+        if: ${{ env.HAS_N8N_INSTANCE == 'true' }}
+        run: npm run test:integration -- tests/integration/n8n-api tests/integration/ai-validation --reporter=default --reporter=junit
         env:
           CI: true
           N8N_API_URL: ${{ secrets.N8N_API_URL }}
