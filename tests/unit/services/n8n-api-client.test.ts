@@ -558,6 +558,336 @@ describe('N8nApiClient', () => {
     });
   });
 
+  describe('canvas groups (nodeGroups)', () => {
+    // n8n validates canvas groups on every write, including writes unrelated to grouping, and
+    // names the group it rejects. These cover the degradation ladder that keeps an unrelated edit
+    // from failing because of a frame — and the guarantee that a group the caller just asked for
+    // is never silently thrown away.
+    const groupedWorkflow = (nodeGroups: any[]) => ({
+      name: 'Grouped',
+      nodes: [
+        { id: 'a', name: 'Set A', type: 'n8n-nodes-base.set', typeVersion: 1, position: [0, 0] as [number, number], parameters: {} },
+        { id: 'b', name: 'Set B', type: 'n8n-nodes-base.set', typeVersion: 1, position: [1, 0] as [number, number], parameters: {} },
+      ],
+      connections: {},
+      nodeGroups,
+    });
+
+    const badRequest = (message: string, data?: unknown) =>
+      createAxiosError({ message, response: { status: 400, data: data ?? { message } } });
+
+    beforeEach(() => {
+      client = new N8nApiClient(defaultConfig);
+    });
+
+    it('forwards groups on update', async () => {
+      const workflow = groupedWorkflow([{ id: 'g1', name: 'Transform', nodeIds: ['a', 'b'] }]);
+      mockAxiosInstance.put.mockResolvedValue({ data: { ...workflow, id: '123' } });
+
+      await client.updateWorkflow('123', workflow);
+
+      expect(mockAxiosInstance.put.mock.calls[0][1].nodeGroups).toEqual([
+        { id: 'g1', name: 'Transform', nodeIds: ['a', 'b'] },
+      ]);
+    });
+
+    it('prunes members that no longer exist before writing, and says so', async () => {
+      const workflow = groupedWorkflow([{ id: 'g1', name: 'Transform', nodeIds: ['a', 'b', 'deleted'] }]);
+      mockAxiosInstance.put.mockResolvedValue({ data: { id: '123' } });
+      const warnings: string[] = [];
+
+      await client.updateWorkflow('123', workflow, { onWarning: w => warnings.push(w) });
+
+      expect(mockAxiosInstance.put.mock.calls[0][1].nodeGroups[0].nodeIds).toEqual(['a', 'b']);
+      expect(warnings.join(' ')).toContain('Transform');
+    });
+
+    it('omits the field and warns when the instance predates canvas groups (n8n < 2.28)', async () => {
+      const workflow = groupedWorkflow([{ id: 'g1', name: 'Transform', nodeIds: ['a'] }]);
+      mockAxiosInstance.put
+        .mockRejectedValueOnce(badRequest('request/body must NOT have additional properties'))
+        .mockResolvedValue({ data: { id: '123' } });
+      const warnings: string[] = [];
+
+      await client.updateWorkflow('123', workflow, { onWarning: w => warnings.push(w) });
+
+      expect(mockAxiosInstance.put).toHaveBeenCalledTimes(2);
+      expect(mockAxiosInstance.put.mock.calls[1][1]).not.toHaveProperty('nodeGroups');
+      expect(warnings.join(' ')).toContain('does not support canvas groups');
+    });
+
+    it('remembers that an instance rejects the field, so the next write skips it', async () => {
+      const workflow = groupedWorkflow([{ id: 'g1', name: 'Transform', nodeIds: ['a'] }]);
+      mockAxiosInstance.put
+        .mockRejectedValueOnce(badRequest('request/body must NOT have additional properties'))
+        .mockResolvedValue({ data: { id: '123' } });
+
+      await client.updateWorkflow('123', workflow);
+      await client.updateWorkflow('123', workflow);
+
+      // 2 for the first call (reject + retry), 1 for the second: no repeat probe.
+      expect(mockAxiosInstance.put).toHaveBeenCalledTimes(3);
+      expect(mockAxiosInstance.put.mock.calls[2][1]).not.toHaveProperty('nodeGroups');
+    });
+
+    it('keeps warning on later writes once the instance is known not to support groups', async () => {
+      // The client outlives a request. Warning only on the write that discovered the limit would
+      // let a caller author a brand-new grouping later in the session, get plain success, and no
+      // group — silently losing what they explicitly asked for.
+      const workflow = groupedWorkflow([{ id: 'g1', name: 'Transform', nodeIds: ['a'] }]);
+      mockAxiosInstance.put
+        .mockRejectedValueOnce(badRequest('request/body must NOT have additional properties'))
+        .mockResolvedValue({ data: { id: '123' } });
+
+      await client.updateWorkflow('123', workflow);
+
+      const laterWarnings: string[] = [];
+      await client.updateWorkflow('123', groupedWorkflow([{ id: 'g2', name: 'Authored now', nodeIds: ['b'] }]), {
+        authoredGroups: new Set(['Authored now']),
+        onWarning: w => laterWarnings.push(w),
+      });
+
+      expect(laterWarnings.join(' ')).toContain('does not support canvas groups');
+    });
+
+    it('keeps warning about dropped descriptions on later writes, but only when one was sent', async () => {
+      const withDescription = groupedWorkflow([
+        { id: 'g1', name: 'Transform', nodeIds: ['a'], description: 'cleans records' },
+      ]);
+      mockAxiosInstance.put
+        .mockRejectedValueOnce(
+badRequest('request/body/nodeGroups/0 must NOT have additional properties')
+        )
+        .mockResolvedValue({ data: { id: '123' } });
+
+      await client.updateWorkflow('123', withDescription);
+
+      const second: string[] = [];
+      await client.updateWorkflow('123', withDescription, { onWarning: w => second.push(w) });
+      expect(second.join(' ')).toContain('descriptions');
+
+      const third: string[] = [];
+      await client.updateWorkflow('123', groupedWorkflow([{ id: 'g1', name: 'Transform', nodeIds: ['a'] }]), {
+        onWarning: w => third.push(w),
+      });
+      expect(third).toEqual([]);
+    });
+
+    it('strips descriptions but keeps the groups when the instance predates them (n8n < 2.32)', async () => {
+      const workflow = groupedWorkflow([
+        { id: 'g1', name: 'Transform', nodeIds: ['a'], description: 'cleans records' },
+      ]);
+      mockAxiosInstance.put
+        .mockRejectedValueOnce(
+badRequest('request/body/nodeGroups/0 must NOT have additional properties')
+        )
+        .mockResolvedValue({ data: { id: '123' } });
+      const warnings: string[] = [];
+
+      await client.updateWorkflow('123', workflow, { onWarning: w => warnings.push(w) });
+
+      const retried = mockAxiosInstance.put.mock.calls[1][1];
+      expect(retried.nodeGroups).toEqual([{ id: 'g1', name: 'Transform', nodeIds: ['a'] }]);
+      expect(warnings.join(' ')).toContain('descriptions');
+    });
+
+    it('ungroups only the group n8n named, and keeps the others', async () => {
+      const workflow = groupedWorkflow([
+        { id: 'g1', name: 'Broken', nodeIds: ['a'] },
+        { id: 'g2', name: 'Fine', nodeIds: ['b'] },
+      ]);
+      mockAxiosInstance.put
+        .mockRejectedValueOnce(
+          badRequest('Node group "Broken" (g1) must form a single connected subgraph with a single entry and exit.')
+        )
+        .mockResolvedValue({ data: { id: '123' } });
+      const warnings: string[] = [];
+
+      await client.updateWorkflow('123', workflow, { onWarning: w => warnings.push(w) });
+
+      expect(mockAxiosInstance.put.mock.calls[1][1].nodeGroups).toEqual([
+        { id: 'g2', name: 'Fine', nodeIds: ['b'] },
+      ]);
+      expect(warnings.join(' ')).toContain('Broken');
+    });
+
+    it('does not remember a semantic rejection as "unsupported"', async () => {
+      // One invalid group must not disable canvas groups for the whole instance.
+      const workflow = groupedWorkflow([{ id: 'g1', name: 'Broken', nodeIds: ['a'] }]);
+      mockAxiosInstance.put
+        .mockRejectedValueOnce(badRequest('Group "Broken" references node ID "x" that does not exist in the workflow.'))
+        .mockResolvedValue({ data: { id: '123' } });
+
+      await client.updateWorkflow('123', workflow);
+      await client.updateWorkflow('123', groupedWorkflow([{ id: 'g2', name: 'Fine', nodeIds: ['b'] }]));
+
+      expect(mockAxiosInstance.put.mock.calls[2][1].nodeGroups).toEqual([
+        { id: 'g2', name: 'Fine', nodeIds: ['b'] },
+      ]);
+    });
+
+    it('surfaces the rejection instead of ungrouping when the caller authored that group', async () => {
+      const workflow = groupedWorkflow([{ id: 'g1', name: 'Mine', nodeIds: ['a'] }]);
+      mockAxiosInstance.put.mockRejectedValue(
+        badRequest('Node group "Mine" (g1) must form a single connected subgraph with a single entry and exit.')
+      );
+
+      await expect(
+        client.updateWorkflow('123', workflow, { authoredGroups: new Set(['Mine']) })
+      ).rejects.toThrow(/single connected subgraph/);
+
+      expect(mockAxiosInstance.put).toHaveBeenCalledTimes(1);
+    });
+
+    it('removes all groups as a last resort when n8n names none of them', async () => {
+      const workflow = groupedWorkflow([{ id: 'g1', name: 'Transform', nodeIds: ['a'] }]);
+      mockAxiosInstance.put
+        .mockRejectedValueOnce(badRequest('Invalid nodeGroups payload'))
+        .mockResolvedValue({ data: { id: '123' } });
+      const warnings: string[] = [];
+
+      await client.updateWorkflow('123', workflow, { onWarning: w => warnings.push(w) });
+
+      expect(mockAxiosInstance.put.mock.calls[1][1].nodeGroups).toEqual([]);
+      expect(warnings.join(' ')).toContain('all of them were removed');
+    });
+
+    it('keeps an authored group when n8n rejects the set without naming one', async () => {
+      // Last resort used to be all-or-nothing. Dropping only the inherited groups saves the write
+      // without destroying what the caller explicitly asked for.
+      const workflow = groupedWorkflow([
+        { id: 'g1', name: 'Inherited', nodeIds: ['a'] },
+        { id: 'g2', name: 'Mine', nodeIds: ['b'] },
+      ]);
+      mockAxiosInstance.put
+        .mockRejectedValueOnce(badRequest('Invalid nodeGroups payload'))
+        .mockResolvedValue({ data: { id: '123' } });
+      const warnings: string[] = [];
+
+      await client.updateWorkflow('123', workflow, {
+        authoredGroups: new Set(['Mine']),
+        onWarning: w => warnings.push(w),
+      });
+
+      expect(mockAxiosInstance.put.mock.calls[1][1].nodeGroups).toEqual([
+        { id: 'g2', name: 'Mine', nodeIds: ['b'] },
+      ]);
+      expect(warnings.join(' ')).toContain('the ones it did not ask about were');
+    });
+
+    it('surfaces the error rather than guessing when n8n names a group it does not hold', async () => {
+      // A group name containing a quote truncates n8n's name capture. Destroying every other group
+      // to recover from an unmatched name would be worse than failing.
+      const workflow = groupedWorkflow([{ id: 'g1', name: 'Keep me', nodeIds: ['a'] }]);
+      mockAxiosInstance.put.mockRejectedValue(
+        badRequest('Group "Say "hi"" references node ID "x" that does not exist in the workflow.')
+      );
+
+      await expect(client.updateWorkflow('123', workflow)).rejects.toThrow(/does not exist/);
+      expect(mockAxiosInstance.put).toHaveBeenCalledTimes(1);
+    });
+
+    it('rejects an authored group whose member is not in the workflow', async () => {
+      // Repair prunes stale members for inherited groups, but for one the caller just authored the
+      // missing node is a mistake in the request — n8n would have said the same.
+      const workflow = groupedWorkflow([{ id: 'g1', name: 'Mine', nodeIds: ['a', 'typo'] }]);
+      mockAxiosInstance.put.mockResolvedValue({ data: { id: '123' } });
+
+      await expect(
+        client.updateWorkflow('123', workflow, { authoredGroups: new Set(['Mine']) })
+      ).rejects.toThrow(/"typo"/);
+
+      expect(mockAxiosInstance.put).not.toHaveBeenCalled();
+    });
+
+    it('does not record the field as unsupported when dropping it does not help', async () => {
+      // n8n cannot say WHICH unknown property it rejected, so the retry is the experiment: if the
+      // write still fails without nodeGroups, something else in the body was wrong and groups must
+      // not be blamed — otherwise one unrelated 400 would disable them for the whole instance.
+      const workflow = groupedWorkflow([{ id: 'g1', name: 'Transform', nodeIds: ['a'] }]);
+      mockAxiosInstance.put.mockRejectedValue(badRequest('request/body must NOT have additional properties'));
+      const warnings: string[] = [];
+
+      await expect(
+        client.updateWorkflow('123', workflow, { onWarning: w => warnings.push(w) })
+      ).rejects.toThrow(/additional properties/);
+
+      expect(warnings).toEqual([]);
+
+      // The next write must still send groups: nothing was learned.
+      mockAxiosInstance.put.mockReset();
+      mockAxiosInstance.put.mockResolvedValue({ data: { id: '123' } });
+      await client.updateWorkflow('123', workflow);
+      expect(mockAxiosInstance.put.mock.calls[0][1]).toHaveProperty('nodeGroups');
+    });
+
+    it('records the field as unsupported only once dropping it succeeds', async () => {
+      const workflow = groupedWorkflow([{ id: 'g1', name: 'Transform', nodeIds: ['a'] }]);
+      mockAxiosInstance.put
+        .mockRejectedValueOnce(badRequest('request/body must NOT have additional properties'))
+        .mockResolvedValue({ data: { id: '123' } });
+      const warnings: string[] = [];
+
+      await client.updateWorkflow('123', workflow, { onWarning: w => warnings.push(w) });
+
+      expect(warnings.join(' ')).toContain('does not support canvas groups');
+      // Learned: the following write skips the field without probing again.
+      await client.updateWorkflow('123', workflow);
+      expect(mockAxiosInstance.put).toHaveBeenCalledTimes(3);
+      expect(mockAxiosInstance.put.mock.calls[2][1]).not.toHaveProperty('nodeGroups');
+    });
+
+    it('leaves errors that have nothing to do with groups alone', async () => {
+      const workflow = groupedWorkflow([{ id: 'g1', name: 'Transform', nodeIds: ['a'] }]);
+      mockAxiosInstance.put.mockRejectedValue(badRequest("request/body must have required property 'name'"));
+
+      await expect(client.updateWorkflow('123', workflow)).rejects.toThrow(/required property/);
+      expect(mockAxiosInstance.put).toHaveBeenCalledTimes(1);
+    });
+
+    it('degrades the same way on create', async () => {
+      const workflow = groupedWorkflow([{ id: 'g1', name: 'Transform', nodeIds: ['a'] }]);
+      mockAxiosInstance.post
+        .mockRejectedValueOnce(badRequest('request/body must NOT have additional properties'))
+        .mockResolvedValue({ data: { id: '123' } });
+      const warnings: string[] = [];
+
+      await client.createWorkflow(workflow, { onWarning: w => warnings.push(w) });
+
+      expect(mockAxiosInstance.post).toHaveBeenCalledTimes(2);
+      expect(mockAxiosInstance.post.mock.calls[1][1]).not.toHaveProperty('nodeGroups');
+      expect(warnings.join(' ')).toContain('does not support canvas groups');
+    });
+
+    it('sends nothing extra for a workflow without groups', async () => {
+      mockAxiosInstance.put.mockResolvedValue({ data: { id: '123' } });
+
+      await client.updateWorkflow('123', { name: 'Plain', nodes: [], connections: {} });
+
+      expect(mockAxiosInstance.put).toHaveBeenCalledTimes(1);
+      expect(mockAxiosInstance.put.mock.calls[0][1]).not.toHaveProperty('nodeGroups');
+    });
+
+    it('degrades an explicit ungroup-all on an instance that has no such field', async () => {
+      // `nodeGroups: []` is a sent field, so a pre-2.28 rejection of it must omit the field and
+      // warn — not fail the write.
+      mockAxiosInstance.put
+        .mockRejectedValueOnce(badRequest('request/body must NOT have additional properties'))
+        .mockResolvedValue({ data: { id: '123' } });
+      const warnings: string[] = [];
+
+      await client.updateWorkflow(
+        '123',
+        { ...groupedWorkflow([]), nodeGroups: [] },
+        { onWarning: w => warnings.push(w) }
+      );
+
+      expect(mockAxiosInstance.put).toHaveBeenCalledTimes(2);
+      expect(mockAxiosInstance.put.mock.calls[1][1]).not.toHaveProperty('nodeGroups');
+      expect(warnings.join(' ')).toContain('does not support canvas groups');
+    });
+  });
+
   describe('deleteWorkflow', () => {
     beforeEach(() => {
       client = new N8nApiClient(defaultConfig);

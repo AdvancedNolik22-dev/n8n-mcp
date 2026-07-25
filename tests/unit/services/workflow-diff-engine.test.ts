@@ -3020,6 +3020,450 @@ describe('WorkflowDiffEngine', () => {
     });
   });
 
+  describe('SetNodeGroups Operation', () => {
+    const grouped = (nodeIds: string[], name = 'Transform') => ({
+      id: 'g1',
+      name,
+      nodeIds
+    });
+
+    it('should create a group from node names and generate an id', async () => {
+      const result = await diffEngine.applyDiff(baseWorkflow, {
+        id: 'test-workflow',
+        operations: [{
+          type: 'setNodeGroups',
+          nodeGroups: [{ name: 'Deliver', nodeNames: ['HTTP Request', 'Slack'] }]
+        } as any]
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.workflow!.nodeGroups).toHaveLength(1);
+      expect(result.workflow!.nodeGroups[0].name).toBe('Deliver');
+      expect(result.workflow!.nodeGroups[0].nodeIds).toEqual(['http-1', 'slack-1']);
+      expect(result.workflow!.nodeGroups[0].id).toMatch(/^[0-9a-f-]{36}$/);
+      // The caller needs these so a rejection of a group just authored is not swallowed.
+      expect(result.authoredGroupNames).toEqual(['Deliver']);
+    });
+
+    it('should accept node ids and a supplied group id', async () => {
+      const result = await diffEngine.applyDiff(baseWorkflow, {
+        id: 'test-workflow',
+        operations: [{
+          type: 'setNodeGroups',
+          nodeGroups: [{ id: 'my-group', name: 'Deliver', nodeIds: ['http-1', 'slack-1'], description: 'sends it on' }]
+        } as any]
+      });
+
+      expect(result.workflow!.nodeGroups[0]).toEqual({
+        id: 'my-group',
+        name: 'Deliver',
+        nodeIds: ['http-1', 'slack-1'],
+        description: 'sends it on'
+      });
+    });
+
+    it('should replace the whole list, not merge into it', async () => {
+      const workflow = { ...baseWorkflow, nodeGroups: [grouped(['webhook-1'], 'Old')] } as any;
+
+      const result = await diffEngine.applyDiff(workflow, {
+        id: 'test-workflow',
+        operations: [{
+          type: 'setNodeGroups',
+          nodeGroups: [{ name: 'New', nodeNames: ['HTTP Request'] }]
+        } as any]
+      });
+
+      expect(result.workflow!.nodeGroups.map((g: any) => g.name)).toEqual(['New']);
+    });
+
+    it('should ungroup everything for an empty array', async () => {
+      const workflow = { ...baseWorkflow, nodeGroups: [grouped(['http-1', 'slack-1'])] } as any;
+
+      const result = await diffEngine.applyDiff(workflow, {
+        id: 'test-workflow',
+        operations: [{ type: 'setNodeGroups', nodeGroups: [] } as any]
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.workflow!.nodeGroups).toEqual([]);
+    });
+
+    it('should reject a missing payload rather than treat it as "ungroup everything"', async () => {
+      const workflow = { ...baseWorkflow, nodeGroups: [grouped(['http-1', 'slack-1'])] } as any;
+
+      const result = await diffEngine.applyDiff(workflow, {
+        id: 'test-workflow',
+        operations: [{ type: 'setNodeGroups' } as any]
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.errors![0].message).toContain('requires a "nodeGroups" array');
+    });
+
+    it('should reject an unknown member', async () => {
+      const result = await diffEngine.applyDiff(baseWorkflow, {
+        id: 'test-workflow',
+        operations: [{
+          type: 'setNodeGroups',
+          nodeGroups: [{ name: 'Deliver', nodeNames: ['No Such Node'] }]
+        } as any]
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.errors![0].message).toContain('No Such Node');
+    });
+
+    it('should not resolve a node id as a name (unlike node-targeting operations)', async () => {
+      const result = await diffEngine.applyDiff(baseWorkflow, {
+        id: 'test-workflow',
+        operations: [{
+          type: 'setNodeGroups',
+          nodeGroups: [{ name: 'Deliver', nodeIds: ['Slack'] }]
+        } as any]
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.errors![0].message).toContain('references node ID "Slack"');
+    });
+
+    it('should reject a node claimed by two groups', async () => {
+      const result = await diffEngine.applyDiff(baseWorkflow, {
+        id: 'test-workflow',
+        operations: [{
+          type: 'setNodeGroups',
+          nodeGroups: [
+            { name: 'First', nodeNames: ['HTTP Request'] },
+            { name: 'Second', nodeNames: ['HTTP Request', 'Slack'] }
+          ]
+        } as any]
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.errors![0].message).toContain('can only belong to one group');
+    });
+
+    it('should accept a node listed twice inside one group, and dedupe it', async () => {
+      // A duplicate within one group describes the same member set, so it is a typo rather than a
+      // conflict — unlike the same node appearing in two different groups.
+      const result = await diffEngine.applyDiff(baseWorkflow, {
+        id: 'test-workflow',
+        operations: [{
+          type: 'setNodeGroups',
+          nodeGroups: [{ name: 'Deliver', nodeNames: ['HTTP Request', 'Slack', 'HTTP Request'] }]
+        } as any]
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.workflow!.nodeGroups[0].nodeIds).toEqual(['http-1', 'slack-1']);
+    });
+
+    it('should reject duplicate group names', async () => {
+      const result = await diffEngine.applyDiff(baseWorkflow, {
+        id: 'test-workflow',
+        operations: [{
+          type: 'setNodeGroups',
+          nodeGroups: [
+            { name: 'Same', nodeNames: ['HTTP Request'] },
+            { name: 'Same', nodeNames: ['Slack'] }
+          ]
+        } as any]
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.errors![0].message).toContain('duplicate group name');
+    });
+
+    it('should resolve by name when nodeIds is present but empty', async () => {
+      // Regression: the validator chose the member list by non-emptiness and the resolver by mere
+      // presence, so `nodeIds: []` alongside a populated `nodeNames` validated, resolved to zero
+      // members, and — because setNodeGroups replaces the whole list — silently ungrouped the
+      // entire workflow while reporting success. Both keys with one empty is a common LLM shape.
+      const workflow = {
+        ...baseWorkflow,
+        nodeGroups: [{ id: 'existing', name: 'Existing', nodeIds: ['webhook-1'] }]
+      } as any;
+
+      const result = await diffEngine.applyDiff(workflow, {
+        id: 'test-workflow',
+        operations: [{
+          type: 'setNodeGroups',
+          nodeGroups: [{ name: 'Deliver', nodeIds: [], nodeNames: ['HTTP Request', 'Slack'] }]
+        } as any]
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.workflow!.nodeGroups).toHaveLength(1);
+      expect(result.workflow!.nodeGroups[0].name).toBe('Deliver');
+      expect(result.workflow!.nodeGroups[0].nodeIds).toEqual(['http-1', 'slack-1']);
+      expect(result.warnings ?? []).toEqual([]);
+    });
+
+    it('should require exactly one of nodeNames or nodeIds', async () => {
+      const both = await diffEngine.applyDiff(baseWorkflow, {
+        id: 'test-workflow',
+        operations: [{
+          type: 'setNodeGroups',
+          nodeGroups: [{ name: 'Deliver', nodeNames: ['Slack'], nodeIds: ['slack-1'] }]
+        } as any]
+      });
+      expect(both.errors![0].message).toContain('use one or the other');
+
+      const neither = await diffEngine.applyDiff(baseWorkflow, {
+        id: 'test-workflow',
+        operations: [{ type: 'setNodeGroups', nodeGroups: [{ name: 'Deliver' }] } as any]
+      });
+      expect(neither.errors![0].message).toContain('needs members');
+    });
+
+    it('should reject a non-string member with a message instead of crashing', async () => {
+      // This operation's payload is unvalidated at the tool boundary, so a non-string member used
+      // to reach normalizeNodeName() and throw a bare "trim is not a function".
+      const result = await diffEngine.applyDiff(baseWorkflow, {
+        id: 'test-workflow',
+        operations: [{
+          type: 'setNodeGroups',
+          nodeGroups: [{ name: 'Deliver', nodeNames: ['Slack', 42] }]
+        } as any]
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.errors![0].message).toContain('not a node name');
+    });
+
+    it('should reject a member that is literally undefined', async () => {
+      // find() returns the element, so an `undefined` member would satisfy `badMember === undefined`
+      // and skip the guard written to catch it. Reachable in-process (mcp-engine), not over JSON.
+      const result = await diffEngine.applyDiff(baseWorkflow, {
+        id: 'test-workflow',
+        operations: [{
+          type: 'setNodeGroups',
+          nodeGroups: [{ name: 'Deliver', nodeNames: ['Slack', undefined] }]
+        } as any]
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.errors![0].message).toContain('not a node name');
+      expect(result.errors![0].message).not.toContain('trim is not a function');
+    });
+
+    it('should reject a non-string group id', async () => {
+      const result = await diffEngine.applyDiff(baseWorkflow, {
+        id: 'test-workflow',
+        operations: [{
+          type: 'setNodeGroups',
+          nodeGroups: [{ id: 7, name: 'Deliver', nodeNames: ['Slack'] }]
+        } as any]
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.errors![0].message).toContain('non-string "id"');
+    });
+
+    it('should reject a description longer than n8n allows', async () => {
+      // The create/update tools cap this in their schema; this operation must agree rather than
+      // let n8n answer with a 400.
+      const result = await diffEngine.applyDiff(baseWorkflow, {
+        id: 'test-workflow',
+        operations: [{
+          type: 'setNodeGroups',
+          nodeGroups: [{ name: 'Deliver', nodeNames: ['Slack'], description: 'x'.repeat(156) }]
+        } as any]
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.errors![0].message).toContain('at most 155');
+    });
+
+    it('should reject a group without a usable name', async () => {
+      const result = await diffEngine.applyDiff(baseWorkflow, {
+        id: 'test-workflow',
+        operations: [{
+          type: 'setNodeGroups',
+          nodeGroups: [{ name: '   ', nodeNames: ['Slack'] }]
+        } as any]
+      });
+
+      expect(result.errors![0].message).toContain('non-empty "name"');
+    });
+  });
+
+  describe('Canvas group reconciliation', () => {
+    const withGroup = (nodeIds: string[]) => ({
+      ...baseWorkflow,
+      nodeGroups: [{ id: 'g1', name: 'Transform', nodeIds }]
+    }) as any;
+
+    it('should prune a removed node from its group and keep the group', async () => {
+      const result = await diffEngine.applyDiff(withGroup(['http-1', 'slack-1']), {
+        id: 'test-workflow',
+        operations: [{ type: 'removeNode', nodeId: 'slack-1' }]
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.workflow!.nodeGroups).toEqual([{ id: 'g1', name: 'Transform', nodeIds: ['http-1'] }]);
+      expect(result.warnings!.some(w => w.message.includes('Transform'))).toBe(true);
+    });
+
+    it('should drop a group whose last member was removed', async () => {
+      const result = await diffEngine.applyDiff(withGroup(['slack-1']), {
+        id: 'test-workflow',
+        operations: [{ type: 'removeNode', nodeId: 'slack-1' }]
+      });
+
+      expect(result.workflow!.nodeGroups).toEqual([]);
+      expect(result.warnings!.some(w => w.message.includes('none of its nodes'))).toBe(true);
+    });
+
+    it('should keep membership when a node is removed and re-added with the same id in one batch', async () => {
+      // Reconciliation runs once at the end, so an intermediate state never loses the member.
+      const result = await diffEngine.applyDiff(withGroup(['http-1', 'slack-1']), {
+        id: 'test-workflow',
+        operations: [
+          { type: 'removeNode', nodeId: 'slack-1' },
+          {
+            type: 'addNode',
+            node: {
+              id: 'slack-1',
+              name: 'Slack',
+              type: 'n8n-nodes-base.slack',
+              typeVersion: 2.2,
+              position: [600, 300],
+              parameters: {}
+            }
+          }
+        ] as any
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.workflow!.nodeGroups[0].nodeIds).toEqual(['http-1', 'slack-1']);
+    });
+
+    it('should prune, not reject, when the same batch removes a node it just grouped', async () => {
+      // The client errors when a group the caller authored references a missing node, because that
+      // is a bad request. Inside one batch it is not: the caller asked for the removal. Pinning the
+      // difference so the two enforcement points stay deliberately, not accidentally, distinct.
+      const result = await diffEngine.applyDiff(baseWorkflow, {
+        id: 'test-workflow',
+        operations: [
+          { type: 'setNodeGroups', nodeGroups: [{ name: 'Enrich', nodeNames: ['HTTP Request', 'Slack'] }] },
+          { type: 'removeNode', nodeId: 'slack-1' }
+        ] as any
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.workflow!.nodeGroups).toEqual([
+        { id: expect.any(String), name: 'Enrich', nodeIds: ['http-1'] }
+      ]);
+      expect(result.warnings!.some(w => w.message.includes('Enrich'))).toBe(true);
+      expect(result.errors ?? []).toEqual([]);
+    });
+
+    it('should leave groups untouched when a node is renamed (groups key on ids)', async () => {
+      const result = await diffEngine.applyDiff(withGroup(['http-1', 'slack-1']), {
+        id: 'test-workflow',
+        operations: [{ type: 'updateNode', nodeId: 'slack-1', updates: { name: 'Notify Team' } }]
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.workflow!.nodeGroups).toEqual([{ id: 'g1', name: 'Transform', nodeIds: ['http-1', 'slack-1'] }]);
+      expect(result.warnings ?? []).toEqual([]);
+    });
+
+    it('should leave a group that lost its shape for n8n to judge', async () => {
+      // Inserting a node between two members breaks single-entry/single-exit, but that rule is
+      // n8n's — the engine must not delete the group on a guess.
+      const result = await diffEngine.applyDiff(withGroup(['http-1', 'slack-1']), {
+        id: 'test-workflow',
+        operations: [
+          {
+            type: 'addNode',
+            node: {
+              id: 'mid-1',
+              name: 'Middle',
+              type: 'n8n-nodes-base.set',
+              typeVersion: 3.4,
+              position: [500, 300],
+              parameters: {}
+            }
+          },
+          { type: 'rewireConnection', source: 'HTTP Request', from: 'Slack', to: 'Middle' },
+          { type: 'addConnection', source: 'Middle', target: 'Slack' }
+        ] as any
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.workflow!.nodeGroups[0].nodeIds).toEqual(['http-1', 'slack-1']);
+    });
+
+    it('should refuse to patch a node id through patchNodeField', async () => {
+      // patchNodeField reaches arbitrary string fields by dot path, so it is a second door to the
+      // rewrite updateNode already refuses.
+      const result = await diffEngine.applyDiff(withGroup(['slack-1']), {
+        id: 'test-workflow',
+        operations: [{
+          type: 'patchNodeField',
+          nodeId: 'slack-1',
+          fieldPath: 'id',
+          patches: [{ find: 'slack-1', replace: 'new-id' }]
+        }] as any
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.errors![0].message).toContain('node IDs are immutable');
+    });
+
+    it('should still allow patching a nested id inside node parameters', async () => {
+      // Only the node's own id is protected; ids inside parameters (e.g. Set assignments) are data.
+      const workflow = withGroup(['slack-1']);
+      const target = workflow.nodes.find((n: any) => n.id === 'http-1');
+      target.parameters = { assignments: { assignments: [{ id: 'old-assignment' }] } };
+
+      const result = await diffEngine.applyDiff(workflow, {
+        id: 'test-workflow',
+        operations: [{
+          type: 'patchNodeField',
+          nodeId: 'http-1',
+          fieldPath: 'parameters.assignments.assignments.0.id',
+          patches: [{ find: 'old-assignment', replace: 'new-assignment' }]
+        }] as any
+      });
+
+      expect(result.success).toBe(true);
+    });
+
+    it('should refuse to change a node id, which would orphan group membership', async () => {
+      const result = await diffEngine.applyDiff(withGroup(['slack-1']), {
+        id: 'test-workflow',
+        operations: [{ type: 'updateNode', nodeId: 'slack-1', updates: { id: 'new-id' } }]
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.errors![0].message).toContain('node IDs are immutable');
+    });
+
+    it('should report reconciliation warnings in validateOnly mode too', async () => {
+      const result = await diffEngine.applyDiff(withGroup(['slack-1']), {
+        id: 'test-workflow',
+        operations: [{ type: 'removeNode', nodeId: 'slack-1' }],
+        validateOnly: true
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.warnings!.some(w => w.message.includes('Transform'))).toBe(true);
+    });
+
+    it('should leave a workflow without groups alone', async () => {
+      const result = await diffEngine.applyDiff(baseWorkflow, {
+        id: 'test-workflow',
+        operations: [{ type: 'removeNode', nodeId: 'slack-1' }]
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.workflow!.nodeGroups).toBeUndefined();
+      expect(result.authoredGroupNames).toBeUndefined();
+    });
+  });
+
   describe('Tag Operations', () => {
     it('should add a new tag', async () => {
       const operation: AddTagOperation = {
