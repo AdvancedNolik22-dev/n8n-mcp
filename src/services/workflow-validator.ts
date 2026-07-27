@@ -906,11 +906,6 @@ export class WorkflowValidator {
         } else {
           result.statistics.validConnections++;
 
-          // Additional validation for AI tool connections
-          if (outputType === 'ai_tool') {
-            this.validateAIToolConnection(sourceName, targetNode, result);
-          }
-
           // Input index bounds checking
           if (outputType === 'main') {
             this.validateInputIndexBounds(sourceName, targetNode, connection, result);
@@ -1017,45 +1012,18 @@ export class WorkflowValidator {
   }
 
   /**
-   * Validate AI tool connections
-   */
-  private validateAIToolConnection(
-    sourceName: string,
-    targetNode: WorkflowNode,
-    result: WorkflowValidationResult
-  ): void {
-    // For AI tool connections, we just need to check if this is being used as a tool
-    // The source should be an AI Agent connecting to this target node as a tool
-    
-    // Get target node info to check if it can be used as a tool
-    const normalizedType = NodeTypeNormalizer.normalizeToFullForm(targetNode.type);
-    let targetNodeInfo = this.nodeRepository.getNode(normalizedType);
-
-    // Try original type if normalization didn't help (fallback for edge cases)
-    if (!targetNodeInfo && normalizedType !== targetNode.type) {
-      targetNodeInfo = this.nodeRepository.getNode(targetNode.type);
-    }
-    
-    if (targetNodeInfo && !targetNodeInfo.isAITool && targetNodeInfo.package !== 'n8n-nodes-base') {
-      // It's a community node being used as a tool
-      result.warnings.push({
-        type: 'warning',
-        nodeId: targetNode.id,
-        nodeName: targetNode.name,
-        message: `Community node "${targetNode.name}" is being used as an AI tool. Ensure N8N_COMMUNITY_PACKAGES_ALLOW_TOOL_USAGE=true is set.`
-      });
-    }
-  }
-
-  /**
    * Validate that a node can actually output ai_tool connections.
    *
    * Valid ai_tool sources are:
    * 1. Langchain tool nodes (in AI_TOOL_VALIDATORS)
    * 2. Tool variant nodes (e.g., nodes-base.supabaseTool)
+   * 3. Nodes whose dynamic outputs expression can emit ai_tool
+   *    (vector stores with mode 'retrieve-as-tool')
+   * 4. Nodes the database marks isAITool
    *
    * If a base node (e.g., nodes-base.supabase) is used with ai_tool connection
-   * but it has a Tool variant available, this is an error.
+   * but it has a Tool variant available, this is an error. Community sources
+   * additionally get the N8N_COMMUNITY_PACKAGES_ALLOW_TOOL_USAGE notice.
    */
   private validateAIToolSource(
     sourceNode: WorkflowNode,
@@ -1071,6 +1039,15 @@ export class WorkflowValidator {
     // Get node info from repository (single lookup, reused below)
     const nodeInfo = this.nodeRepository.getNode(normalizedType);
 
+    // N8N_COMMUNITY_PACKAGES_ALLOW_TOOL_USAGE gates community packages as tools
+    // at all, so this applies even when the node declares usableAsTool. It tests
+    // the database's community flag rather than the package name, which would
+    // sweep in first-party @n8n/* packages (#955), and it fires on the tool (the
+    // ai_tool source), not on the agent receiving the connection.
+    if (nodeInfo?.isCommunity) {
+      this.pushCommunityToolUsageWarning(sourceNode, result);
+    }
+
     // Check if it's a Tool variant (ends with Tool and is in database as isToolVariant)
     if (ToolVariantGenerator.isToolVariantNodeType(normalizedType)) {
       // It looks like a Tool variant, verify it exists in database
@@ -1080,8 +1057,32 @@ export class WorkflowValidator {
     }
 
     if (!nodeInfo) {
-      // Node not found in database - might be a community node or unknown
-      // Don't error here, let other validation handle unknown nodes
+      // Node not found in database - other validation reports unknown node
+      // types, so no error here. A package-qualified non-core type is commonly
+      // a user-installed community package the bundled database doesn't know;
+      // it still needs the environment variable to serve as a tool, so keep
+      // that guidance, which the pre-#955 target-side check emitted by accident.
+      if (!this.isCorePackageType(normalizedType) && normalizedType.includes('.')) {
+        this.pushCommunityToolUsageWarning(sourceNode, result);
+      }
+      return;
+    }
+
+    // Nodes may declare outputs as an expression evaluated against the node's
+    // parameters, so a connection type can exist only for particular values —
+    // vector stores expose ai_tool only when mode is 'retrieve-as-tool'. The
+    // database stores the raw expression; scan it for ai_tool instead of
+    // maintaining a list of the nodes that do this. The scan is deliberately
+    // permissive: any expression that can produce ai_tool passes, even when the
+    // current parameters would not produce it (the LangChain Code node lists
+    // ai_tool in a connector lookup, for example). Beyond the retrieve-as-tool
+    // mode gate checked below, under-warning beats reinstating the false
+    // INVALID_AI_TOOL_SOURCE this replaced.
+    const aiToolOutputExpression = this.findConditionalAIToolExpression(nodeInfo.outputs);
+    if (aiToolOutputExpression) {
+      // Valid - the node emits ai_tool for the right parameter values, but the
+      // current parameters may not be those values.
+      this.validateConditionalAIToolMode(sourceNode, aiToolOutputExpression, result);
       return;
     }
 
@@ -1121,6 +1122,76 @@ export class WorkflowValidator {
       message: `Node "${sourceNode.name}" of type "${sourceNode.type}" cannot output ai_tool connections. ` +
         `Only AI tool nodes (e.g., Calculator, HTTP Request Tool) or Tool variants (e.g., *Tool suffix nodes) can be connected to AI Agents as tools.`,
       code: 'INVALID_AI_TOOL_SOURCE'
+    });
+  }
+
+  private pushCommunityToolUsageWarning(
+    sourceNode: WorkflowNode,
+    result: WorkflowValidationResult
+  ): void {
+    result.warnings.push({
+      type: 'warning',
+      nodeId: sourceNode.id,
+      nodeName: sourceNode.name,
+      message: `Community node "${sourceNode.name}" is being used as an AI tool. Ensure N8N_COMMUNITY_PACKAGES_ALLOW_TOOL_USAGE=true is set on the n8n instance.`
+    });
+  }
+
+  /**
+   * Find a dynamic output expression that can produce an ai_tool output.
+   * Returns the expression string so the caller can inspect the gating
+   * parameter, or null when the node's outputs are static or never
+   * include ai_tool.
+   */
+  private findConditionalAIToolExpression(outputs: unknown): string | null {
+    // Community ingestion stores nodeDesc.outputs verbatim, so a conditional
+    // expression can arrive as a bare string rather than a one-element array.
+    const candidates =
+      Array.isArray(outputs) ? outputs :
+      typeof outputs === 'string' ? [outputs] :
+      [];
+
+    return candidates.find(
+      (output): output is string =>
+        typeof output === 'string' && output.startsWith('={{') && output.includes('ai_tool')
+    ) ?? null;
+  }
+
+  /**
+   * Warn when a node whose ai_tool output is gated on `mode` is not set to the
+   * mode that exposes it. Stays silent when mode is itself an expression, which
+   * cannot be evaluated statically.
+   */
+  private validateConditionalAIToolMode(
+    sourceNode: WorkflowNode,
+    outputExpression: string,
+    result: WorkflowValidationResult
+  ): void {
+    if (!outputExpression.includes('retrieve-as-tool')) return;
+
+    const mode = sourceNode.parameters?.mode;
+    // null and undefined both mean "unset - the node's default mode applies"
+    const isUnset = mode === undefined || mode === null;
+    const isStaticMode = isUnset || (typeof mode === 'string' && !mode.startsWith('='));
+    if (!isStaticMode || mode === 'retrieve-as-tool') return;
+
+    // When mode is unset, the expression's own `?? '<default>'` fallback decides
+    // which output exists. Warn only when that default is identifiable and
+    // demonstrably not retrieve-as-tool - staying silent otherwise keeps this
+    // false-positive-safe if a future node defaults differently.
+    if (isUnset) {
+      const defaultMode = outputExpression.match(/\?\?\s*'([^']+)'/)?.[1];
+      if (defaultMode === undefined || defaultMode === 'retrieve-as-tool') return;
+    }
+
+    result.warnings.push({
+      type: 'warning',
+      nodeId: sourceNode.id,
+      nodeName: sourceNode.name,
+      message: `Node "${sourceNode.name}" connects to an AI Agent as a tool, but its ai_tool output only exists when mode is "retrieve-as-tool"` +
+        (isUnset ? ' (mode is not set, so the default applies)' : ` (current mode: "${mode}")`) +
+        `. Set mode to "retrieve-as-tool".`,
+      code: 'AI_TOOL_MODE_MISMATCH'
     });
   }
 
@@ -1852,7 +1923,7 @@ export class WorkflowValidator {
 
     // AI Agent advisories (no tools connected, community tools) are covered
     // by validateAISpecificNodes (exact agent type match, node name in the
-    // message) and by validateAIToolConnection (per-node community-package
+    // message) and by validateAIToolSource (per-node community-package
     // notice) — no duplicate workflow-level checks here.
   }
 
