@@ -4749,6 +4749,22 @@ Full documentation is being prepared. For now, use get_node_essentials for confi
 
     logger.info('Shutting down MCP server...');
 
+    // Ship queued telemetry first. Callers exit via process.exit() right after
+    // this method returns, which never emits 'beforeExit', so the batch
+    // processor's own exit handler does not get to run; without this a short
+    // session loses everything it queued since the last interval flush.
+    // Bounded and non-throwing, and deliberately ahead of the initialization
+    // await below: telemetry needs no database, so an initialization that never
+    // settles must not also cost us the queued events. Guarded like every other
+    // cleanup step here — telemetry must never change a shutdown's outcome,
+    // which for src/mcp/index.ts would mean exit code 1 and skipped stdin
+    // teardown.
+    try {
+      await telemetry.flushBeforeExit();
+    } catch (error) {
+      logger.debug('Telemetry flush during shutdown failed:', error);
+    }
+
     // Wait for initialization to complete (or fail) before cleanup
     // This prevents race conditions where shutdown runs while init is in progress
     try {

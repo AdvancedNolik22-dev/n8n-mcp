@@ -16,19 +16,44 @@ vi.mock('fs', async () => {
   };
 });
 
+// The opt-out variables this suite reasons about. The test environment disables
+// telemetry globally (vitest.config.ts) so no test run can reach the backend;
+// this suite owns the opt-out logic itself, so it controls them explicitly
+// instead of inheriting whatever the ambient environment says.
+const OPT_OUT_VARS = [
+  'N8N_MCP_TELEMETRY_DISABLED',
+  'TELEMETRY_DISABLED',
+  'DISABLE_TELEMETRY'
+] as const;
+
 describe('TelemetryConfigManager', () => {
   let manager: TelemetryConfigManager;
+  let savedOptOutVars: Record<string, string | undefined>;
 
   beforeEach(() => {
     vi.clearAllMocks();
     // Clear singleton instance
     (TelemetryConfigManager as any).instance = null;
 
+    savedOptOutVars = {};
+    for (const name of OPT_OUT_VARS) {
+      savedOptOutVars[name] = process.env[name];
+      delete process.env[name];
+    }
+
     // Mock console.log to suppress first-run notice in tests
     vi.spyOn(console, 'log').mockImplementation(() => {});
   });
 
   afterEach(() => {
+    for (const [name, value] of Object.entries(savedOptOutVars)) {
+      if (value === undefined) {
+        delete process.env[name];
+      } else {
+        process.env[name] = value;
+      }
+    }
+
     vi.restoreAllMocks();
   });
 
@@ -311,8 +336,15 @@ describe('TelemetryConfigManager', () => {
 
       expect(manager.isEnabled()).toBe(true);
 
-      // Restore original environment
-      process.env.N8N_MCP_TELEMETRY_DISABLED = originalEnv;
+      // Restore original environment. Assigning an undefined value would set the
+      // literal string "undefined", which config-manager reads as an invalid
+      // opt-out value; afterEach restores it either way, but keep the local
+      // restore honest.
+      if (originalEnv === undefined) {
+        delete process.env.N8N_MCP_TELEMETRY_DISABLED;
+      } else {
+        process.env.N8N_MCP_TELEMETRY_DISABLED = originalEnv;
+      }
     });
 
     it('should handle invalid JSON in config file gracefully', () => {
