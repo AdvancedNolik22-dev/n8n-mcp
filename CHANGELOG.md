@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.69.0] - 2026-08-08
+
+### Security
+
+- Fix incomplete IPv6 link-local filtering in outbound URL validation (GHSA-2x5j-hrmv-ccrq). Reported by @kaimandalic.
+
+### Changed
+
+- **Outbound URL validation now rejects more non-globally-reachable address blocks.** Alongside the ranges already refused, `strict` and `moderate` modes now also reject `100.64.0.0/10` (RFC 6598 shared address space), `192.0.0.0/24` (RFC 6890 IETF protocol assignments), `224.0.0.0/4` and `ff00::/8` (multicast), and `240.0.0.0/4` including the `255.255.255.255` broadcast address. This is a behavior change for anyone whose n8n instance is reachable only at such an address — most plausibly within `100.64.0.0/10`, which is used by Tailscale, some Kubernetes pod CIDRs, and carrier-grade NAT. Those deployments can keep working via the existing `WEBHOOK_SECURITY_MODE=permissive` setting, but note that it is coarse: it re-allows every private range at once, leaving only cloud-metadata endpoints and non-canonical IPv6 tunneling blocked. Documentation and benchmarking ranges (`192.0.2.0/24`, `198.51.100.0/24`, `203.0.113.0/24`, `198.18.0.0/15`, `2001:db8::/32`) remain allowed, unchanged from previous releases. In the other direction, a small set of addresses in IETF-reserved space whose short first hextet happened to match the previous text-based prefix tests (`fc::`, `fd::`, `fec::` and neighbours) are no longer classified as unique-local or site-local; nothing is assignable or routable in that space.
+
 ## [2.68.4] - 2026-08-07
 
 ### Fixed
