@@ -47,12 +47,23 @@ interface MultiTenantHeaders {
 const MAX_SESSIONS = Math.max(1, parseInt(process.env.N8N_MCP_MAX_SESSIONS || '100', 10));
 const SESSION_CLEANUP_INTERVAL = 5 * 60 * 1000; // 5 minutes
 
+// Interval between SSE keep-alive comment frames on the Streamable HTTP
+// transport's open streams — the legacy SSEServerTransport path below has no
+// equivalent option. The frames are what keep an idle GET stream, or a POST
+// stream held open through a long tool call, from being closed by a reverse
+// proxy or an idle timeout, which reaches the client as
+// `SSE stream disconnected: TypeError: terminated`.
+//
+// 15s is the SDK's own default, set explicitly so the behavior is visible here
+// and does not move with a future change to that default.
+const STREAMABLE_HTTP_KEEP_ALIVE_MS = 15_000;
+
 // The JSON-RPC surface this server implements, as exact method names plus
 // namespace prefixes. Gating on the namespace rather than an exact method list
 // means a method added inside a namespace we already serve keeps reaching the
 // SDK instead of being rejected as unknown while the surface drifts.
 // Namespaces cover every request and notification defined by
-// @modelcontextprotocol/sdk 1.28.0; tests/unit/http-server/method-not-found.test.ts
+// @modelcontextprotocol/sdk 1.30.0; tests/unit/http-server/method-not-found.test.ts
 // fails if a later SDK introduces one outside them.
 //
 // The cost of that choice: an unregistered method inside an accepted namespace
@@ -790,6 +801,7 @@ export class SingleSessionHTTPServer {
 
           transport = new StreamableHTTPServerTransport({
             sessionIdGenerator: () => sessionIdToUse,
+            keepAliveMs: STREAMABLE_HTTP_KEEP_ALIVE_MS,
             onsessioninitialized: (initializedSessionId: string) => {
               // Store both transport and server by session ID when session is initialized
               logger.info('handleRequest: Session initialized, storing transport and server', { 
