@@ -1084,7 +1084,9 @@ export class WorkflowDiffEngine {
             });
             continue;
           }
-          current = current.replace(patch.find, patch.replace);
+          // Function replacer keeps the replacement verbatim — a bare string would
+          // read "$&", "$'" etc. in it as JS replacement patterns (#1012).
+          current = current.replace(patch.find, () => patch.replace);
         }
         this.setNestedProperty(draft, path, current);
       } else {
@@ -1196,11 +1198,10 @@ export class WorkflowDiffEngine {
           );
         }
 
-        if (patch.replaceAll) {
-          current = current.split(patch.find).join(patch.replace);
-        } else {
-          current = current.replace(patch.find, patch.replace);
-        }
+        // split/join inserts the replacement verbatim; String.replace would read
+        // "$&", "$'" and friends in it as JS replacement patterns (#1012). Safe
+        // for the single-occurrence case too: the checks above leave exactly one.
+        current = current.split(patch.find).join(patch.replace);
       }
     }
 

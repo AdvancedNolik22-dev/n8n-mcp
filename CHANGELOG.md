@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.71.1] - 2026-08-18
+
+### Fixed
+
+- **`patchNodeField` no longer corrupts a field when the replacement text contains `$`.** In literal mode (the default), the replacement string was handed straight to `String.prototype.replace()`, which interprets JS replacement patterns inside it: `$'` splices in everything after the match, `` $` `` everything before it, `$&` the match itself. Patching a Code node with something as ordinary as `const money = '$' + amount.toFixed(2)` duplicated the rest of the node's source into the middle of the insertion, saved the workflow in that state — live, if the workflow was active — and reported success. Literal mode now inserts the replacement verbatim in the single-occurrence case as well as under `replaceAll`, as does the older `__patch_find_replace` path in `updateNode`. With `regex: true`, replacement patterns remain available by design — `$1` for capture groups, `$$` for a literal `$` — and the tool documentation now states the distinction. Reported with root cause and both candidate fixes by @NextLevelManagementAdvisors. (#1012)
+
 ## [2.71.0] - 2026-08-18
 
 ### Fixed
