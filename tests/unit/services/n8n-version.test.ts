@@ -433,6 +433,46 @@ describe('n8n-version', () => {
       expect(cached).toEqual({ version: '1.119.0', major: 1, minor: 119, patch: 0 });
       expect(axios.get).toHaveBeenCalledTimes(1);
     });
+
+    it('caches an instance that answers without a version', async () => {
+      // The normal answer from every n8n >= 1.119.0. Re-probing would cost a round trip per
+      // workflow write to learn the same thing.
+      vi.mocked(axios.get).mockResolvedValue({ status: 200, data: { data: { sso: {} } } });
+
+      expect(await fetchN8nVersion(baseUrl)).toBeNull();
+      expect(await fetchN8nVersion(baseUrl)).toBeNull();
+
+      expect(axios.get).toHaveBeenCalledTimes(1);
+    });
+
+    it('re-probes after a probe that produced no usable response', async () => {
+      // Neither a timeout nor a 5xx - which validateStatus rejects - says anything about what the
+      // instance reports when healthy, so caching either would suppress detection over a blip.
+      vi.mocked(axios.get).mockRejectedValueOnce(new Error('ETIMEDOUT'));
+      vi.mocked(axios.get).mockRejectedValueOnce(
+        Object.assign(new Error('Bad Gateway'), { response: { status: 502 } })
+      );
+      vi.mocked(axios.get).mockResolvedValue(settingsResponse);
+
+      expect(await fetchN8nVersion(baseUrl)).toBeNull();
+      expect(await fetchN8nVersion(baseUrl)).toBeNull();
+      expect(await fetchN8nVersion(baseUrl)).toEqual({
+        version: '1.119.0',
+        major: 1,
+        minor: 119,
+        patch: 0,
+      });
+      expect(axios.get).toHaveBeenCalledTimes(3);
+    });
+
+    it('does not let a forced refresh keep reporting a version the instance stopped sending', async () => {
+      vi.mocked(axios.get).mockResolvedValueOnce(settingsResponse);
+      expect(await fetchN8nVersion(baseUrl)).not.toBeNull();
+
+      vi.mocked(axios.get).mockResolvedValue({ status: 200, data: { data: {} } });
+      expect(await fetchN8nVersion(baseUrl, { forceRefresh: true })).toBeNull();
+      expect(await fetchN8nVersion(baseUrl)).toBeNull();
+    });
   });
 
   describe('VERSION_THRESHOLDS', () => {
