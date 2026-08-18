@@ -4,12 +4,8 @@
  * This module provides version detection for n8n instances and filters
  * workflow settings based on what the target n8n version supports.
  *
- * VERSION HISTORY for workflowSettings in n8n Public API:
- * - All versions: 7 core properties (saveExecutionProgress, saveManualExecutions,
- *                 saveDataErrorExecution, saveDataSuccessExecution, executionTimeout,
- *                 errorWorkflow, timezone)
- * - 1.37.0+: Added executionOrder
- * - 1.119.0+: Added callerPolicy, callerIds, timeSavedPerExecution, availableInMCP
+ * Which property arrived in which version lives in constants/workflow-settings.ts, together
+ * with the pass-through floor at or above which settings are forwarded untouched.
  *
  * References:
  * - https://github.com/n8n-io/n8n/pull/21297 (PR adding 4 new properties in 1.119.0)
@@ -20,6 +16,12 @@ import axios from 'axios';
 import { logger } from '../utils/logger';
 import { N8nVersionInfo, N8nSettingsResponse } from '../types/n8n-api';
 import type { PinnedAgents } from '../utils/ssrf-protection';
+import {
+  DERIVED_SETTINGS_PROPERTIES,
+  SETTINGS_PASS_THROUGH_FLOOR,
+  WORKFLOW_SETTINGS_PROPERTIES,
+  type SettingsVersion,
+} from '../constants/workflow-settings';
 
 // Cache version info per base URL with TTL to handle server upgrades
 interface CachedVersion {
@@ -31,32 +33,6 @@ interface CachedVersion {
 const VERSION_CACHE_TTL_MS = 5 * 60 * 1000;
 
 const versionCache = new Map<string, CachedVersion>();
-
-// Settings properties supported by each n8n version range
-// These are CUMULATIVE - each version adds to the previous
-const SETTINGS_BY_VERSION = {
-  // Core properties supported by all versions
-  core: [
-    'saveExecutionProgress',
-    'saveManualExecutions',
-    'saveDataErrorExecution',
-    'saveDataSuccessExecution',
-    'executionTimeout',
-    'errorWorkflow',
-    'timezone',
-  ],
-  // Added in n8n 1.37.0
-  v1_37_0: [
-    'executionOrder',
-  ],
-  // Added in n8n 1.119.0 (PR #21297)
-  v1_119_0: [
-    'callerPolicy',
-    'callerIds',
-    'timeSavedPerExecution',
-    'availableInMCP',
-  ],
-};
 
 /**
  * Parse version string into structured version info
@@ -80,7 +56,7 @@ export function parseVersion(versionString: string): N8nVersionInfo | null {
 /**
  * Compare two versions: returns -1 if a < b, 0 if equal, 1 if a > b
  */
-export function compareVersions(a: N8nVersionInfo, b: N8nVersionInfo): number {
+export function compareVersions(a: SettingsVersion, b: SettingsVersion): number {
   if (a.major !== b.major) return a.major - b.major;
   if (a.minor !== b.minor) return a.minor - b.minor;
   return a.patch - b.patch;
@@ -90,24 +66,25 @@ export function compareVersions(a: N8nVersionInfo, b: N8nVersionInfo): number {
  * Check if version meets minimum requirement
  */
 export function versionAtLeast(version: N8nVersionInfo, major: number, minor: number, patch = 0): boolean {
-  const target = { version: '', major, minor, patch };
-  return compareVersions(version, target) >= 0;
+  return compareVersions(version, { major, minor, patch }) >= 0;
 }
 
 /**
- * Get supported settings properties for a given n8n version
+ * Known settings properties a given n8n version accepts on a write.
+ *
+ * Derived properties are excluded: n8n ignores them on write, so they are never something a
+ * caller can set. This answers "what did n8n accept at version X", which is only the whole
+ * story below {@link SETTINGS_PASS_THROUGH_FLOOR} - above it {@link cleanSettingsForVersion}
+ * forwards unknown properties too, because this list trails n8n's releases.
  */
 export function getSupportedSettingsProperties(version: N8nVersionInfo): Set<string> {
-  const supported = new Set<string>(SETTINGS_BY_VERSION.core);
+  const supported = new Set<string>();
 
-  // Add executionOrder if >= 1.37.0
-  if (versionAtLeast(version, 1, 37, 0)) {
-    SETTINGS_BY_VERSION.v1_37_0.forEach(prop => supported.add(prop));
-  }
-
-  // Add new properties if >= 1.119.0
-  if (versionAtLeast(version, 1, 119, 0)) {
-    SETTINGS_BY_VERSION.v1_119_0.forEach(prop => supported.add(prop));
+  for (const [name, meta] of Object.entries(WORKFLOW_SETTINGS_PROPERTIES)) {
+    if (meta.derived) continue;
+    if (compareVersions(version, meta.since) >= 0) {
+      supported.add(name);
+    }
   }
 
   return supported;
@@ -210,13 +187,21 @@ export function setCachedVersion(baseUrl: string, version: N8nVersionInfo): void
 }
 
 /**
- * Clean workflow settings for API update based on n8n version
+ * Clean workflow settings for an API write against a specific n8n version.
  *
- * This function filters workflow settings to only include properties
- * that the target n8n version supports, preventing "additional properties" errors.
+ * Derived properties are always dropped - n8n ignores them on write but echoes them on GET,
+ * and our writes merge over a GET.
+ *
+ * Everything else depends on the instance:
+ * - At or above {@link SETTINGS_PASS_THROUGH_FLOOR}, or when the version could not be detected,
+ *   properties are forwarded untouched. Our property list trails n8n's weekly releases, and a
+ *   setting dropped here is dropped silently; n8n's own 400 is at least actionable.
+ * - Below the floor, only properties that version is known to accept survive. Those instances
+ *   predate properties we know about, so forwarding one is a guaranteed rejection of the whole
+ *   request rather than a risk worth taking.
  *
  * @param settings - The workflow settings to clean
- * @param version - The target n8n version (if null, returns settings unchanged)
+ * @param version - The target n8n version, or null when detection failed
  * @returns Cleaned settings object
  */
 export function cleanSettingsForVersion(
@@ -227,20 +212,23 @@ export function cleanSettingsForVersion(
     return {};
   }
 
-  // If version unknown, return settings unchanged (let the API decide)
-  if (!version) {
-    return settings;
-  }
-
-  const supportedProperties = getSupportedSettingsProperties(version);
+  const passThrough = !version || compareVersions(version, SETTINGS_PASS_THROUGH_FLOOR) >= 0;
+  const supportedProperties = passThrough ? null : getSupportedSettingsProperties(version);
+  const target = version ? `n8n ${version.version}` : 'n8n version unknown';
 
   const cleaned: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(settings)) {
-    if (supportedProperties.has(key)) {
-      cleaned[key] = value;
-    } else {
-      logger.debug(`Filtered out unsupported settings property: ${key} (n8n ${version.version})`);
+    if (DERIVED_SETTINGS_PROPERTIES.has(key)) {
+      logger.debug(`Dropped derived settings property n8n ignores on write: ${key}`);
+      continue;
     }
+
+    if (supportedProperties && !supportedProperties.has(key)) {
+      logger.debug(`Filtered out unsupported settings property: ${key} (${target})`);
+      continue;
+    }
+
+    cleaned[key] = value;
   }
 
   return cleaned;
@@ -250,4 +238,5 @@ export function cleanSettingsForVersion(
 export const VERSION_THRESHOLDS = {
   EXECUTION_ORDER: { major: 1, minor: 37, patch: 0 },
   CALLER_POLICY: { major: 1, minor: 119, patch: 0 },
+  SETTINGS_PASS_THROUGH: SETTINGS_PASS_THROUGH_FLOOR,
 };

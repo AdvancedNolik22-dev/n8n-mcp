@@ -11,7 +11,7 @@ import {
   N8nServerError,
 } from '../../../src/utils/n8n-errors';
 import * as n8nValidation from '../../../src/services/n8n-validation';
-import { clearVersionCache } from '../../../src/services/n8n-version';
+import { clearVersionCache, parseVersion } from '../../../src/services/n8n-version';
 import { logger } from '../../../src/utils/logger';
 import * as dns from 'dns/promises';
 
@@ -101,6 +101,25 @@ describe('N8nApiClient', () => {
     vi.mocked(axios.create).mockReturnValue(mockAxiosInstance as any);
     vi.mocked(axios.get).mockResolvedValue({ status: 200, data: { status: 'ok' } });
     
+    // Route a sequence of outcomes through the real response interceptor, so callers see the
+    // N8nApiError the interceptor produces rather than a raw axios error. Needed for fallbacks
+    // that branch on the status of the first failure.
+    mockAxiosInstance.simulateSequence = (method: string, outcomes: any[]) => {
+      let call = 0;
+      mockAxiosInstance[method].mockImplementation(async () => {
+        const outcome = outcomes[Math.min(call++, outcomes.length - 1)];
+        if (!outcome.error) return { data: outcome.data };
+        const axiosError = createAxiosError(outcome.error);
+        try {
+          return Promise.reject(
+            await mockAxiosInstance._responseInterceptor.onRejected(axiosError)
+          );
+        } catch (transformed) {
+          return Promise.reject(transformed);
+        }
+      });
+    };
+
     // Helper function to simulate axios error with interceptor
     mockAxiosInstance.simulateError = async (method: string, errorConfig: any) => {
       const axiosError = createAxiosError(errorConfig);
@@ -538,13 +557,30 @@ describe('N8nApiClient', () => {
       expect(result).toEqual(updatedWorkflow);
     });
 
+    it('should fallback to PATCH when the 405 arrives through the response interceptor', async () => {
+      // The interceptor rewrites every rejection into an N8nApiError, which carries statusCode
+      // and no response. A fallback reading error.response.status never fires in production.
+      const workflow = { name: 'Updated', nodes: [], connections: {} };
+      const updatedWorkflow = { ...workflow, id: '123' };
+
+      await mockAxiosInstance.simulateError('put', {
+        response: { status: 405, data: { message: 'Method Not Allowed' } }
+      });
+      mockAxiosInstance.patch.mockResolvedValue({ data: updatedWorkflow });
+
+      const result = await client.updateWorkflow('123', workflow);
+
+      expect(mockAxiosInstance.patch).toHaveBeenCalledWith('/workflows/123', workflow);
+      expect(result).toEqual(updatedWorkflow);
+    });
+
     it('should handle update error', async () => {
       const workflow = { name: 'Updated', nodes: [], connections: {} };
-      const error = { 
+      const error = {
         message: 'Request failed',
-        response: { status: 400, data: { message: 'Invalid update' } } 
+        response: { status: 400, data: { message: 'Invalid update' } }
       };
-      
+
       await mockAxiosInstance.simulateError('put', error);
       
       try {
@@ -931,9 +967,140 @@ badRequest('request/body/nodeGroups/0 must NOT have additional properties')
 
       const result = await client.activateWorkflow('123');
 
+      // Version undetectable here. The legacy route works on every version, so it is used
+      // directly rather than probing /publish - detection genuinely fails on real instances.
       expect(mockAxiosInstance.post).toHaveBeenCalledWith('/workflows/123/activate', {});
       expect(result).toEqual(activatedWorkflow);
       expect(result.active).toBe(true);
+    });
+
+    it('should use /publish on n8n 2.33.0 and above', async () => {
+      vi.spyOn(client, 'getVersion').mockResolvedValue(parseVersion('2.34.4'));
+      mockAxiosInstance.post.mockResolvedValue({ data: { id: '123', active: true } });
+
+      await client.activateWorkflow('123');
+
+      expect(mockAxiosInstance.post).toHaveBeenCalledTimes(1);
+      expect(mockAxiosInstance.post).toHaveBeenCalledWith('/workflows/123/publish', {});
+    });
+
+    it('should use the deprecated /activate on n8n below 2.33.0', async () => {
+      vi.spyOn(client, 'getVersion').mockResolvedValue(parseVersion('2.32.4'));
+      mockAxiosInstance.post.mockResolvedValue({ data: { id: '123', active: true } });
+
+      await client.activateWorkflow('123');
+
+      expect(mockAxiosInstance.post).toHaveBeenCalledTimes(1);
+      expect(mockAxiosInstance.post).toHaveBeenCalledWith('/workflows/123/activate', {});
+    });
+
+    it('should fall back to /activate when /publish 404s', async () => {
+      vi.spyOn(client, 'getVersion').mockResolvedValue(parseVersion('2.34.4'));
+      const activated = { id: '123', active: true };
+      // Through the interceptor: it rejects with an N8nApiError carrying statusCode, not a
+      // raw axios error with .response - which is what the fallback has to read.
+      mockAxiosInstance.simulateSequence('post', [
+        { error: { response: { status: 404, data: { message: 'Not Found' } } } },
+        { data: activated },
+      ]);
+
+      const result = await client.activateWorkflow('123');
+
+      expect(mockAxiosInstance.post).toHaveBeenNthCalledWith(1, '/workflows/123/publish', {});
+      expect(mockAxiosInstance.post).toHaveBeenNthCalledWith(2, '/workflows/123/activate', {});
+      expect(result).toEqual(activated);
+    });
+
+    it('should use the legacy route when the version cannot be detected', async () => {
+      // Reproduces a live instance whose /rest/settings carries no version at all. Probing
+      // /publish there cost a failed request per call and broke activation outright.
+      vi.spyOn(client, 'getVersion').mockResolvedValue(null);
+      mockAxiosInstance.post.mockResolvedValue({ data: { id: '123', active: true } });
+
+      await client.activateWorkflow('123');
+
+      expect(mockAxiosInstance.post).toHaveBeenCalledTimes(1);
+      expect(mockAxiosInstance.post).toHaveBeenCalledWith('/workflows/123/activate', {});
+    });
+
+    it('should fall back to /activate when /publish answers 405', async () => {
+      // n8n answers "POST method not allowed" rather than 404 when the path prefix matches
+      // but the method does not - observed live on a pre-2.33 instance.
+      vi.spyOn(client, 'getVersion').mockResolvedValue(parseVersion('2.34.4'));
+      const activated = { id: '123', active: true };
+      mockAxiosInstance.simulateSequence('post', [
+        { error: { response: { status: 405, data: { message: 'POST method not allowed' } } } },
+        { data: activated },
+      ]);
+
+      const result = await client.activateWorkflow('123');
+
+      expect(mockAxiosInstance.post).toHaveBeenNthCalledWith(1, '/workflows/123/publish', {});
+      expect(mockAxiosInstance.post).toHaveBeenNthCalledWith(2, '/workflows/123/activate', {});
+      expect(result).toEqual(activated);
+    });
+
+    it('should fall back to /publish when the legacy route is gone', async () => {
+      // The legacy routes are deprecated with no announced sunset. When n8n removes them, an
+      // instance whose version we cannot read must move to /publish rather than lose activation.
+      vi.spyOn(client, 'getVersion').mockResolvedValue(null);
+      const activated = { id: '123', active: true };
+      mockAxiosInstance.simulateSequence('post', [
+        { error: { response: { status: 404, data: { message: 'Not Found' } } } },
+        { data: activated },
+      ]);
+
+      const result = await client.activateWorkflow('123');
+
+      expect(mockAxiosInstance.post).toHaveBeenNthCalledWith(1, '/workflows/123/activate', {});
+      expect(mockAxiosInstance.post).toHaveBeenNthCalledWith(2, '/workflows/123/publish', {});
+      expect(result).toEqual(activated);
+    });
+
+    it('should fall back when the legacy route answers 410 Gone', async () => {
+      // A retired alias may be answered rather than removed from the router
+      vi.spyOn(client, 'getVersion').mockResolvedValue(null);
+      const activated = { id: '123', active: true };
+      mockAxiosInstance.simulateSequence('post', [
+        { error: { response: { status: 410, data: { message: 'Gone' } } } },
+        { data: activated },
+      ]);
+
+      const result = await client.activateWorkflow('123');
+
+      expect(mockAxiosInstance.post).toHaveBeenNthCalledWith(2, '/workflows/123/publish', {});
+      expect(result).toEqual(activated);
+    });
+
+    it('should surface the fallback error when it is substantive, not a missing route', async () => {
+      // A 400 naming the real problem is more useful than the route probe that preceded it
+      vi.spyOn(client, 'getVersion').mockResolvedValue(null);
+      mockAxiosInstance.simulateSequence('post', [
+        { error: { response: { status: 405, data: { message: 'POST method not allowed' } } } },
+        { error: { response: { status: 400, data: { message: 'Workflow has no trigger node' } } } },
+      ]);
+
+      await expect(client.activateWorkflow('123')).rejects.toThrow(/trigger node/);
+    });
+
+    it('should surface the original error when neither route exists', async () => {
+      vi.spyOn(client, 'getVersion').mockResolvedValue(null);
+      await mockAxiosInstance.simulateError('post', {
+        response: { status: 404, data: { message: 'Not Found' } }
+      });
+
+      await expect(client.activateWorkflow('nope')).rejects.toBeInstanceOf(N8nNotFoundError);
+      expect(mockAxiosInstance.post).toHaveBeenCalledTimes(2);
+    });
+
+    it('should surface a non-404 failure without probing the other route', async () => {
+      vi.spyOn(client, 'getVersion').mockResolvedValue(parseVersion('2.34.4'));
+      await mockAxiosInstance.simulateError('post', {
+        response: { status: 400, data: { message: 'Workflow has no trigger node' } }
+      });
+
+      await expect(client.activateWorkflow('123')).rejects.toBeInstanceOf(N8nValidationError);
+      expect(mockAxiosInstance.post).toHaveBeenCalledTimes(1);
     });
 
     it('should handle activation error - no trigger nodes', async () => {
@@ -1017,9 +1184,45 @@ badRequest('request/body/nodeGroups/0 must NOT have additional properties')
 
       const result = await client.deactivateWorkflow('123');
 
+      // Version undetectable here - legacy route, which every version has
       expect(mockAxiosInstance.post).toHaveBeenCalledWith('/workflows/123/deactivate', {});
       expect(result).toEqual(deactivatedWorkflow);
       expect(result.active).toBe(false);
+    });
+
+    it('should use /unpublish on n8n 2.33.0 and above', async () => {
+      vi.spyOn(client, 'getVersion').mockResolvedValue(parseVersion('2.34.4'));
+      mockAxiosInstance.post.mockResolvedValue({ data: { id: '123', active: false } });
+
+      await client.deactivateWorkflow('123');
+
+      expect(mockAxiosInstance.post).toHaveBeenCalledTimes(1);
+      expect(mockAxiosInstance.post).toHaveBeenCalledWith('/workflows/123/unpublish', {});
+    });
+
+    it('should use the deprecated /deactivate on n8n below 2.33.0', async () => {
+      vi.spyOn(client, 'getVersion').mockResolvedValue(parseVersion('2.32.4'));
+      mockAxiosInstance.post.mockResolvedValue({ data: { id: '123', active: false } });
+
+      await client.deactivateWorkflow('123');
+
+      expect(mockAxiosInstance.post).toHaveBeenCalledTimes(1);
+      expect(mockAxiosInstance.post).toHaveBeenCalledWith('/workflows/123/deactivate', {});
+    });
+
+    it('should fall back to /deactivate when /unpublish 404s', async () => {
+      vi.spyOn(client, 'getVersion').mockResolvedValue(parseVersion('2.34.4'));
+      const deactivated = { id: '123', active: false };
+      mockAxiosInstance.simulateSequence('post', [
+        { error: { response: { status: 404, data: { message: 'Not Found' } } } },
+        { data: deactivated },
+      ]);
+
+      const result = await client.deactivateWorkflow('123');
+
+      expect(mockAxiosInstance.post).toHaveBeenNthCalledWith(1, '/workflows/123/unpublish', {});
+      expect(mockAxiosInstance.post).toHaveBeenNthCalledWith(2, '/workflows/123/deactivate', {});
+      expect(result).toEqual(deactivated);
     });
 
     it('should handle deactivation error - workflow not found', async () => {

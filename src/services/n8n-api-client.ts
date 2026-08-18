@@ -45,7 +45,7 @@ import {
   FolderListResponse,
   ProjectSummary,
 } from '../types/n8n-api';
-import { handleN8nApiError, logN8nError, N8nValidationError } from '../utils/n8n-errors';
+import { handleN8nApiError, logN8nError, N8nApiError, N8nValidationError } from '../utils/n8n-errors';
 import { encodeApiPathSegment } from '../utils/validation-schemas';
 import { cleanWorkflowForCreate, cleanWorkflowForUpdate } from './n8n-validation';
 import {
@@ -59,6 +59,7 @@ import {
   fetchN8nVersion,
   cleanSettingsForVersion,
   getCachedVersion,
+  versionAtLeast,
 } from './n8n-version';
 import type { PinnedAgents } from '../utils/ssrf-protection';
 
@@ -79,6 +80,27 @@ const GROUPS_UNSUPPORTED_WARNING =
   'This n8n version does not support canvas groups (added in 2.28); the workflow was saved without them.';
 const GROUP_DESCRIPTIONS_UNSUPPORTED_WARNING =
   'This n8n version does not support canvas group descriptions (added in 2.32); the descriptions were not saved.';
+
+/**
+ * Statuses that mean "this instance does not serve that route". A router without the route may
+ * answer 404 or 405 depending on whether it matches the path prefix before the method, and a
+ * politely retired alias may answer 410 rather than disappearing outright.
+ */
+const ROUTE_ABSENT_STATUSES = new Set([404, 405, 410]);
+
+/**
+ * HTTP status of a failed request from this client.
+ *
+ * The response interceptor converts every rejection to an `N8nApiError`, which carries
+ * `statusCode` and no `response`. Reading `error.response.status` on a rejection from
+ * `this.client` therefore always yields undefined - which silently disables any fallback
+ * keyed on a specific status. The raw-axios branch is kept for callers that bypass the
+ * interceptor, such as tests.
+ */
+function failureStatus(error: unknown): number | undefined {
+  if (error instanceof N8nApiError) return error.statusCode;
+  return (error as any)?.response?.status;
+}
 
 /** The same write payload without `nodeGroups`, for instances whose schema has no such field. */
 function withoutNodeGroups(payload: Record<string, unknown>): Record<string, unknown> {
@@ -528,7 +550,7 @@ export class N8nApiClient {
       const response = await this.client.put(`/workflows/${safeId}`, body);
       return response.data;
     } catch (putError: any) {
-      if (putError.response?.status !== 405) throw putError;
+      if (failureStatus(putError) !== 405) throw putError;
       logger.debug('PUT method not supported, falling back to PATCH');
       const response = await this.client.patch(`/workflows/${safeId}`, body);
       return response.data;
@@ -654,22 +676,84 @@ export class N8nApiClient {
     }
   }
 
-  async activateWorkflow(id: string): Promise<Workflow> {
+  /**
+   * POST the publish-family route a workflow needs, preferring the name the target n8n uses.
+   *
+   * n8n 2.33 renamed `/activate` to `/publish` and `/deactivate` to `/unpublish`, and marked the
+   * old pair deprecated (2026-07-23). The deprecated routes are literal aliases of the new
+   * handlers — same service call, same result — so this is a rename, not a behaviour change.
+   * `/publish` additionally accepts an optional body naming a version to publish; we send none,
+   * which keeps the semantics identical to `/activate`.
+   *
+   * The new route is used only when the instance is *confirmed* to have it. The legacy pair
+   * works on every supported version - on 2.33+ they are the same handler - so an instance
+   * whose version could not be read is served by the legacy route rather than probed. That
+   * matters because detection fails on real instances: `/rest/settings` does not always carry
+   * `n8nVersion`, and probing a pre-2.33 instance then wastes a request on every call.
+   *
+   * The fallback runs in both directions on a 404 or 405. A router with no route may report
+   * either, depending on whether it matches the path prefix before the method; n8n answers 405
+   * here, so keying on 404 alone left the fallback dead in practice. Symmetry matters because
+   * the legacy routes are deprecated (2026-07-23, no sunset announced): when n8n eventually
+   * removes them, an instance we could not version-detect would otherwise lose activation
+   * entirely, rather than moving to the route that replaced it.
+   *
+   * The cost is one extra request on a workflow id that does not exist, since n8n answers 404
+   * for an absent workflow and an absent route alike. Both attempts end in the same error.
+   */
+  private async postPublishRoute(
+    id: string,
+    modernPath: 'publish' | 'unpublish',
+    legacyPath: 'activate' | 'deactivate'
+  ): Promise<Workflow> {
+    const safeId = encodeApiPathSegment(id, 'workflowId');
+    const version = await this.getVersion();
+    const preferModern = version !== null && versionAtLeast(version, 2, 33, 0);
+    const [primaryPath, fallbackPath] = preferModern
+      ? [modernPath, legacyPath]
+      : [legacyPath, modernPath];
+    const post = async (path: string): Promise<Workflow> =>
+      (await this.client.post(`/workflows/${safeId}/${path}`, {})).data;
+    let status: number | undefined;
+
+    let primaryError: unknown;
     try {
-      const response = await this.client.post(`/workflows/${encodeApiPathSegment(id, 'workflowId')}/activate`, {});
-      return response.data;
-    } catch (error) {
-      throw handleN8nApiError(error);
+      return await post(primaryPath);
+    } catch (error: any) {
+      status = failureStatus(error);
+      if (!ROUTE_ABSENT_STATUSES.has(status as number)) {
+        throw handleN8nApiError(error);
+      }
+      primaryError = error;
+    }
+
+    // n8n answers 404 for a workflow that does not exist as well as for a route it does not
+    // have, so this retry also fires on a bad workflow ID. That costs one request and ends in
+    // the same error, which is why the status is logged as a route probe, not a failure.
+    logger.debug(
+      `POST /workflows/{id}/${primaryPath} returned ${status} - retrying /${fallbackPath} ` +
+        '(this n8n does not serve that route, or the workflow does not exist)'
+    );
+    try {
+      return await post(fallbackPath);
+    } catch (fallbackError) {
+      // When the fallback fails the same way, neither route exists and the first attempt is the
+      // more faithful account - a missing workflow should read as a missing workflow rather than
+      // as confusion about the second route. A substantive failure (say a 400 naming a missing
+      // trigger) is the useful one, so that is surfaced instead.
+      const fallbackStatus = failureStatus(fallbackError);
+      throw handleN8nApiError(
+        ROUTE_ABSENT_STATUSES.has(fallbackStatus as number) ? primaryError : fallbackError
+      );
     }
   }
 
+  async activateWorkflow(id: string): Promise<Workflow> {
+    return this.postPublishRoute(id, 'publish', 'activate');
+  }
+
   async deactivateWorkflow(id: string): Promise<Workflow> {
-    try {
-      const response = await this.client.post(`/workflows/${encodeApiPathSegment(id, 'workflowId')}/deactivate`, {});
-      return response.data;
-    } catch (error) {
-      throw handleN8nApiError(error);
-    }
+    return this.postPublishRoute(id, 'unpublish', 'deactivate');
   }
 
   /**
