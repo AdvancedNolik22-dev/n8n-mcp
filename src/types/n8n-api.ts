@@ -223,6 +223,15 @@ export interface ProjectSummary {
   type?: string;
 }
 
+/** Project shape returned by `listProjects()` (GET /projects). */
+export interface Project {
+  id: string;
+  name: string;
+  type?: 'personal' | 'team' | string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 // Variable Types
 export interface Variable {
   id?: string;
@@ -485,6 +494,19 @@ export interface McpToolResponse {
   executionId?: string;
   workflowId?: string;
   operationsApplied?: number;
+  // Official-MCP-backed tools (e.g. n8n_manage_agents) — the action that was
+  // requested, the official tool name it was dispatched to, a human-readable
+  // hint, the raw official error payload on failure, and whether the result
+  // was truncated to the size cap.
+  action?: string;
+  officialTool?: string;
+  hint?: string;
+  officialError?: unknown;
+  truncated?: boolean;
+  // n8n_list_catalog: which catalog was listed ('projects' | 'tags') and
+  // which backend answered ('public-api' | 'official-mcp').
+  kind?: string;
+  backend?: string;
 }
 
 // Execution Filtering Types

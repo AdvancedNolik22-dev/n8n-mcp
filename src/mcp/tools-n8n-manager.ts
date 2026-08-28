@@ -1,4 +1,5 @@
 import { ToolDefinition } from '../types';
+import { AGENT_ACTIONS, DESTRUCTIVE_AGENT_ACTIONS } from './agents-action-map';
 
 /**
  * n8n Management Tools
@@ -849,6 +850,55 @@ Old backups are also pruned automatically (10 most recent per workflow, plus an 
       openWorldHint: true,
     },
   },
+  {
+    name: 'n8n_manage_agents',
+    description: `Manage n8n Agents (persisted assistants with a model, instructions, tools, skills, tasks, memory and channels) through n8n's instance-level MCP server. Requires N8N_MCP_ACCESS_TOKEN (MCP API key from n8n Settings → Instance-level MCP) and n8n >= 2.34 with the agents module. Actions: reference, search, get, create, mutate, validate, call, publish, unpublish, revert, versions, delete, discover_assets, verify_mcp_server, update_integration. Start with action=reference (config shape and mutate operations), then discover_assets → create → mutate (one resource at a time, always with the latest configHash) → validate. publish only when the user explicitly asks. call runs the agent with real credentials and tools and may return approvals[] that need a human decision — never approve on the user's behalf. This is not the AI Agent workflow node; use get_node for that.`,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        action: { type: 'string', enum: AGENT_ACTIONS, description: 'Operation to perform' },
+        args: { type: 'object', description: 'Arguments for the action, forwarded to n8n verbatim. See tools_documentation("n8n_manage_agents", "full") for the per-action fields.' },
+        timeoutMs: { type: 'integer', minimum: 5000, maximum: 600000, description: 'Request timeout in ms. Default 30000; 180000 for action=call. The agent run continues in n8n even if this expires.' },
+      },
+      required: ['action'],
+    },
+    annotations: { title: 'Manage n8n Agents', readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+  },
+  {
+    name: 'n8n_explore_node_resources',
+    description: 'Resolve the real options behind a node\'s dynamic dropdown (loadOptions) or resource-locator search (listSearch) using one of the instance\'s credentials — Slack channels, Google Sheets tabs, model lists — so workflow configs use existing IDs instead of invented ones. Requires N8N_MCP_ACCESS_TOKEN. Find methodName/methodType in get_node output (dynamicOptions on a property) and the credentialId with n8n_manage_credentials list.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        nodeType: { type: 'string', description: 'Full node type, e.g. n8n-nodes-base.slack' },
+        version: { type: 'number', description: 'Node typeVersion' },
+        methodName: { type: 'string', description: 'loadOptionsMethod or searchListMethod name from the property definition' },
+        methodType: { type: 'string', enum: ['listSearch', 'loadOptions'] },
+        credentialType: { type: 'string', description: 'Credential type the node uses, e.g. slackApi' },
+        credentialId: { type: 'string', description: 'ID of an existing credential of that type' },
+        filter: { type: 'string', description: 'Search text (listSearch only)' },
+        paginationToken: { type: 'string', description: 'Token from a previous page (listSearch only)' },
+        currentNodeParameters: { type: 'object', description: 'Parameters the method depends on (loadOptionsDependsOn), e.g. {documentId: {...}}' },
+        timeoutMs: { type: 'integer', minimum: 5000, maximum: 600000, description: 'Request timeout in ms (default 30000)' },
+      },
+      required: ['nodeType', 'version', 'methodName', 'methodType', 'credentialType', 'credentialId'],
+    },
+    annotations: { title: 'Explore Node Resources', readOnlyHint: true, destructiveHint: false, openWorldHint: true },
+  },
+  {
+    name: 'n8n_list_catalog',
+    description: 'List instance-level catalog entries: projects (with the personal project marked, needed as projectId for agents and data tables) or tags. Reads the Public API first; when team projects are not licensed there, falls back to n8n\'s MCP server if N8N_MCP_ACCESS_TOKEN is set.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        kind: { type: 'string', enum: ['projects', 'tags'] },
+        query: { type: 'string', description: 'Case-insensitive name filter' },
+        limit: { type: 'integer', minimum: 1, maximum: 500 },
+      },
+      required: ['kind'],
+    },
+    annotations: { title: 'List Catalog', readOnlyHint: true, destructiveHint: false, openWorldHint: true },
+  },
 ];
 
 /**
@@ -861,6 +911,8 @@ export const TOOL_OPERATION_PARAM: Record<string, string> = {
   'n8n_evaluations': 'action',
   'n8n_manage_folders': 'action',
   'n8n_workflow_versions': 'mode',
+  'n8n_manage_agents': 'action',
+  'n8n_list_catalog': 'kind',
 };
 
 /**
@@ -877,4 +929,7 @@ export const DESTRUCTIVE_TOOL_OPERATIONS: Record<string, Set<string>> = {
   // transferToFolderId it archives the folder's workflows.
   'n8n_manage_folders': new Set(['create', 'rename', 'move', 'delete']),
   'n8n_workflow_versions': new Set(['delete', 'rollback', 'prune']),
+  // Derived from AGENT_ACTION_MAP: create/mutate persist a draft and call runs
+  // the agent's real tools, so the write set is wider than the publish/delete pair.
+  'n8n_manage_agents': new Set(DESTRUCTIVE_AGENT_ACTIONS),
 };
