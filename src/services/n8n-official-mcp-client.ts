@@ -1,9 +1,34 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport, StreamableHTTPError } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
+import type { jsonSchemaValidator, JsonSchemaValidatorResult } from '@modelcontextprotocol/sdk/validation/index.js';
 import { SSRFProtection, PinnedFetch } from '../utils/ssrf-protection';
 import { PROJECT_VERSION } from '../utils/version';
 import { logger } from '../utils/logger';
+
+/**
+ * The SDK client validates a tool result's `structuredContent` against the
+ * `outputSchema` the server advertised for that tool, and turns a mismatch
+ * into `McpError(InvalidParams)`. n8n declares output schemas that describe
+ * only the success shape, then answers refusals and errors with a different
+ * payload — `prepare_workflow_pin_data` on a workflow that is not exposed to
+ * MCP returns `isError: true` with `{ error: 'Workflow is not available in
+ * MCP. …' }` — so enforcing the schema here converts a server refusal our
+ * callers need to read into an opaque transport error.
+ *
+ * Results are untrusted data that we forward and size-cap regardless of what
+ * the schema claims, so client-side enforcement buys nothing. This validator
+ * accepts everything, which disables that comparison.
+ *
+ * It does NOT disable every client-side output check: the SDK still throws
+ * `McpError(InvalidRequest, -32600)` when a tool that declares an outputSchema
+ * answers `isError: false` with no `structuredContent` at all
+ * (`client/index.js:487-489` — the guard is gated on a validator existing, and
+ * this one does exist). `mapOfficialTransportError` names that case.
+ */
+const PERMISSIVE_JSON_SCHEMA_VALIDATOR: jsonSchemaValidator = {
+  getValidator: <T>() => (input: unknown): JsonSchemaValidatorResult<T> => ({ valid: true, data: input as T, errorMessage: undefined }),
+};
 
 export type OfficialMcpErrorCode =
   | 'NOT_CONFIGURED' | 'OFFICIAL_MCP_AUTH_FAILED' | 'OFFICIAL_MCP_NOT_ENABLED'
@@ -49,6 +74,12 @@ export const AGENT_TOOL_NAMES = [
 ] as const;
 
 export interface OfficialMcpCapabilities { reachable: boolean; toolCount: number; toolNames: string[]; agentTools: boolean; checkedAt: number; error?: OfficialMcpErrorCode }
+/**
+ * `sizeBytes` is the size of the payload as received from n8n (the larger of
+ * the text and the structured content), measured before any capping, so a
+ * caller can see how much was cut. `truncated` says whether `text` / `json`
+ * are smaller than that.
+ */
 export interface OfficialToolResult { isError: boolean; text: string; json?: unknown; sizeBytes: number; truncated: boolean }
 export interface AgentBuilderReference { ok?: boolean; uri?: string; guide?: string; configSchema?: unknown; [key: string]: unknown }
 
@@ -89,12 +120,18 @@ export function mapOfficialTransportError(err: unknown): OfficialMcpError {
     if (err.code === ErrorCode.RequestTimeout) {
       return new OfficialMcpError('OFFICIAL_MCP_TIMEOUT', 'Request to n8n MCP server timed out');
     }
-    // InvalidParams reaches here from two places, both worth naming: the SDK
-    // validating a tool's `structuredContent` against the output schema the
-    // server advertised for it (n8n's schema and payload drifting apart), and
-    // n8n itself rejecting the request's arguments.
+    // InvalidParams now only reaches here from n8n itself rejecting the
+    // request's arguments (JSON-RPC -32602): the client opts out of the SDK's
+    // client-side output-schema comparison (see PERMISSIVE_JSON_SCHEMA_VALIDATOR).
     if (err.code === ErrorCode.InvalidParams) {
-      return new OfficialMcpError('OFFICIAL_MCP_TRANSPORT_ERROR', "Result did not match the tool's output schema or the request was rejected (JSON-RPC -32602)");
+      return new OfficialMcpError('OFFICIAL_MCP_TRANSPORT_ERROR', 'n8n MCP server rejected the request arguments (JSON-RPC -32602)');
+    }
+    // The opt-out does not cover this one: the SDK raises InvalidRequest itself
+    // when a tool that declares an outputSchema answers a non-error result with
+    // no structuredContent at all. n8n answering -32600 on the wire lands here
+    // too, which the fixed message stays true for.
+    if (err.code === ErrorCode.InvalidRequest) {
+      return new OfficialMcpError('OFFICIAL_MCP_TRANSPORT_ERROR', 'n8n returned a result without structured content for a tool that declares an output schema (JSON-RPC -32600)');
     }
     const code = typeof err.code === 'number' ? err.code : 'unknown';
     return new OfficialMcpError('OFFICIAL_MCP_TRANSPORT_ERROR', `n8n MCP server returned a protocol error (JSON-RPC code ${code})`);
@@ -120,6 +157,33 @@ function structuredSize(value: unknown): number {
   }
 }
 
+/**
+ * A bounded stand-in for an oversized structured payload that reports a
+ * failure at its root.
+ *
+ * Callers read the failure flags (`success: false` / `ok: false`) off the
+ * structured content, so dropping an oversized payload wholesale would turn a
+ * failure into a success. Keeping the flag, a capped message and the code
+ * preserves that mapping at a fixed size. Returns `undefined` for anything
+ * that is not a root-level failure — those are dropped as before.
+ */
+function boundedFailureProjection(value: unknown): Record<string, unknown> | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const root = value as Record<string, unknown>;
+  const flag = root.success === false ? 'success' : root.ok === false ? 'ok' : undefined;
+  if (!flag) return undefined;
+
+  const message =
+    typeof root.error === 'string' ? root.error
+    : typeof root.message === 'string' ? root.message
+    : 'n8n returned an error payload too large to include';
+  return {
+    [flag]: false,
+    error: message.slice(0, 2000),
+    ...(typeof root.code === 'string' ? { code: root.code } : {}),
+  };
+}
+
 function parseResult(raw: { content?: Array<{ type: string; text?: string }>; isError?: boolean; structuredContent?: unknown }): OfficialToolResult {
   let text = (raw.content ?? []).filter(c => c.type === 'text' && typeof c.text === 'string').map(c => c.text as string).join('\n');
   const textBytes = Buffer.byteLength(text, 'utf8');
@@ -133,7 +197,9 @@ function parseResult(raw: { content?: Array<{ type: string; text?: string }>; is
   if (json !== undefined) {
     structuredBytes = structuredSize(json);
     if (structuredBytes > OFFICIAL_RESULT_MAX_BYTES) {
-      json = undefined;
+      // A root-level failure keeps a bounded projection of itself; anything
+      // else is dropped. An oversized failure must never read as a success.
+      json = boundedFailureProjection(json);
       truncated = true;
     }
   }
@@ -206,7 +272,7 @@ export class N8nOfficialMcpClient {
         requestInit: { headers: { Authorization: `Bearer ${this.token}` } },
         fetch: pinned.fetch,
       });
-      const client = new Client({ name: 'n8n-mcp', version: PROJECT_VERSION }, { capabilities: {} });
+      const client = new Client({ name: 'n8n-mcp', version: PROJECT_VERSION }, { capabilities: {}, jsonSchemaValidator: PERMISSIVE_JSON_SCHEMA_VALIDATOR });
       try {
         await client.connect(transport, { timeout: DEFAULT_TIMEOUT_MS });
       } catch (err) {
@@ -268,10 +334,12 @@ export class N8nOfficialMcpClient {
    * Forwards one tool call. `idempotent` must be true for the connection-level
    * retry below to fire — see the comment at the retry gate.
    *
-   * The SDK validates a tool's `structuredContent` against the `outputSchema`
-   * the server advertised for it, so a drift between n8n's declared schema and
-   * what it actually returns rejects here as `McpError(InvalidParams)`;
-   * `mapOfficialTransportError` turns that into a readable transport error.
+   * Results are returned as n8n sent them — including `isError` refusals whose
+   * payload does not match the tool's advertised `outputSchema` (see
+   * PERMISSIVE_JSON_SCHEMA_VALIDATOR); callers decide what a refusal means. The
+   * one client-side shape check the SDK still applies is the -32600 case below:
+   * a non-error result with no `structuredContent` on a tool that declares an
+   * output schema.
    */
   async callTool(name: string, args: Record<string, unknown>, opts: { timeoutMs?: number; idempotent?: boolean } = {}): Promise<OfficialToolResult> {
     const timeout = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;

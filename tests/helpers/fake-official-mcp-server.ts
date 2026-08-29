@@ -8,9 +8,23 @@ import { z } from 'zod';
  * `structured` makes the tool answer with `structuredContent` as well as text.
  * It requires an `outputSchema` on the registration (the SDK only emits
  * structuredContent for tools that declare one), so the tool is registered
- * with a passthrough object schema when it is set.
+ * with a passthrough object schema when `outputSchema` is not given.
+ *
+ * `outputSchema` declares a real shape instead, as a zod raw shape (what
+ * `McpServer.registerTool` accepts; the SDK converts it to the JSON Schema the
+ * client sees in `listTools`). Use it to reproduce n8n's tools, which advertise
+ * a success-only schema and then answer refusals with a different payload —
+ * note the server skips its own output validation for `isError` results, so
+ * such a mismatch does reach the wire.
  */
-export interface FakeTool { name: string; handler?: (args: Record<string, unknown>) => unknown | Promise<unknown>; isError?: boolean; structured?: Record<string, unknown> }
+export interface FakeTool {
+  name: string;
+  handler?: (args: Record<string, unknown>) => unknown | Promise<unknown>;
+  /** A function is evaluated per call, so one tool can refuse once and then succeed. */
+  isError?: boolean | ((args: Record<string, unknown>) => boolean);
+  structured?: (args: Record<string, unknown>) => unknown;
+  outputSchema?: Record<string, z.ZodTypeAny>;
+}
 /**
  * A JSON-RPC error to answer one method with, instead of dispatching it to the
  * McpServer. Needed because `McpServer` converts every failure inside a tool
@@ -27,6 +41,8 @@ export interface FakeOfficialMcpOptions {
 export interface FakeOfficialMcp {
   url: string;
   requests: Array<{ method: string; authorization?: string }>;
+  /** Names of the tools invoked so far, in order — one entry per tools/call POST that reached a registered tool. */
+  toolCalls: string[];
   setRaw(raw: FakeOfficialMcpOptions['raw'] | undefined): void;
   setJsonRpcError(err: FakeJsonRpcError | undefined): void;
   close(): Promise<void>;
@@ -53,6 +69,7 @@ export async function startFakeOfficialMcp(opts: FakeOfficialMcpOptions = {}): P
   let raw = opts.raw;
   let jsonRpcError = opts.jsonRpcError;
   const requests: FakeOfficialMcp['requests'] = [];
+  const toolCalls: string[] = [];
 
   // A fresh McpServer per request (see below) needs the same tools registered
   // each time; factored out so registration logic lives in one place.
@@ -65,14 +82,16 @@ export async function startFakeOfficialMcp(opts: FakeOfficialMcpOptions = {}): P
       // keeps normalizeObjectSchema's "already an object schema" path and lets arbitrary
       // arguments flow through untouched — good enough for a test fake with no real schema.
       const config: any = { description: `fake ${tool.name}`, inputSchema: z.object({}).passthrough() as any };
-      if (tool.structured) config.outputSchema = z.object({}).passthrough() as any;
+      if (tool.outputSchema) config.outputSchema = tool.outputSchema as any;
+      else if (tool.structured) config.outputSchema = z.object({}).passthrough() as any;
       mcp.registerTool<any, any>(tool.name, config, async (args: any) => {
         const typedArgs = args as Record<string, unknown>;
+        toolCalls.push(tool.name);
         const value = tool.handler ? await tool.handler(typedArgs) : { ok: true, tool: tool.name, args: typedArgs };
         return {
           content: [{ type: 'text' as const, text: typeof value === 'string' ? value : JSON.stringify(value) }],
-          ...(tool.structured ? { structuredContent: tool.structured } : {}),
-          isError: tool.isError === true,
+          ...(tool.structured ? { structuredContent: tool.structured(typedArgs) as Record<string, unknown> } : {}),
+          isError: typeof tool.isError === 'function' ? tool.isError(typedArgs) === true : tool.isError === true,
         };
       });
     }
@@ -142,6 +161,7 @@ export async function startFakeOfficialMcp(opts: FakeOfficialMcpOptions = {}): P
   return {
     url: `http://127.0.0.1:${port}/mcp-server/http`,
     requests,
+    toolCalls,
     setRaw: r => { raw = r; },
     setJsonRpcError: e => { jsonRpcError = e; },
     close: async () => {
