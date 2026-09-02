@@ -15,7 +15,7 @@ The data is pseudonymous at the point of collection: it carries an installation 
 The data controller is:
 
 AiAdvisors Romuald Członkowski, a sole proprietorship (jednoosobowa działalność gospodarcza) registered in Poland
-Contact: romuald@n8n-mcp.com
+Contact: legal@n8n-mcp.com
 Postal address available on request.
 
 ## What We Collect
