@@ -187,7 +187,7 @@ We may update this policy. Changes are published in this file, with the version 
 
 ## Contact
 
-Privacy requests and questions: romuald@n8n-mcp.com
+Privacy requests and questions: legal@n8n-mcp.com
 
 General questions about telemetry can also be raised on GitHub:
 https://github.com/czlonkowski/n8n-mcp/issues
