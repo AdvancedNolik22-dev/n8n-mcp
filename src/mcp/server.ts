@@ -10,6 +10,7 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { ToolDefinition } from '../types';
+import type { McpToolResponse } from '../types/n8n-api';
 import { existsSync, readFileSync, promises as fs } from 'fs';
 import path from 'path';
 import { n8nDocumentationToolsFinal } from './tools';
@@ -20,11 +21,13 @@ import {
   getDisabledTools as getDisabledToolsPolicy,
   getDisabledToolOperations as getDisabledToolOperationsPolicy,
   getValidOperations,
+  isOperationDisabled,
   resolveRequestedOperation,
 } from './tool-policy';
 import { makeToolsN8nFriendly } from './tools-n8n-friendly';
 import { getWorkflowExampleString } from './workflow-examples';
 import { logger } from '../utils/logger';
+import { hasText, resolveGetNodeAliases, suggestExecutionsAction, withWorkflowIdAlias } from './param-aliases';
 import { installStdioGuard } from '../utils/stdio-guard';
 import { summarizeToolCallArgs } from '../utils/redaction';
 import { NodeRepository } from '../database/node-repository';
@@ -673,8 +676,13 @@ export class N8NDocumentationMCPServer {
       const remaining = [...getValidOperations(toolName)].filter(v => !ops.has(v));
 
       const param = cloned.inputSchema?.properties?.[paramName];
+      let defaultRemoved = false;
       if (param?.enum) {
         param.enum = (param.enum as string[]).filter(v => !ops.has(v.toLowerCase()));
+        if (typeof param.default === 'string' && ops.has(param.default.toLowerCase())) {
+          delete param.default;
+          defaultRemoved = true;
+        }
         if (param.enum.length === 0) {
           logger.warn(
             `DISABLED_TOOL_OPERATIONS: all operations for '${toolName}' are disabled ` +
@@ -684,12 +692,14 @@ export class N8NDocumentationMCPServer {
         }
         if (param.description) {
           const disabledList = [...ops].join(', ');
-          param.description = `${param.description} (disabled by server policy: ${disabledList})`;
+          param.description = `${param.description} (disabled by server policy: ${disabledList}`
+            + `${defaultRemoved ? '; no default, pass a value' : ''})`;
         }
       }
 
       const disabledList = [...ops].join(', ');
-      cloned.description = `${cloned.description}\n\n> Operations disabled by server policy: ${disabledList}`;
+      cloned.description = `${cloned.description}\n\n> Operations disabled by server policy: ${disabledList}`
+        + (defaultRemoved ? `. The default for ${paramName} was one of them, so ${paramName} must be passed explicitly.` : '');
 
       // If filtering removed every destructive operation, the tool is now
       // read-only — recompute its MCP annotations so hosts that honor them
@@ -1291,10 +1301,19 @@ export class N8NDocumentationMCPServer {
         validationResult = ToolValidation.validateWorkflowId(args);
         break;
       case 'n8n_executions':
-        // Requires action parameter, id validation done in handler based on action
-        validationResult = args.action
+        // action defaults to list; id validation is done in dispatch based on action
+        validationResult = { valid: true, errors: [] };
+        break;
+      case 'n8n_test_workflow':
+        validationResult = hasText(args.workflowId)
           ? { valid: true, errors: [] }
-          : { valid: false, errors: [{ field: 'action', message: 'action is required' }] };
+          : {
+              valid: false,
+              errors: [{
+                field: 'workflowId',
+                message: 'workflowId is required: the ID of the workflow to run ("id" is accepted as an alias)'
+              }]
+            };
         break;
       case 'n8n_evaluations': {
         // Every action of this tool requires action and workflowId;
@@ -1576,6 +1595,26 @@ export class N8NDocumentationMCPServer {
     return coerced;
   }
 
+  /**
+   * `n8n_executions` with action=get but no execution id is the most frequent
+   * agent call error in telemetry, and the caller wants the listing. Serve it
+   * and say so, rather than failing the call.
+   */
+  private async listExecutionsInsteadOfGet(args: any): Promise<McpToolResponse> {
+    // The policy gate checked this call as `get`; the fallback must not open a
+    // listing that a DISABLED_TOOL_OPERATIONS rule has closed.
+    if (isOperationDisabled('n8n_executions', 'list')) {
+      throw new Error('id is required for action=get');
+    }
+    const result = await n8nHandlers.handleListExecutions(args, this.instanceContext);
+    if (!result.success) return result;
+    const scope = hasText(args.workflowId) ? `executions of workflow ${args.workflowId}` : 'recent executions';
+    return {
+      ...result,
+      message: `action=get was called without an execution id, so ${scope} were listed instead. Pass id to get one execution.`
+    };
+  }
+
   async executeTool(name: string, args: any): Promise<any> {
     // Ensure args is an object and validate it
     args = args || {};
@@ -1628,13 +1667,15 @@ export class N8NDocumentationMCPServer {
           includeOperations: args.includeOperations,
           source: args.source
         });
-      case 'get_node':
+      case 'get_node': {
         this.validateToolParams(name, args, ['nodeType']);
+        // Retired get_node_essentials / get_node_info vocabulary maps onto mode + detail
+        const { mode: nodeMode, detail: nodeDetail } = resolveGetNodeAliases(args.mode, args.detail);
         // Handle consolidated modes: docs, search_properties
-        if (args.mode === 'docs') {
+        if (nodeMode === 'docs') {
           return this.getNodeDocumentation(args.nodeType);
         }
-        if (args.mode === 'search_properties') {
+        if (nodeMode === 'search_properties') {
           if (!args.propertyQuery) {
             throw new Error('propertyQuery is required for mode=search_properties');
           }
@@ -1643,13 +1684,14 @@ export class N8NDocumentationMCPServer {
         }
         return this.getNode(
           args.nodeType,
-          args.detail,
-          args.mode,
+          nodeDetail,
+          nodeMode,
           args.includeTypeInfo,
           args.includeExamples,
           args.fromVersion,
           args.toVersion
         );
+      }
       case 'validate_node':
         this.validateToolParams(name, args, ['nodeType', 'config']);
         // Ensure config is an object
@@ -1792,27 +1834,35 @@ export class N8NDocumentationMCPServer {
         await this.ensureInitialized();
         if (!this.repository) throw new Error('Repository not initialized');
         return n8nHandlers.handleAutofixWorkflow(args, this.repository, this.instanceContext);
-      case 'n8n_test_workflow':
-        this.validateToolParams(name, args, ['workflowId']);
-        return n8nHandlers.handleTestWorkflow(args, this.instanceContext);
+      case 'n8n_test_workflow': {
+        const testArgs = withWorkflowIdAlias(args);
+        this.validateToolParams(name, testArgs);
+        return n8nHandlers.handleTestWorkflow(testArgs, this.instanceContext);
+      }
       case 'n8n_executions': {
-        this.validateToolParams(name, args, ['action']);
-        const execAction = args.action;
+        this.validateToolParams(name, args);
+        // Agents that only want a listing often omit action or send get without an id.
+        // The same normalisation the policy gate uses, so a disabled-operation rule
+        // and the dispatch always see the same value.
+        const execAction = String(resolveRequestedOperation(name, args));
         switch (execAction) {
           case 'get':
-            if (!args.id) {
-              throw new Error('id is required for action=get');
+            if (!hasText(args.id)) {
+              return this.listExecutionsInsteadOfGet(args);
             }
             return n8nHandlers.handleGetExecution(args, this.instanceContext);
           case 'list':
             return n8nHandlers.handleListExecutions(args, this.instanceContext);
           case 'delete':
-            if (!args.id) {
+            if (!hasText(args.id)) {
               throw new Error('id is required for action=delete');
             }
             return n8nHandlers.handleDeleteExecution(args, this.instanceContext);
-          default:
-            throw new Error(`Unknown action: ${execAction}. Valid actions: get, list, delete`);
+          default: {
+            const message = `Unknown action: ${execAction}. Valid actions: get, list, delete.`;
+            const hint = suggestExecutionsAction(execAction);
+            throw new Error(hint ? `${message} ${hint}` : message);
+          }
         }
       }
       case 'n8n_evaluations': {
@@ -1849,8 +1899,8 @@ export class N8NDocumentationMCPServer {
         }
         return n8nHandlers.handleHealthCheck(this.instanceContext);
       case 'n8n_workflow_versions':
-        this.validateToolParams(name, args, ['mode']);
-        return n8nHandlers.handleWorkflowVersions(args, this.repository!, this.instanceContext);
+        // mode defaults to list in the handler schema; workflowId is filled from id
+        return n8nHandlers.handleWorkflowVersions(withWorkflowIdAlias(args), this.repository!, this.instanceContext);
 
       case 'n8n_deploy_template':
         this.validateToolParams(name, args, ['templateId']);
@@ -3302,7 +3352,9 @@ Full documentation is being prepared. For now, use get_node_essentials for confi
     }
 
     if (!validModes.includes(mode)) {
-      throw new Error(`get_node: Invalid mode "${mode}". Valid options: ${validModes.join(', ')}`);
+      // docs and search_properties are dispatched before this method; list them so the
+      // error names every mode the tool accepts.
+      throw new Error(`get_node: Invalid mode "${mode}". Valid options: info, docs, search_properties, ${validModes.slice(1).join(', ')}`);
     }
 
     const normalizedType = NodeTypeNormalizer.normalizeToFullForm(nodeType);
