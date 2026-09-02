@@ -130,7 +130,7 @@ With that ID you can ask us to:
 - Delete all event data associated with the ID
 - Tell you what event data we hold for the ID
 
-Send requests to romuald@n8n-mcp.com quoting the ID. Deletion covers raw events, raw workflow change records, the processing queue, and the registry entry. It cannot reach the anonymized dataset or aggregated statistics, because they do not carry the ID and we have no way to identify which rows came from you.
+Send requests to legal@n8n-mcp.com quoting the ID. Deletion covers raw events, raw workflow change records, the processing queue, and the registry entry. It cannot reach the anonymized dataset or aggregated statistics, because they do not carry the ID and we have no way to identify which rows came from you.
 
 If you are in the European Union you also have the right to lodge a complaint with your national data protection authority.
 
