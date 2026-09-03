@@ -732,6 +732,57 @@ describe('N8nApiClient', () => {
       expect(last.nodeGroups).toEqual([{ id: 'g1', name: 'G', nodeIds: ['a'] }]);
     });
 
+    it('drops exactly the keys n8n names when the rejection names them (n8n 2.37 create wording)', async () => {
+      mockAxiosInstance.post
+        .mockRejectedValueOnce(badRequest("request/body/settings Unrecognized key(s) in object: 'mysteryKey', 'timeSavedMode'"))
+        .mockResolvedValue({ data: { id: '123' } });
+      const warnings: string[] = [];
+      const settings = { executionOrder: 'v1', redactionPolicy: 'strict', timeSavedMode: 'fixed', mysteryKey: 1 };
+
+      await client.createWorkflow(workflowWith(settings), { onWarning: w => warnings.push(w) });
+      mockAxiosInstance.post.mockResolvedValue({ data: { id: '124' } });
+      await client.createWorkflow(workflowWith(settings));
+
+      // One retry without both named keys, redactionPolicy untouched; both remembered as certain.
+      expect(mockAxiosInstance.post).toHaveBeenCalledTimes(3);
+      expect(mockAxiosInstance.post.mock.calls[1][1].settings).toEqual({ executionOrder: 'v1', redactionPolicy: 'strict' });
+      expect(mockAxiosInstance.post.mock.calls[2][1].settings).toEqual({ executionOrder: 'v1', redactionPolicy: 'strict' });
+      expect(warnings.join(' ')).toContain('mysteryKey, timeSavedMode');
+    });
+
+    it('remembers only what n8n named or the single guess the success followed', async () => {
+      // The AJV ladder first guesses mysteryKey (the only unknown key) and is still rejected;
+      // n8n then names redactionPolicy, and the write succeeds without it.
+      mockAxiosInstance.put
+        .mockRejectedValueOnce(badRequest('request/body/settings must NOT have additional properties'))
+        .mockRejectedValueOnce(badRequest("request/body/settings Unrecognized key(s) in object: 'redactionPolicy'"))
+        .mockResolvedValue({ data: { id: '123' } });
+      const settings = { executionOrder: 'v1', timeSavedMode: 'fixed', mysteryKey: 1, redactionPolicy: 'strict' };
+
+      await client.updateWorkflow('123', workflowWith(settings));
+      await client.updateWorkflow('123', workflowWith(settings));
+
+      // Only redactionPolicy is remembered: n8n named it. mysteryKey was a guess the success did
+      // not follow, so it is sent again rather than stripped on suspicion.
+      expect(mockAxiosInstance.put).toHaveBeenCalledTimes(4);
+      const secondWriteBody = mockAxiosInstance.put.mock.calls[3][1];
+      expect(secondWriteBody.settings).toEqual({ executionOrder: 'v1', timeSavedMode: 'fixed', mysteryKey: 1 });
+    });
+
+    it('ignores a named key that is not in the payload and falls back to the ladder', async () => {
+      mockAxiosInstance.post
+        .mockRejectedValueOnce(badRequest("request/body/settings Unrecognized key(s) in object: 'notSent'"))
+        .mockResolvedValue({ data: { id: '123' } });
+      const warnings: string[] = [];
+
+      await client.createWorkflow(workflowWith({ executionOrder: 'v1', mysteryKey: 1 }), { onWarning: w => warnings.push(w) });
+
+      expect(mockAxiosInstance.post).toHaveBeenCalledTimes(2);
+      expect(mockAxiosInstance.post.mock.calls[1][1].settings).toEqual({ executionOrder: 'v1' });
+      expect(warnings.join(' ')).toContain('mysteryKey');
+      expect(warnings.join(' ')).not.toContain('notSent');
+    });
+
     it('applies to create as well as update', async () => {
       mockAxiosInstance.post
         .mockRejectedValueOnce(settingsRejected())

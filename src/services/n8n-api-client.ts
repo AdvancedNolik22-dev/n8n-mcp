@@ -46,7 +46,7 @@ import {
   ProjectSummary,
   Project,
 } from '../types/n8n-api';
-import { enrichUnknownPropertyError, handleN8nApiError, isUnknownSettingsPropertyError, logN8nError, N8nApiError, N8nValidationError } from '../utils/n8n-errors';
+import { enrichUnknownPropertyError, handleN8nApiError, isUnknownSettingsPropertyError, logN8nError, N8nApiError, N8nValidationError, unknownSettingsKeysNamedBy } from '../utils/n8n-errors';
 import { encodeApiPathSegment } from '../utils/validation-schemas';
 import { cleanWorkflowForCreate, cleanWorkflowForUpdate } from './n8n-validation';
 import {
@@ -629,12 +629,13 @@ export class N8nApiClient {
    * trails n8n, and a property dropped up front is dropped silently. The cost of forwarding is
    * a 400 whose AJV message names the path but not the key, so this ladder finds the key the
    * only way it can, by retrying without candidates in the order settingsRejectionLadder gives.
-   * Every drop is reported through onWarning. A key dropped on its own is remembered for this
-   * client's lifetime, so a session that has learnt the instance's schema stops paying the probe;
-   * the first step drops every unknown key together, and remembering all of them would keep
-   * stripping a key the instance accepts, so that step is probed again on the next write. The
-   * ladder adds at most steps.length writes, each of which may run the group ladder in full; a
-   * write that still fails after it surfaces the last rejection.
+   * n8n answers in one of two wordings. The zod one (create on n8n 2.37+) names the keys, so
+   * they are dropped in a single retry and remembered. The AJV one does not, so the ladder
+   * guesses one step at a time; only a step that dropped a single key is remembered, since the
+   * first step drops every unknown key together and remembering all of them would keep stripping
+   * a key the instance accepts. Every drop is reported through onWarning. The loop adds at most
+   * steps.length plus one write per settings key, each of which may run the group ladder in
+   * full; a write that still fails after that surfaces the last rejection.
    */
   private async sendWorkflowWriteWithSettingsFallback(
     payload: Record<string, unknown>,
@@ -650,21 +651,44 @@ export class N8nApiClient {
 
     const steps = settingsRejectionLadder(body.settings);
     const dropped: string[] = [];
-    for (let step = 0; ; step++) {
+    // Keys n8n itself named are proven. A ladder guess is proven only if the write succeeded
+    // right after it and it dropped a single key; earlier guesses may have been innocent.
+    const namedByN8n: string[] = [];
+    let lastGuess: string[] = [];
+    // Bound: a retry either consumes a ladder step or removes a named key, so both counts cap it.
+    const settingsKeys = () => Object.keys((body.settings as object | undefined) ?? {});
+    const maxSettingsRetries = steps.length + settingsKeys().length;
+    for (let step = 0, retries = 0; ; ) {
       try {
         const result = await this.sendWorkflowWriteWithGroupFallback(body, send, options);
         if (dropped.length > 0) {
-          for (const single of steps.slice(0, step).filter(keys => keys.length === 1)) {
-            this.rejectedSettings.add(single[0]);
-          }
+          const certain = lastGuess.length === 1 ? [...namedByN8n, ...lastGuess] : namedByN8n;
+          for (const key of certain) this.rejectedSettings.add(key);
           options.onWarning?.(settingsRejectedWarning(dropped));
         }
         return result;
       } catch (error) {
         const apiError = handleN8nApiError(error);
-        if (!isUnknownSettingsPropertyError(apiError) || step >= steps.length) throw apiError;
-        body = withoutSettings(body, steps[step]);
-        dropped.push(...steps[step]);
+        if (!isUnknownSettingsPropertyError(apiError) || retries++ >= maxSettingsRetries) throw apiError;
+        // A wording that names the keys settles the matter in one retry; the AJV wording does
+        // not, so the ladder guesses one step at a time. Only keys still in the payload count:
+        // a name n8n reports that is not there, or a ladder step already emptied by a named
+        // retry, would be a retry without progress.
+        const present = new Set(settingsKeys());
+        const named = unknownSettingsKeysNamedBy(apiError).filter(key => present.has(key));
+        let drop = named;
+        while (drop.length === 0 && step < steps.length) {
+          drop = steps[step++].filter(key => present.has(key));
+        }
+        if (drop.length === 0) throw apiError;
+        if (named.length > 0) {
+          namedByN8n.push(...named);
+          lastGuess = [];
+        } else {
+          lastGuess = drop;
+        }
+        body = withoutSettings(body, drop);
+        dropped.push(...drop);
       }
     }
   }
