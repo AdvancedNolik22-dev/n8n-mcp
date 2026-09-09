@@ -41,4 +41,4 @@
 ## Getting Help
 
 1. Check the [Docker Troubleshooting Guide](./DOCKER_TROUBLESHOOTING.md)
-2. Open an issue on [GitHub](https://github.com/czlonkowski/n8n-mcp/issues)
+2. Open an issue on [GitHub](https://github.com/AdvancedNolik22-dev/n8n-mcp/issues)

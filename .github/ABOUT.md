@@ -38,7 +38,7 @@ Perfect for:
 
 ```bash
 # Quick start with Docker
-docker run -it ghcr.io/czlonkowski/n8n-mcp:latest
+docker run -it ghcr.io/AdvancedNolik22-dev/n8n-mcp:latest
 ```
 
 See the [README](../README.md) for full setup instructions.

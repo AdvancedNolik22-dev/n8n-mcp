@@ -1,21 +1,21 @@
 # n8n-MCP
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![GitHub stars](https://img.shields.io/github/stars/czlonkowski/n8n-mcp?style=social)](https://github.com/czlonkowski/n8n-mcp)
+[![GitHub stars](https://img.shields.io/github/stars/AdvancedNolik22-dev/n8n-mcp?style=social)](https://github.com/AdvancedNolik22-dev/n8n-mcp)
 [![npm version](https://img.shields.io/npm/v/n8n-mcp.svg)](https://www.npmjs.com/package/n8n-mcp)
-[![codecov](https://codecov.io/gh/czlonkowski/n8n-mcp/graph/badge.svg?token=YOUR_TOKEN)](https://codecov.io/gh/czlonkowski/n8n-mcp)
-[![Tests](https://img.shields.io/badge/tests-6524%20passing-brightgreen.svg)](https://github.com/czlonkowski/n8n-mcp/actions)
-[![n8n version](https://img.shields.io/badge/n8n-2.37.2-orange.svg)](https://github.com/n8n-io/n8n)
-[![Docker](https://img.shields.io/badge/docker-ghcr.io%2Fczlonkowski%2Fn8n--mcp-green.svg)](https://github.com/czlonkowski/n8n-mcp/pkgs/container/n8n-mcp)
+[![codecov](https://codecov.io/gh/AdvancedNolik22-dev/n8n-mcp/graph/badge.svg?token=YOUR_TOKEN)](https://codecov.io/gh/AdvancedNolik22-dev/n8n-mcp)
+[![Tests](https://img.shields.io/badge/tests-6524%20passing-brightgreen.svg)](https://github.com/AdvancedNolik22-dev/n8n-mcp/actions)
+[![n8n version](https://img.shields.io/badge/n8n-2.38.2-orange.svg)](https://github.com/n8n-io/n8n)
+[![Docker](https://img.shields.io/badge/docker-ghcr.io%2FAdvancedNolik22-dev%2Fn8n--mcp-green.svg)](https://github.com/AdvancedNolik22-dev/n8n-mcp/pkgs/container/n8n-mcp)
 [![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/n8n-mcp?referralCode=n8n-mcp)
 
-A Model Context Protocol (MCP) server that provides AI assistants with comprehensive access to n8n node documentation, properties, and operations. Deploy in minutes to give Claude and other AI assistants deep knowledge about n8n's 2,691 workflow automation nodes (832 core + 1,859 community).
+A Model Context Protocol (MCP) server that provides AI assistants with comprehensive access to n8n node documentation, properties, and operations. Deploy in minutes to give Claude and other AI assistants deep knowledge about n8n's 2,755 workflow automation nodes (832 core + 1,923 community).
 
 ## Overview
 
 n8n-MCP serves as a bridge between n8n's workflow automation platform and AI models, enabling them to understand and work with n8n nodes effectively. It provides structured access to:
 
-- **2,691 n8n nodes** - 832 core nodes + 1,859 community nodes (1,539 verified)
+- **2,755 n8n nodes** - 832 core nodes + 1,923 community nodes (1,591 verified)
 - **Node properties** - 99% coverage with detailed schemas
 - **Node operations** - 66.5% coverage of available actions
 - **Documentation** - 86% coverage from official n8n docs (including AI nodes)
@@ -27,14 +27,14 @@ n8n-MCP serves as a bridge between n8n's workflow automation platform and AI mod
 ## Support This Project
 
 <div align="center">
-  <a href="https://github.com/sponsors/czlonkowski">
+  <a href="https://github.com/sponsors/AdvancedNolik22-dev">
     <img src="https://img.shields.io/badge/Sponsor-❤️-db61a2?style=for-the-badge&logo=github-sponsors" alt="Sponsor n8n-mcp" />
   </a>
 </div>
 
-**n8n-mcp** started as a personal tool but now helps tens of thousands of developers automate their workflows efficiently. Maintaining and developing this project competes with my paid work. Your sponsorship helps me dedicate focused time to new features, respond quickly to issues, keep documentation up-to-date, and ensure compatibility with latest n8n releases. **[Become a sponsor](https://github.com/sponsors/czlonkowski)**
+**n8n-mcp** started as a personal tool but now helps tens of thousands of developers automate their workflows efficiently. Maintaining and developing this project competes with my paid work. Your sponsorship helps me dedicate focused time to new features, respond quickly to issues, keep documentation up-to-date, and ensure compatibility with latest n8n releases. **[Become a sponsor](https://github.com/sponsors/AdvancedNolik22-dev)**
 
-> 💼 **Need it built for you?** Work with [AiAdvisors — n8n automation audits, builds, and operations](https://aiadvisors.pl/en), run by the author of n8n-mcp and n8n-skills.
+> 💼 **Need it built for you?** Work with [AdvancedNolik22-dev — n8n automation audits, builds, and operations](https://github.com/AdvancedNolik22-dev), run by the author of n8n-mcp and n8n-skills.
 
 ## Important Safety Warning
 
@@ -103,7 +103,7 @@ Supercharge your n8n workflow building with specialized skills that teach AI how
 
 [![n8n-mcp Skills Setup](./docs/img/skills.png)](https://www.youtube.com/watch?v=e6VvRqmUY2Y)
 
-Learn more: [n8n-skills repository](https://github.com/czlonkowski/n8n-skills)
+Learn more: [n8n-skills repository](https://github.com/AdvancedNolik22-dev/n8n-skills)
 
 ## Claude Project Setup
 
@@ -281,7 +281,7 @@ CORRECT - Four separate string parameters:
 }
 ```
 
-**Reference**: [GitHub Issue #327](https://github.com/czlonkowski/n8n-mcp/issues/327)
+**Reference**: [GitHub Issue #327](https://github.com/AdvancedNolik22-dev/n8n-mcp/issues/327)
 
 ### CRITICAL: IF Node Multi-Output Routing
 
@@ -474,4 +474,4 @@ See [Acknowledgments](./docs/ACKNOWLEDGMENTS.md) for credits and template attrib
 
 > 💼 **Need it built for you?**
 >
-> Work with [AiAdvisors — n8n automation audits, builds, and operations](https://aiadvisors.pl/en), run by the author of n8n-mcp and n8n-skills.
+> Work with [AdvancedNolik22-dev — n8n automation audits, builds, and operations](https://github.com/AdvancedNolik22-dev), run by the author of n8n-mcp and n8n-skills.

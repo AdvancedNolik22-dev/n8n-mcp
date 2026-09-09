@@ -66,7 +66,7 @@ export class EnhancedDocumentationFetcher {
 
   constructor(docsPath?: string) {
     // SECURITY: Validate and sanitize docsPath to prevent command injection
-    // See: https://github.com/czlonkowski/n8n-mcp/issues/265 (CRITICAL-01 Part 2)
+    // See: https://github.com/AdvancedNolik22-dev/n8n-mcp/issues/265 (CRITICAL-01 Part 2)
     const defaultPath = path.join(__dirname, '../../temp', 'n8n-docs');
 
     if (!docsPath) {
@@ -128,7 +128,7 @@ export class EnhancedDocumentationFetcher {
   /**
    * Clone or update the n8n-docs repository
    * SECURITY: Uses spawnSync with argument arrays to prevent command injection
-   * See: https://github.com/czlonkowski/n8n-mcp/issues/265 (CRITICAL-01 Part 2)
+   * See: https://github.com/AdvancedNolik22-dev/n8n-mcp/issues/265 (CRITICAL-01 Part 2)
    */
   async ensureDocsRepository(): Promise<void> {
     try {
@@ -673,7 +673,7 @@ export class EnhancedDocumentationFetcher {
   /**
    * Search for node documentation file
    * SECURITY: Uses Node.js fs APIs instead of shell commands to prevent command injection
-   * See: https://github.com/czlonkowski/n8n-mcp/issues/265 (CRITICAL-01)
+   * See: https://github.com/AdvancedNolik22-dev/n8n-mcp/issues/265 (CRITICAL-01)
    */
   private async searchForNodeDoc(nodeType: string): Promise<string | null> {
     try {

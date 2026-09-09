@@ -60,7 +60,7 @@ RUN mkdir -p ./data && \
     chmod 755 ./data
 
 # Add metadata labels
-LABEL org.opencontainers.image.source="https://github.com/czlonkowski/n8n-mcp"
+LABEL org.opencontainers.image.source="https://github.com/AdvancedNolik22-dev/n8n-mcp"
 LABEL org.opencontainers.image.description="n8n MCP Server - Integration between n8n workflow automation and Model Context Protocol"
 LABEL org.opencontainers.image.licenses="MIT"
 LABEL org.opencontainers.image.title="n8n-mcp"
@@ -78,7 +78,7 @@ ENV NODE_ENV=production
 ENV IS_DOCKER=true
 ENV MCP_MODE=http
 # NOTE: USE_FIXED_HTTP is deprecated. SingleSessionHTTPServer is now the default.
-# See: https://github.com/czlonkowski/n8n-mcp/issues/524
+# See: https://github.com/AdvancedNolik22-dev/n8n-mcp/issues/524
 ENV LOG_LEVEL=info
 ENV TRUST_PROXY=1
 ENV HOST=0.0.0.0

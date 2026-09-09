@@ -292,7 +292,7 @@ Railway provides metrics for:
 
 Since the Railway template uses a specific Docker image tag, updates are manual:
 
-1. **Check for updates** on [GitHub](https://github.com/czlonkowski/n8n-mcp)
+1. **Check for updates** on [GitHub](https://github.com/AdvancedNolik22-dev/n8n-mcp)
 2. **Update image tag** in Railway:
    - Go to Settings → Deploy → Docker Image
    - Change tag from current to new version
@@ -340,7 +340,7 @@ AUTH_RATE_LIMIT_MAX=20                # 20 attempts per IP
 ## 🆘 Getting Help
 
 - **Railway Documentation**: [docs.railway.app](https://docs.railway.app)
-- **n8n-MCP Issues**: [GitHub Issues](https://github.com/czlonkowski/n8n-mcp/issues)
+- **n8n-MCP Issues**: [GitHub Issues](https://github.com/AdvancedNolik22-dev/n8n-mcp/issues)
 - **Railway Community**: [Discord](https://discord.gg/railway)
 
 ## 🎉 Success!

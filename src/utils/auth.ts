@@ -50,7 +50,7 @@ export class AuthManager {
     }
 
     // SECURITY: Use timing-safe comparison for static token
-    // See: https://github.com/czlonkowski/n8n-mcp/issues/265 (CRITICAL-02)
+    // See: https://github.com/AdvancedNolik22-dev/n8n-mcp/issues/265 (CRITICAL-02)
     if (AuthManager.timingSafeCompare(token, expectedToken)) {
       return true;
     }
@@ -143,7 +143,7 @@ export class AuthManager {
    *   return res.status(401).json({ error: 'Unauthorized' });
    * }
    *
-   * @see https://github.com/czlonkowski/n8n-mcp/issues/265 (CRITICAL-02)
+   * @see https://github.com/AdvancedNolik22-dev/n8n-mcp/issues/265 (CRITICAL-02)
    */
   static timingSafeCompare(plainToken: string, expectedToken: string): boolean {
     try {

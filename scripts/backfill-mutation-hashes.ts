@@ -6,7 +6,7 @@
  *
  * Usage: npx tsx scripts/backfill-mutation-hashes.ts
  *
- * Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+ * Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
  */
 
 import { WorkflowSanitizer } from '../src/telemetry/workflow-sanitizer.js';

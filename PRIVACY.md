@@ -14,7 +14,7 @@ The data is pseudonymous at the point of collection: it carries an installation 
 
 The data controller is:
 
-AiAdvisors Romuald Członkowski, a sole proprietorship (jednoosobowa działalność gospodarcza) registered in Poland
+AdvancedNolik22-dev AdvancedNolik22-dev, a sole proprietorship (jednoosobowa działalność gospodarcza) registered in Poland
 Contact: legal@n8n-mcp.com
 Postal address available on request.
 
@@ -190,4 +190,4 @@ We may update this policy. Changes are published in this file, with the version 
 Privacy requests and questions: legal@n8n-mcp.com
 
 General questions about telemetry can also be raised on GitHub:
-https://github.com/czlonkowski/n8n-mcp/issues
+https://github.com/AdvancedNolik22-dev/n8n-mcp/issues

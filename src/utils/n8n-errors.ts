@@ -241,13 +241,13 @@ export function enrichUnknownPropertyError(
     parts.push(
       'This usually means the instance stores a setting its Public API write schema rejects ' +
         '(entity-vs-schema drift). Please report the offending key at ' +
-        'https://github.com/czlonkowski/n8n-mcp/issues.'
+        'https://github.com/AdvancedNolik22-dev/n8n-mcp/issues.'
     );
   } else {
     parts.push(`Top-level keys sent: ${Object.keys(sentBody).join(', ') || '(none)'}.`);
     parts.push(
       "One of these keys is not accepted by this instance's Public API write schema. " +
-        'Please report the offending key at https://github.com/czlonkowski/n8n-mcp/issues.'
+        'Please report the offending key at https://github.com/AdvancedNolik22-dev/n8n-mcp/issues.'
     );
   }
 

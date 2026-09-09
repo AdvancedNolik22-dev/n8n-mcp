@@ -5,7 +5,7 @@ import { AuthManager } from '../../../src/utils/auth';
  * Unit tests for AuthManager.timingSafeCompare
  *
  * SECURITY: These tests verify constant-time comparison to prevent timing attacks
- * See: https://github.com/czlonkowski/n8n-mcp/issues/265 (CRITICAL-02)
+ * See: https://github.com/AdvancedNolik22-dev/n8n-mcp/issues/265 (CRITICAL-02)
  */
 describe('AuthManager.timingSafeCompare', () => {
   describe('Security: Timing Attack Prevention', () => {

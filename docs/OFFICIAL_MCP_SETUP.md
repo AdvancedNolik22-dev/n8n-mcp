@@ -127,7 +127,7 @@ docker run -d \
   -e N8N_API_URL=https://your-n8n-instance.com \
   -e N8N_API_KEY=your-n8n-api-key \
   -e N8N_MCP_ACCESS_TOKEN=your-mcp-access-token \
-  ghcr.io/czlonkowski/n8n-mcp:latest
+  ghcr.io/AdvancedNolik22-dev/n8n-mcp:latest
 ```
 
 **HTTP mode (`.env`):**

@@ -70,16 +70,16 @@ function buildManifest() {
       'MCP server providing AI assistants with comprehensive access to n8n node ' +
       'documentation and workflow management capabilities',
     author: {
-      name: 'Romuald Członkowski',
-      url: 'https://aiadvisors.pl/en',
+      name: 'AdvancedNolik22-dev',
+      url: 'https://github.com/AdvancedNolik22-dev',
     },
     repository: {
       type: 'git',
-      url: 'https://github.com/czlonkowski/n8n-mcp',
+      url: 'https://github.com/AdvancedNolik22-dev/n8n-mcp',
     },
     homepage: 'https://www.n8n-mcp.com/',
-    documentation: 'https://github.com/czlonkowski/n8n-mcp#readme',
-    support: 'https://github.com/czlonkowski/n8n-mcp/issues',
+    documentation: 'https://github.com/AdvancedNolik22-dev/n8n-mcp#readme',
+    support: 'https://github.com/AdvancedNolik22-dev/n8n-mcp/issues',
     license: 'MIT',
     keywords: ['n8n', 'mcp', 'workflow', 'automation', 'ai', 'documentation', 'model-context-protocol'],
     privacy_policies: ['https://n8n.io/legal/privacy/'],

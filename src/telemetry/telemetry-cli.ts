@@ -40,7 +40,7 @@ Commands:
   disable  Disable telemetry
   status   Show current telemetry status
 
-Learn more: https://github.com/czlonkowski/n8n-mcp/blob/main/PRIVACY.md
+Learn more: https://github.com/AdvancedNolik22-dev/n8n-mcp/blob/main/PRIVACY.md
 `);
       process.exit(action ? 1 : 0);
   }

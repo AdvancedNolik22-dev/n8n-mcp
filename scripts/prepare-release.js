@@ -315,7 +315,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>`;
             execSync('git push', { cwd: this.rootDir, stdio: 'inherit' });
             success('Pushed to remote repository');
             log('\n🎉 Release workflow will be triggered automatically!', 'green');
-            log('Monitor progress at: https://github.com/czlonkowski/n8n-mcp/actions', 'blue');
+            log('Monitor progress at: https://github.com/AdvancedNolik22-dev/n8n-mcp/actions', 'blue');
           } else {
             warning('Release cancelled. Commit created but not pushed.');
             info('You can push manually later to trigger the release.');
@@ -345,9 +345,9 @@ Co-Authored-By: Claude <noreply@anthropic.com>`;
     log('   • Build and push Docker images', 'green');
     log('   • Update documentation badges', 'green');
     log('\n🔍 Monitor the release at:', 'blue');
-    log('   • GitHub Actions: https://github.com/czlonkowski/n8n-mcp/actions', 'blue');
+    log('   • GitHub Actions: https://github.com/AdvancedNolik22-dev/n8n-mcp/actions', 'blue');
     log('   • NPM Package: https://www.npmjs.com/package/n8n-mcp', 'blue');
-    log('   • Docker Images: https://github.com/czlonkowski/n8n-mcp/pkgs/container/n8n-mcp', 'blue');
+    log('   • Docker Images: https://github.com/AdvancedNolik22-dev/n8n-mcp/pkgs/container/n8n-mcp', 'blue');
     
     log('\n✅ Release preparation completed successfully!', 'green');
   }

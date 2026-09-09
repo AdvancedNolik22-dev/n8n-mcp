@@ -1148,7 +1148,7 @@ export class SingleSessionHTTPServer {
 
     // SECURITY: Rate limiting for authentication endpoints
     // Prevents brute force attacks and DoS
-    // See: https://github.com/czlonkowski/n8n-mcp/issues/265 (HIGH-02)
+    // See: https://github.com/AdvancedNolik22-dev/n8n-mcp/issues/265 (HIGH-02)
     // Declared before route registrations so all authenticated endpoints
     // (including GET /mcp and DELETE /mcp) can reference it.
     const authLimiter = rateLimit({
@@ -1217,7 +1217,7 @@ export class SingleSessionHTTPServer {
           header: 'Authorization: Bearer <token>',
           required_for: ['POST /mcp', 'GET /mcp', 'DELETE /mcp', 'GET /sse', 'POST /messages']
         },
-        documentation: 'https://github.com/czlonkowski/n8n-mcp'
+        documentation: 'https://github.com/AdvancedNolik22-dev/n8n-mcp'
       });
     });
 
@@ -1263,7 +1263,7 @@ export class SingleSessionHTTPServer {
         res.status(400).json({
           error: 'SSE transport uses /sse endpoint',
           message: 'Connect via GET /sse for SSE streaming. POST messages to /messages?sessionId=<id>.',
-          documentation: 'https://github.com/czlonkowski/n8n-mcp'
+          documentation: 'https://github.com/AdvancedNolik22-dev/n8n-mcp'
         });
         return;
       }
@@ -1337,7 +1337,7 @@ export class SingleSessionHTTPServer {
             authentication: 'None'
           }
         },
-        documentation: 'https://github.com/czlonkowski/n8n-mcp'
+        documentation: 'https://github.com/AdvancedNolik22-dev/n8n-mcp'
       });
     });
 

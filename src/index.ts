@@ -1,6 +1,6 @@
 /**
  * n8n-MCP - Model Context Protocol Server for n8n
- * Copyright (c) 2024 AiAdvisors Romuald Czlonkowski
+ * Copyright (c) 2024 AdvancedNolik22-dev AdvancedNolik22-dev
  * Licensed under the Sustainable Use License v1.0
  */
 

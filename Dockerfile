@@ -27,7 +27,7 @@ RUN --mount=type=cache,target=/root/.npm \
     echo '{"overrides":{"isolated-vm":"npm:empty-npm-package@1.0.0"}}' > package.json && \
     npm install --no-save typescript@^5.8.3 @types/node@^22.15.30 @types/express@^5.0.3 \
         @modelcontextprotocol/sdk@1.30.0 dotenv@^16.5.0 express@^5.1.0 axios@^1.18.1 \
-        n8n-workflow@2.37.2 uuid@^11.1.1 @types/uuid@^10.0.0 \
+        n8n-workflow@2.38.1 uuid@^11.1.1 @types/uuid@^10.0.0 \
         openai@^4.77.0 zod@3.25.76 lru-cache@^11.2.1 "@supabase/supabase-js@>=2.57.4 <2.110.0" \
         undici@^6.28.0
 
@@ -77,7 +77,7 @@ COPY docker/n8n-mcp /usr/local/bin/
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh /usr/local/bin/n8n-mcp
 
 # Add container labels
-LABEL org.opencontainers.image.source="https://github.com/czlonkowski/n8n-mcp"
+LABEL org.opencontainers.image.source="https://github.com/AdvancedNolik22-dev/n8n-mcp"
 LABEL org.opencontainers.image.description="n8n MCP Server - Runtime Only"
 LABEL org.opencontainers.image.licenses="MIT"
 LABEL org.opencontainers.image.title="n8n-mcp"

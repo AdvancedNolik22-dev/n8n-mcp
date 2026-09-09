@@ -6,20 +6,20 @@ While not legally required, we'd love it if you included attribution! Here are s
 
 ### In Your README
 ```
-Built with [n8n-MCP](https://github.com/czlonkowski/n8n-mcp) by Romuald Czlonkowski @ [www.aiadvisors.pl/en](https://www.aiadvisors.pl/en)
+Built with [n8n-MCP](https://github.com/AdvancedNolik22-dev/n8n-mcp) by AdvancedNolik22-dev @ [github.com/AdvancedNolik22-dev](https://github.com/AdvancedNolik22-dev)
 ```
 
 ### In Your Documentation
 ```
-This project uses n8n-MCP (https://github.com/czlonkowski/n8n-mcp) 
+This project uses n8n-MCP (https://github.com/AdvancedNolik22-dev/n8n-mcp) 
 for n8n node documentation access.
-Created by Romuald Czlonkowski @ www.aiadvisors.pl/en
+Created by AdvancedNolik22-dev @ github.com/AdvancedNolik22-dev
 ```
 
 ### In Code Comments
 ```javascript
-// Powered by n8n-MCP - https://github.com/czlonkowski/n8n-mcp
-// Created by Romuald Czlonkowski @ www.aiadvisors.pl/en
+// Powered by n8n-MCP - https://github.com/AdvancedNolik22-dev/n8n-mcp
+// Created by AdvancedNolik22-dev @ github.com/AdvancedNolik22-dev
 ```
 
 ## Why Attribution Matters

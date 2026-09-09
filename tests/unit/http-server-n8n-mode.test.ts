@@ -256,7 +256,7 @@ describe('HTTP Server n8n Mode', () => {
             authentication: 'None'
           }
         },
-        documentation: 'https://github.com/czlonkowski/n8n-mcp'
+        documentation: 'https://github.com/AdvancedNolik22-dev/n8n-mcp'
       });
     });
 

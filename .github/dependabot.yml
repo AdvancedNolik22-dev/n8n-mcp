@@ -18,7 +18,7 @@ updates:
       timezone: "UTC"
     open-pull-requests-limit: 10
     reviewers:
-      - "czlonkowski"
+      - "AdvancedNolik22-dev"
     versioning-strategy: "increase"
     commit-message:
       prefix: "deps"
@@ -86,7 +86,7 @@ updates:
       timezone: "UTC"
     open-pull-requests-limit: 5
     reviewers:
-      - "czlonkowski"
+      - "AdvancedNolik22-dev"
     commit-message:
       prefix: "deps(ui)"
       prefix-development: "deps-dev(ui)"
@@ -123,7 +123,7 @@ updates:
       - "github-actions"
       - "dependencies"
     reviewers:
-      - "czlonkowski"
+      - "AdvancedNolik22-dev"
     rebase-strategy: "auto"
 
   # Monitor Docker base images
@@ -142,5 +142,5 @@ updates:
       - "docker"
       - "dependencies"
     reviewers:
-      - "czlonkowski"
+      - "AdvancedNolik22-dev"
     rebase-strategy: "auto"

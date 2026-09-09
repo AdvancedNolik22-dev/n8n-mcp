@@ -263,7 +263,7 @@ A: Marking required fields (378 errors) + better structure messages (1,268 error
 ## File Structure
 
 ```
-/Users/romualdczlonkowski/Pliki/n8n-mcp/n8n-mcp/
+./
 ├── ANALYSIS_QUICK_REFERENCE.md ............ Quick lookup (5.8KB)
 ├── VALIDATION_ANALYSIS_SUMMARY.md ........ Executive summary (13KB)
 ├── VALIDATION_ANALYSIS_REPORT.md ......... Complete analysis (27KB)

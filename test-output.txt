@@ -3,7 +3,7 @@
 > vitest --reporter=verbose
 
 
- RUN  v3.2.4 /Users/romualdczlonkowski/Pliki/n8n-mcp/n8n-mcp
+ RUN  v3.2.4 .
       Coverage enabled with v8
 
  ✓ tests/unit/http-server/multi-tenant-support.test.ts > HTTP Server Multi-Tenant Support > extractMultiTenantHeaders Function > should extract all multi-tenant headers when present 2ms
@@ -1039,16 +1039,16 @@ ERROR: AUTH_TOKEN or AUTH_TOKEN_FILE is required for HTTP mode
  ✓ tests/unit/services/enhanced-config-validator-integration.test.ts > EnhancedConfigValidator - Integration Tests > similarity service integration > should initialize similarity services when initializeSimilarityServices is called 45ms
 stderr | tests/unit/services/enhanced-config-validator-integration.test.ts > EnhancedConfigValidator - Integration Tests > similarity service integration > should handle similarity service errors gracefully
 Resource similarity service error: Error: Service error
-    at Object.<anonymous> [90m(/Users/romualdczlonkowski/Pliki/n8n-mcp/n8n-mcp/[39mtests/unit/services/enhanced-config-validator-integration.test.ts:193:15[90m)[39m
-    at Object.mockCall [90m(file:///Users/romualdczlonkowski/Pliki/n8n-mcp/n8n-mcp/[39mnode_modules/[4m@vitest[24m/spy/dist/index.js:96:15[90m)[39m
-    at Object.spy [as findSimilarResources] [90m(file:///Users/romualdczlonkowski/Pliki/n8n-mcp/n8n-mcp/[39mnode_modules/[4mtinyspy[24m/dist/index.js:47:80[90m)[39m
-    at Function.validateResourceAndOperation [90m(/Users/romualdczlonkowski/Pliki/n8n-mcp/n8n-mcp/[39msrc/services/enhanced-config-validator.ts:732:56[90m)[39m
-    at Function.addOperationSpecificEnhancements [90m(/Users/romualdczlonkowski/Pliki/n8n-mcp/n8n-mcp/[39msrc/services/enhanced-config-validator.ts:260:10[90m)[39m
-    at Function.validateWithMode [90m(/Users/romualdczlonkowski/Pliki/n8n-mcp/n8n-mcp/[39msrc/services/enhanced-config-validator.ts:110:10[90m)[39m
-    at [90m/Users/romualdczlonkowski/Pliki/n8n-mcp/n8n-mcp/[39mtests/unit/services/enhanced-config-validator-integration.test.ts:196:46
-    at [90mfile:///Users/romualdczlonkowski/Pliki/n8n-mcp/n8n-mcp/[39mnode_modules/[4m@vitest[24m/runner/dist/chunk-hooks.js:155:11
-    at [90mfile:///Users/romualdczlonkowski/Pliki/n8n-mcp/n8n-mcp/[39mnode_modules/[4m@vitest[24m/runner/dist/chunk-hooks.js:752:26
-    at [90mfile:///Users/romualdczlonkowski/Pliki/n8n-mcp/n8n-mcp/[39mnode_modules/[4m@vitest[24m/runner/dist/chunk-hooks.js:1897:20
+    at Object.<anonymous> [90m(./[39mtests/unit/services/enhanced-config-validator-integration.test.ts:193:15[90m)[39m
+    at Object.mockCall [90m(file://./[39mnode_modules/[4m@vitest[24m/spy/dist/index.js:96:15[90m)[39m
+    at Object.spy [as findSimilarResources] [90m(file://./[39mnode_modules/[4mtinyspy[24m/dist/index.js:47:80[90m)[39m
+    at Function.validateResourceAndOperation [90m(./[39msrc/services/enhanced-config-validator.ts:732:56[90m)[39m
+    at Function.addOperationSpecificEnhancements [90m(./[39msrc/services/enhanced-config-validator.ts:260:10[90m)[39m
+    at Function.validateWithMode [90m(./[39msrc/services/enhanced-config-validator.ts:110:10[90m)[39m
+    at [90m./[39mtests/unit/services/enhanced-config-validator-integration.test.ts:196:46
+    at [90mfile://./[39mnode_modules/[4m@vitest[24m/runner/dist/chunk-hooks.js:155:11
+    at [90mfile://./[39mnode_modules/[4m@vitest[24m/runner/dist/chunk-hooks.js:752:26
+    at [90mfile://./[39mnode_modules/[4m@vitest[24m/runner/dist/chunk-hooks.js:1897:20
 
  ✓ tests/unit/services/enhanced-config-validator-integration.test.ts > EnhancedConfigValidator - Integration Tests > similarity service integration > should use resource similarity service for invalid resource errors 45ms
  ✓ tests/unit/services/enhanced-config-validator-integration.test.ts > EnhancedConfigValidator - Integration Tests > similarity service integration > should use operation similarity service for invalid operation errors 45ms

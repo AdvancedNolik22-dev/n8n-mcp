@@ -13,7 +13,7 @@ import * as dns from 'dns/promises';
  * Unit tests for SSRFProtection with configurable security modes
  *
  * SECURITY: These tests verify SSRF protection blocks malicious URLs in all modes
- * See: https://github.com/czlonkowski/n8n-mcp/issues/265 (HIGH-03)
+ * See: https://github.com/AdvancedNolik22-dev/n8n-mcp/issues/265 (HIGH-03)
  */
 describe('SSRFProtection', () => {
   const originalEnv = process.env.WEBHOOK_SECURITY_MODE;

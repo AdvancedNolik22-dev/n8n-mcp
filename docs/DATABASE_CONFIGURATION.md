@@ -44,7 +44,7 @@ SQLJS_SAVE_INTERVAL_MS=5000  # Default: 5000ms (5 seconds)
         "--rm",
         "--init",
         "-e", "SQLJS_SAVE_INTERVAL_MS=10000",
-        "ghcr.io/czlonkowski/n8n-mcp:latest"
+        "ghcr.io/AdvancedNolik22-dev/n8n-mcp:latest"
       ]
     }
   }

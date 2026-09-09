@@ -10,7 +10,7 @@ n8n-mcp is a Model Context Protocol server that gives AI assistants structured a
 
 - The n8n-mcp server itself, in all supported deployment modes (stdio, HTTP single-session, multi-tenant HTTP, Docker image).
 - The data flows between AI clients, the server, n8n instances, and the n8n.io templates API.
-- The supply chain used to publish the npm package and the `ghcr.io/czlonkowski/n8n-mcp` container image.
+- The supply chain used to publish the npm package and the `ghcr.io/AdvancedNolik22-dev/n8n-mcp` container image.
 
 It does **not** cover:
 
@@ -46,7 +46,7 @@ The project has three security objectives, in priority order:
 - **stdio** — single process launched by the AI client, communicates over stdin/stdout. No network surface.
 - **HTTP single-session** — Express server with a single shared `AUTH_TOKEN`. Session state is in-memory.
 - **Multi-tenant HTTP** — Enabled by `ENABLE_MULTI_TENANT=true`. Each request carries the tenant's n8n URL and API key in headers (`x-n8n-url`, `x-n8n-key`, `x-instance-id`, `x-session-id`).
-- **Docker image** — `ghcr.io/czlonkowski/n8n-mcp`, runs as a non-root user with the randomized UID/GID created at build time.
+- **Docker image** — `ghcr.io/AdvancedNolik22-dev/n8n-mcp`, runs as a non-root user with the randomized UID/GID created at build time.
 
 ### 3.3 Trust boundaries
 
@@ -100,7 +100,7 @@ flowchart LR
 | `data/nodes.db` | Low | Public n8n node documentation. No user data. |
 | `data/templates.db` | Low | Public n8n.io workflow templates. |
 | npm package `n8n-mcp` | High | Downstream users execute it directly; integrity matters. |
-| Docker image `ghcr.io/czlonkowski/n8n-mcp` | High | Same — users pull and run it. |
+| Docker image `ghcr.io/AdvancedNolik22-dev/n8n-mcp` | High | Same — users pull and run it. |
 
 ## 5. STRIDE analysis
 

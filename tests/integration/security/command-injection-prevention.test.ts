@@ -5,7 +5,7 @@ import { EnhancedDocumentationFetcher } from '../../../src/utils/enhanced-docume
  * Integration tests for command injection prevention
  *
  * SECURITY: These tests verify that malicious inputs cannot execute shell commands
- * See: https://github.com/czlonkowski/n8n-mcp/issues/265 (CRITICAL-01)
+ * See: https://github.com/AdvancedNolik22-dev/n8n-mcp/issues/265 (CRITICAL-01)
  */
 describe('Command Injection Prevention', () => {
   let fetcher: EnhancedDocumentationFetcher;

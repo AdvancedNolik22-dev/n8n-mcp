@@ -3020,7 +3020,7 @@ export async function handleDiagnostic(request: any, context?: InstanceContext):
         'n8n instance not running or crashed',
         'Network firewall blocking connection'
       ],
-      documentation: 'https://github.com/czlonkowski/n8n-mcp?tab=readme-ov-file#n8n-management-tools-optional---requires-api-configuration'
+      documentation: 'https://github.com/AdvancedNolik22-dev/n8n-mcp?tab=readme-ov-file#n8n-management-tools-optional---requires-api-configuration'
     };
   } else {
     // API not configured - setup guidance
@@ -3067,7 +3067,7 @@ export async function handleDiagnostic(request: any, context?: InstanceContext):
           '4. Run n8n_health_check with mode="diagnostic" to verify',
           '5. All 19 tools will be available!'
         ],
-        documentation: 'https://github.com/czlonkowski/n8n-mcp?tab=readme-ov-file#n8n-management-tools-optional---requires-api-configuration'
+        documentation: 'https://github.com/AdvancedNolik22-dev/n8n-mcp?tab=readme-ov-file#n8n-management-tools-optional---requires-api-configuration'
       }
     };
   }

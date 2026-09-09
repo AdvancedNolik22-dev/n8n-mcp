@@ -473,7 +473,7 @@ export class WorkflowValidator {
         // Check if this is a dynamic Tool variant (e.g., googleDriveTool, googleSheetsTool)
         // n8n creates these at runtime when ANY node is used in an AI Agent's tool slot,
         // but they don't exist in npm packages. We infer validity if the base node exists.
-        // See: https://github.com/czlonkowski/n8n-mcp/issues/522
+        // See: https://github.com/AdvancedNolik22-dev/n8n-mcp/issues/522
         if (!nodeInfo && ToolVariantGenerator.isToolVariantNodeType(normalizedType)) {
           const baseNodeType = ToolVariantGenerator.getBaseNodeType(normalizedType);
           if (baseNodeType) {

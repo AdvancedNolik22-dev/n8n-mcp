@@ -43,7 +43,7 @@ const supportsAutoSelectFamily = typeof (net as any).getDefaultAutoSelectFamily 
  * SSRF Protection Utility with Configurable Security Modes
  *
  * Validates URLs to prevent Server-Side Request Forgery attacks including DNS rebinding
- * See: https://github.com/czlonkowski/n8n-mcp/issues/265 (HIGH-03)
+ * See: https://github.com/AdvancedNolik22-dev/n8n-mcp/issues/265 (HIGH-03)
  *
  * Security Modes:
  * - strict (default): Block localhost + private IPs + cloud metadata (production)

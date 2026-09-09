@@ -1100,7 +1100,7 @@ export class N8nApiClient {
    * - Modern (n8n v0.200.0+): {data: Workflow[], nextCursor?: string}
    * - Legacy (older versions): Workflow[] (wrapped automatically)
    *
-   * @see https://github.com/czlonkowski/n8n-mcp/issues/349
+   * @see https://github.com/AdvancedNolik22-dev/n8n-mcp/issues/349
    */
   async listWorkflows(params: WorkflowListParams = {}): Promise<WorkflowListResponse> {
     try {
@@ -1168,7 +1168,7 @@ export class N8nApiClient {
    * - Modern (n8n v0.200.0+): {data: Execution[], nextCursor?: string}
    * - Legacy (older versions): Execution[] (wrapped automatically)
    *
-   * @see https://github.com/czlonkowski/n8n-mcp/issues/349
+   * @see https://github.com/AdvancedNolik22-dev/n8n-mcp/issues/349
    */
   async listExecutions(params: ExecutionListParams = {}): Promise<ExecutionListResponse> {
     try {
@@ -1258,7 +1258,7 @@ export class N8nApiClient {
       const { webhookUrl, httpMethod, data, headers, waitForResponse = true } = request;
 
       // SECURITY: Validate URL for SSRF protection (includes DNS resolution)
-      // See: https://github.com/czlonkowski/n8n-mcp/issues/265 (HIGH-03)
+      // See: https://github.com/AdvancedNolik22-dev/n8n-mcp/issues/265 (HIGH-03)
       const { SSRFProtection } = await import('../utils/ssrf-protection');
       const validation = await SSRFProtection.validateWebhookUrl(webhookUrl);
 
@@ -1338,7 +1338,7 @@ export class N8nApiClient {
    * - Modern (n8n v0.200.0+): {data: Credential[], nextCursor?: string}
    * - Legacy (older versions): Credential[] (wrapped automatically)
    *
-   * @see https://github.com/czlonkowski/n8n-mcp/issues/349
+   * @see https://github.com/AdvancedNolik22-dev/n8n-mcp/issues/349
    */
   async listCredentials(params: CredentialListParams = {}): Promise<CredentialListResponse> {
     try {
@@ -1424,7 +1424,7 @@ export class N8nApiClient {
    * - Modern (n8n v0.200.0+): {data: Tag[], nextCursor?: string}
    * - Legacy (older versions): Tag[] (wrapped automatically)
    *
-   * @see https://github.com/czlonkowski/n8n-mcp/issues/349
+   * @see https://github.com/AdvancedNolik22-dev/n8n-mcp/issues/349
    */
   async listTags(params: TagListParams = {}): Promise<TagListResponse> {
     try {

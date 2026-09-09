@@ -72,7 +72,7 @@ const testCases: TestCase[] = [
   },
   {
     // DEPRECATED: This test case tests the deprecated fixed HTTP implementation
-    // See: https://github.com/czlonkowski/n8n-mcp/issues/524
+    // See: https://github.com/AdvancedNolik22-dev/n8n-mcp/issues/524
     name: 'Fixed HTTP implementation (DEPRECATED)',
     env: {
       MCP_MODE: 'http',

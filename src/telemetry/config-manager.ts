@@ -396,10 +396,10 @@ For Docker: Set N8N_MCP_TELEMETRY_DISABLED=true
       row('npx n8n-mcp telemetry disable'),
       row(),
       row('Data deletion requests:'),
-      row('Email romuald@n8n-mcp.com with your installation ID'),
+      row('Email advancednolik22@gmail.com with your installation ID'),
       row(),
       row('Full policy:'),
-      row('https://github.com/czlonkowski/n8n-mcp/blob/main/PRIVACY.md'),
+      row('https://github.com/AdvancedNolik22-dev/n8n-mcp/blob/main/PRIVACY.md'),
       row(),
       `╚${'═'.repeat(width + 1)}╝`,
     ];

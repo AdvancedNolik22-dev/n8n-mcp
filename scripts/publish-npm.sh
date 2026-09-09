@@ -69,12 +69,12 @@ pkg.exports = {
   }
 };
 pkg.bin = { 'n8n-mcp': './dist/mcp/stdio-wrapper.js' };
-pkg.repository = { type: 'git', url: 'git+https://github.com/czlonkowski/n8n-mcp.git' };
+pkg.repository = { type: 'git', url: 'git+https://github.com/AdvancedNolik22-dev/n8n-mcp.git' };
 pkg.keywords = ['n8n', 'mcp', 'model-context-protocol', 'ai', 'workflow', 'automation'];
-pkg.author = 'Romuald Czlonkowski @ www.aiadvisors.pl/en';
+pkg.author = 'AdvancedNolik22-dev @ github.com/AdvancedNolik22-dev';
 pkg.license = 'MIT';
-pkg.bugs = { url: 'https://github.com/czlonkowski/n8n-mcp/issues' };
-pkg.homepage = 'https://github.com/czlonkowski/n8n-mcp#readme';
+pkg.bugs = { url: 'https://github.com/AdvancedNolik22-dev/n8n-mcp/issues' };
+pkg.homepage = 'https://github.com/AdvancedNolik22-dev/n8n-mcp#readme';
 pkg.files = ['dist/**/*', 'data/nodes.db', '.env.example', 'README.md', 'LICENSE'];
 // Note: node_modules are automatically included for dependencies
 delete pkg.private; // Remove private field so we can publish

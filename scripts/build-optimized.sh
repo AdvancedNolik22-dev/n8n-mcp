@@ -23,7 +23,7 @@ echo "📦 Building Docker image..."
 docker build \
     --progress=plain \
     --cache-from type=gha \
-    --cache-from type=registry,ref=ghcr.io/czlonkowski/n8n-mcp:buildcache \
+    --cache-from type=registry,ref=ghcr.io/AdvancedNolik22-dev/n8n-mcp:buildcache \
     --build-arg BUILDKIT_INLINE_CACHE=1 \
     -t "n8n-mcp:latest" \
     .

@@ -2,7 +2,7 @@
 
 ## Reporting Vulnerabilities
 
-If you discover a security vulnerability in n8n-mcp, please report it through [GitHub's private vulnerability reporting](https://github.com/czlonkowski/n8n-mcp/security/advisories/new). Do not create public issues for security vulnerabilities.
+If you discover a security vulnerability in n8n-mcp, please report it through [GitHub's private vulnerability reporting](https://github.com/AdvancedNolik22-dev/n8n-mcp/security/advisories/new). Do not create public issues for security vulnerabilities.
 
 ## Supported Versions
 

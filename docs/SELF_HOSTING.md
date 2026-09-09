@@ -134,7 +134,7 @@ docker --version
 
 ```bash
 # Pull the Docker image (~280MB, no n8n dependencies!)
-docker pull ghcr.io/czlonkowski/n8n-mcp:latest
+docker pull ghcr.io/AdvancedNolik22-dev/n8n-mcp:latest
 ```
 
 > **⚡ Ultra-optimized:** Our Docker image is 82% smaller than typical n8n images because it contains NO n8n dependencies - just the runtime MCP server with a pre-built database!
@@ -155,7 +155,7 @@ Add to Claude Desktop config:
         "-e", "MCP_MODE=stdio",
         "-e", "LOG_LEVEL=error",
         "-e", "DISABLE_CONSOLE_OUTPUT=true",
-        "ghcr.io/czlonkowski/n8n-mcp:latest"
+        "ghcr.io/AdvancedNolik22-dev/n8n-mcp:latest"
       ]
     }
   }
@@ -178,7 +178,7 @@ Add to Claude Desktop config:
         "-e", "DISABLE_CONSOLE_OUTPUT=true",
         "-e", "N8N_API_URL=https://your-n8n-instance.com",
         "-e", "N8N_API_KEY=your-api-key",
-        "ghcr.io/czlonkowski/n8n-mcp:latest"
+        "ghcr.io/AdvancedNolik22-dev/n8n-mcp:latest"
       ]
     }
   }
@@ -206,7 +206,7 @@ If you're running n8n locally (e.g., `http://localhost:5678` or Docker), you nee
         "-e", "N8N_API_URL=http://host.docker.internal:5678",
         "-e", "N8N_API_KEY=your-api-key",
         "-e", "WEBHOOK_SECURITY_MODE=moderate",
-        "ghcr.io/czlonkowski/n8n-mcp:latest"
+        "ghcr.io/AdvancedNolik22-dev/n8n-mcp:latest"
       ]
     }
   }
@@ -232,7 +232,7 @@ If you're running n8n locally (e.g., `http://localhost:5678` or Docker), you nee
 
 ```bash
 # 1. Clone and setup
-git clone https://github.com/czlonkowski/n8n-mcp.git
+git clone https://github.com/AdvancedNolik22-dev/n8n-mcp.git
 cd n8n-mcp
 npm install
 npm run build

@@ -103,8 +103,8 @@ Automatically extracts release notes from `docs/CHANGELOG.md` using the version 
 - ~50MB vs 1GB+ with dev dependencies
 
 #### Docker Images
-- **Standard**: `ghcr.io/czlonkowski/n8n-mcp:vX.Y.Z`
-- **Railway**: `ghcr.io/czlonkowski/n8n-mcp-railway:vX.Y.Z`
+- **Standard**: `ghcr.io/AdvancedNolik22-dev/n8n-mcp:vX.Y.Z`
+- **Railway**: `ghcr.io/AdvancedNolik22-dev/n8n-mcp-railway:vX.Y.Z`
 - Multi-platform: linux/amd64, linux/arm64
 - Semantic version tags: `vX.Y.Z`, `vX.Y`, `vX`, `latest`
 
@@ -130,7 +130,7 @@ The `publish-npm` job authenticates to npm via short-lived OIDC tokens minted by
 2. Go to the package page → **Settings** → **Trusted Publishers** → **Add publisher**.
 3. Configure:
    - **Publisher**: GitHub Actions
-   - **Organization or user**: `czlonkowski`
+   - **Organization or user**: `AdvancedNolik22-dev`
    - **Repository**: `n8n-mcp`
    - **Workflow filename**: `release.yml`
    - **Environment**: `npm-publish`
@@ -222,12 +222,12 @@ docker build -t test-image .
 ## Monitoring
 
 ### GitHub Actions
-Monitor releases at: https://github.com/czlonkowski/n8n-mcp/actions
+Monitor releases at: https://github.com/AdvancedNolik22-dev/n8n-mcp/actions
 
 ### Release Status
-- **GitHub Releases**: https://github.com/czlonkowski/n8n-mcp/releases
+- **GitHub Releases**: https://github.com/AdvancedNolik22-dev/n8n-mcp/releases
 - **NPM Package**: https://www.npmjs.com/package/n8n-mcp
-- **Docker Images**: https://github.com/czlonkowski/n8n-mcp/pkgs/container/n8n-mcp
+- **Docker Images**: https://github.com/AdvancedNolik22-dev/n8n-mcp/pkgs/container/n8n-mcp
 
 ### Notifications
 
@@ -250,7 +250,7 @@ npm error code ENEEDAUTH
 npm error need auth This command requires you to be logged in
 ```
 **Solution**: Verify the Trusted Publisher configuration on npmjs.com matches the workflow:
-- Repository: `czlonkowski/n8n-mcp`
+- Repository: `AdvancedNolik22-dev/n8n-mcp`
 - Workflow filename: `release.yml` (filename only, no path)
 - Environment: `npm-publish`
 

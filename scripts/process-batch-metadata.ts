@@ -86,7 +86,7 @@ async function processBatchMetadata(batchFile: string) {
 }
 
 // Main
-const batchFile = process.argv[2] || '/Users/romualdczlonkowski/Pliki/n8n-mcp/n8n-mcp/docs/batch_68fff7242850819091cfed64f10fb6b4_output.jsonl';
+const batchFile = process.argv[2] || './docs/batch_68fff7242850819091cfed64f10fb6b4_output.jsonl';
 
 processBatchMetadata(batchFile)
   .then(() => {

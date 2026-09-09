@@ -28,7 +28,7 @@ Test n8n-MCP locally with the provided test script:
 
 ```bash
 # Clone the repository
-git clone https://github.com/czlonkowski/n8n-mcp.git
+git clone https://github.com/AdvancedNolik22-dev/n8n-mcp.git
 cd n8n-mcp
 
 # Build the project
@@ -105,7 +105,7 @@ Starting with version 2.9.2, we use a single optimized Dockerfile for all deploy
 
 ## Production Deployment
 
-> **⚠️ Critical**: Docker caches images locally. Always run `docker pull ghcr.io/czlonkowski/n8n-mcp:latest` before deploying to ensure you have the latest version. This simple step prevents most deployment issues.
+> **⚠️ Critical**: Docker caches images locally. Always run `docker pull ghcr.io/AdvancedNolik22-dev/n8n-mcp:latest` before deploying to ensure you have the latest version. This simple step prevents most deployment issues.
 
 ### Same Server as n8n
 
@@ -119,7 +119,7 @@ The pre-built images are automatically updated with each release and are the eas
 
 ```bash
 # ALWAYS pull the latest image first
-docker pull ghcr.io/czlonkowski/n8n-mcp:latest
+docker pull ghcr.io/AdvancedNolik22-dev/n8n-mcp:latest
 
 # Generate a secure token (save this!)
 AUTH_TOKEN=$(openssl rand -hex 32)
@@ -142,7 +142,7 @@ docker run -d \
   -e AUTH_TOKEN=$AUTH_TOKEN \
   -e LOG_LEVEL=info \
   --restart unless-stopped \
-  ghcr.io/czlonkowski/n8n-mcp:latest
+  ghcr.io/AdvancedNolik22-dev/n8n-mcp:latest
 ```
 
 ### Building from Source (Advanced Users)
@@ -151,7 +151,7 @@ Only build from source if you need custom modifications or are contributing to d
 
 ```bash
 # Clone and build
-git clone https://github.com/czlonkowski/n8n-mcp.git
+git clone https://github.com/AdvancedNolik22-dev/n8n-mcp.git
 cd n8n-mcp
 
 # Build Docker image
@@ -213,7 +213,7 @@ Deploy n8n-MCP on a separate server from your n8n instance:
 ```bash
 # On your cloud server (Hetzner, AWS, DigitalOcean, etc.)
 # ALWAYS pull the latest image first
-docker pull ghcr.io/czlonkowski/n8n-mcp:latest
+docker pull ghcr.io/AdvancedNolik22-dev/n8n-mcp:latest
 
 # Generate auth tokens
 AUTH_TOKEN=$(openssl rand -hex 32)
@@ -231,7 +231,7 @@ docker run -d \
   -e AUTH_TOKEN=$AUTH_TOKEN \
   -e LOG_LEVEL=info \
   --restart unless-stopped \
-  ghcr.io/czlonkowski/n8n-mcp:latest
+  ghcr.io/AdvancedNolik22-dev/n8n-mcp:latest
 ```
 
 #### Building from Source (Advanced)
@@ -240,7 +240,7 @@ Only needed if you're modifying the code:
 
 ```bash
 # Clone and build
-git clone https://github.com/czlonkowski/n8n-mcp.git
+git clone https://github.com/AdvancedNolik22-dev/n8n-mcp.git
 cd n8n-mcp
 docker build -t n8n-mcp:latest .
 
@@ -279,7 +279,7 @@ version: '3.8'
 
 services:
   n8n-mcp:
-    image: ghcr.io/czlonkowski/n8n-mcp:latest
+    image: ghcr.io/AdvancedNolik22-dev/n8n-mcp:latest
     pull_policy: always  # Always pull latest image
     container_name: n8n-mcp
     restart: unless-stopped
@@ -324,7 +324,7 @@ EOF
 **Building from Source (if needed)**
 ```bash
 # Only if you need custom modifications
-git clone https://github.com/czlonkowski/n8n-mcp.git
+git clone https://github.com/AdvancedNolik22-dev/n8n-mcp.git
 cd n8n-mcp
 docker build -t n8n-mcp:local .
 
@@ -467,7 +467,7 @@ You are an n8n workflow expert. Use the MCP tools to:
 - **Always pull latest images**: Docker caches images locally, so run `docker pull` before deployment
 - Run containers with `--read-only` flag if possible
 - Use specific image versions instead of `:latest` in production
-- Regular updates: `docker pull ghcr.io/czlonkowski/n8n-mcp:latest`
+- Regular updates: `docker pull ghcr.io/AdvancedNolik22-dev/n8n-mcp:latest`
 
 ## Troubleshooting
 
@@ -476,7 +476,7 @@ You are an n8n workflow expert. Use the MCP tools to:
 **Using Outdated Cached Images**
 - **Symptom**: Missing features, old bugs reappearing, features not working as documented
 - **Cause**: Docker uses locally cached images instead of pulling the latest version
-- **Solution**: Always run `docker pull ghcr.io/czlonkowski/n8n-mcp:latest` before deployment
+- **Solution**: Always run `docker pull ghcr.io/AdvancedNolik22-dev/n8n-mcp:latest` before deployment
 - **Verification**: Check image age with `docker images | grep n8n-mcp`
 
 ### Common Configuration Issues
@@ -566,8 +566,8 @@ You are an n8n workflow expert. Use the MCP tools to:
 
 **"Features Not Working as Expected"**
 - **Symptom**: Missing features, old bugs, or compatibility issues
-- **Solution**: Pull the latest image: `docker pull ghcr.io/czlonkowski/n8n-mcp:latest`
-- **Check**: Verify image date with `docker inspect ghcr.io/czlonkowski/n8n-mcp:latest | grep Created`
+- **Solution**: Pull the latest image: `docker pull ghcr.io/AdvancedNolik22-dev/n8n-mcp:latest`
+- **Check**: Verify image date with `docker inspect ghcr.io/AdvancedNolik22-dev/n8n-mcp:latest | grep Created`
 
 **"Protocol version mismatch"**
 - n8n-MCP automatically uses version 2024-11-05 for n8n compatibility
@@ -726,7 +726,7 @@ curl http://localhost:3001/health
 curl http://localhost:3001/mcp
 ```
 
-3. **Report issues**: Include the diagnostic information when opening an issue on [GitHub](https://github.com/czlonkowski/n8n-mcp/issues)
+3. **Report issues**: Include the diagnostic information when opening an issue on [GitHub](https://github.com/AdvancedNolik22-dev/n8n-mcp/issues)
 
 ## Performance Tips
 
@@ -744,4 +744,4 @@ curl http://localhost:3001/mcp
 
 ---
 
-Need help? Open an issue on [GitHub](https://github.com/czlonkowski/n8n-mcp/issues) or check the [n8n forums](https://community.n8n.io)
+Need help? Open an issue on [GitHub](https://github.com/AdvancedNolik22-dev/n8n-mcp/issues) or check the [n8n forums](https://community.n8n.io)

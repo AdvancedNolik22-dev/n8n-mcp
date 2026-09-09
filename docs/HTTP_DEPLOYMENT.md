@@ -90,7 +90,7 @@ docker run -d \
   --restart unless-stopped \
   --env-file .env \
   -p 3000:3000 \
-  ghcr.io/czlonkowski/n8n-mcp:latest
+  ghcr.io/AdvancedNolik22-dev/n8n-mcp:latest
 
 # 3. Verify deployment
 curl http://localhost:3000/health
@@ -100,7 +100,7 @@ curl http://localhost:3000/health
 
 ```bash
 # 1. Clone and setup
-git clone https://github.com/czlonkowski/n8n-mcp.git
+git clone https://github.com/AdvancedNolik22-dev/n8n-mcp.git
 cd n8n-mcp
 npm install
 npm run build
@@ -414,7 +414,7 @@ version: '3.8'
 
 services:
   n8n-mcp:
-    image: ghcr.io/czlonkowski/n8n-mcp:latest
+    image: ghcr.io/AdvancedNolik22-dev/n8n-mcp:latest
     container_name: n8n-mcp
     restart: unless-stopped
     environment:
@@ -489,7 +489,7 @@ volumes:
 # /etc/systemd/system/n8n-mcp.service
 [Unit]
 Description=n8n-MCP HTTP Server
-Documentation=https://github.com/czlonkowski/n8n-mcp
+Documentation=https://github.com/AdvancedNolik22-dev/n8n-mcp
 After=network.target
 Requires=network.target
 
@@ -551,7 +551,7 @@ sudo chmod 600 /etc/n8n-mcp/auth_token
 sudo chown n8n-mcp:n8n-mcp /etc/n8n-mcp/auth_token
 
 # Deploy application
-sudo -u n8n-mcp git clone https://github.com/czlonkowski/n8n-mcp.git /opt/n8n-mcp
+sudo -u n8n-mcp git clone https://github.com/AdvancedNolik22-dev/n8n-mcp.git /opt/n8n-mcp
 cd /opt/n8n-mcp
 sudo -u n8n-mcp npm install --production
 sudo -u n8n-mcp npm run build
@@ -712,7 +712,7 @@ docker run --read-only \
   n8n-mcp
 
 # Security scanning
-docker scan ghcr.io/czlonkowski/n8n-mcp:latest
+docker scan ghcr.io/AdvancedNolik22-dev/n8n-mcp:latest
 ```
 
 ## 🔍 Troubleshooting
@@ -920,13 +920,13 @@ Both layers together provide defence in depth. The MCP layer is a convenience kn
 docker exec n8n-mcp node -e "console.log(require('./package.json').version)"
 
 # Update to latest
-docker pull ghcr.io/czlonkowski/n8n-mcp:latest
+docker pull ghcr.io/AdvancedNolik22-dev/n8n-mcp:latest
 docker stop n8n-mcp
 docker rm n8n-mcp
 # Re-run with same environment
 
 # Update to specific version
-docker pull ghcr.io/czlonkowski/n8n-mcp:v2.7.17
+docker pull ghcr.io/AdvancedNolik22-dev/n8n-mcp:v2.7.17
 ```
 
 ### Database Management
@@ -949,7 +949,7 @@ curl -X POST https://your-server.com/mcp \
 
 ## 🆘 Getting Help
 
-- 📚 [Full Documentation](https://github.com/czlonkowski/n8n-mcp)
+- 📚 [Full Documentation](https://github.com/AdvancedNolik22-dev/n8n-mcp)
 - 🚂 [Railway Deployment Guide](./RAILWAY_DEPLOYMENT.md) - Easiest deployment option
-- 🐛 [Report Issues](https://github.com/czlonkowski/n8n-mcp/issues)
-- 💬 [Community Discussions](https://github.com/czlonkowski/n8n-mcp/discussions)
+- 🐛 [Report Issues](https://github.com/AdvancedNolik22-dev/n8n-mcp/issues)
+- 💬 [Community Discussions](https://github.com/AdvancedNolik22-dev/n8n-mcp/discussions)

@@ -2,7 +2,7 @@
 
 This document is the playbook the n8n-mcp maintainer follows when a security incident is active. It is not a replacement for ordinary bug triage -- regular contributions and bug reports still flow through the process described in [`CONTRIBUTING.md`](../CONTRIBUTING.md). For instructions on how to *report* a security vulnerability, see [`SECURITY.md`](../SECURITY.md).
 
-n8n-mcp is a TypeScript MCP server distributed via NPM (`npx n8n-mcp`) and Docker images on GHCR (`ghcr.io/czlonkowski/n8n-mcp`). The incidents this plan covers reflect that reality: a single maintainer, two distribution channels (NPM + GHCR), and a security boundary that is the n8n API itself, not n8n-mcp.
+n8n-mcp is a TypeScript MCP server distributed via NPM (`npx n8n-mcp`) and Docker images on GHCR (`ghcr.io/AdvancedNolik22-dev/n8n-mcp`). The incidents this plan covers reflect that reality: a single maintainer, two distribution channels (NPM + GHCR), and a security boundary that is the n8n API itself, not n8n-mcp.
 
 The hosted service at **n8n-mcp.com** has its own incident response procedures. Patched versions are deployed to the hosted service immediately after the NPM release.
 
@@ -74,7 +74,7 @@ Every incident follows four phases. The first step of every phase is the same: m
 
 **Distribution-specific considerations:**
 - **NPM:** Most n8n-mcp users run via `npx`, which fetches the latest version on each invocation. Patches propagate quickly once published. NPM does not support deleting published versions -- use `npm deprecate` for bad versions and publish a clean superseding version.
-- **Docker:** Docker users pin to specific tags (e.g. `ghcr.io/czlonkowski/n8n-mcp:v2.47.6`). Unlike NPM, GHCR allows deleting image tags. Push a patched image under a new version tag and update the `latest` tag. Consider deleting the compromised tag if it has not been widely pulled.
+- **Docker:** Docker users pin to specific tags (e.g. `ghcr.io/AdvancedNolik22-dev/n8n-mcp:v2.47.6`). Unlike NPM, GHCR allows deleting image tags. Push a patched image under a new version tag and update the `latest` tag. Consider deleting the compromised tag if it has not been widely pulled.
 - Use telemetry (if available) to gauge adoption percentage before proceeding to disclosure.
 
 ### Phase 3: Disclosure
@@ -87,7 +87,7 @@ Every incident follows four phases. The first step of every phase is the same: m
    - For **Medium/Low**: patch in the next regular release cycle and document in the changelog.
 3. **Publish the advisory:**
    - Publish the GHSA (GitHub auto-publishes the CVE via its CNA service).
-   - Include: CVE identifier, affected version range, fixed version, vulnerability class description (without full exploit details), CVSS score, reporter credit (with consent), and upgrade instructions (`npx n8n-mcp@latest` or `docker pull ghcr.io/czlonkowski/n8n-mcp:latest`).
+   - Include: CVE identifier, affected version range, fixed version, vulnerability class description (without full exploit details), CVSS score, reporter credit (with consent), and upgrade instructions (`npx n8n-mcp@latest` or `docker pull ghcr.io/AdvancedNolik22-dev/n8n-mcp:latest`).
 4. **Update the changelog:** Add a `### Security` entry under the new version in `CHANGELOG.md` with the CVE identifier, a brief description, and reporter credit. This is the project's primary communication channel for releases -- there are no separate release notes.
 5. **Credit the reporter** unless they decline. Mention them in the advisory and the `CHANGELOG.md` entry.
 
@@ -129,7 +129,7 @@ Every incident follows four phases. The first step of every phase is the same: m
 
 1. Reproduce the regression. Use `git bisect` to find the introducing commit.
 2. Open a pinned GitHub issue titled `[REGRESSION <version>] ...`.
-3. Post a user-facing workaround within 24 hours (e.g. pin to a prior version: `npx n8n-mcp@<safe-version>` or `ghcr.io/czlonkowski/n8n-mcp:<safe-version>`).
+3. Post a user-facing workaround within 24 hours (e.g. pin to a prior version: `npx n8n-mcp@<safe-version>` or `ghcr.io/AdvancedNolik22-dev/n8n-mcp:<safe-version>`).
 4. Fix, add a regression test, cut a patch release.
 5. Update `CHANGELOG.md` and close the pinned issue.
 

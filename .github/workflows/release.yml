@@ -233,17 +233,17 @@ jobs:
           ### Docker
           ```bash
           # Standard image
-          docker run -p 3000:3000 ghcr.io/czlonkowski/n8n-mcp:v${{ needs.detect-version-change.outputs.new-version }}
+          docker run -p 3000:3000 ghcr.io/AdvancedNolik22-dev/n8n-mcp:v${{ needs.detect-version-change.outputs.new-version }}
           
           # Railway optimized
-          docker run -p 3000:3000 ghcr.io/czlonkowski/n8n-mcp-railway:v${{ needs.detect-version-change.outputs.new-version }}
+          docker run -p 3000:3000 ghcr.io/AdvancedNolik22-dev/n8n-mcp-railway:v${{ needs.detect-version-change.outputs.new-version }}
           ```
           
           ## Documentation
-          - [Installation Guide](https://github.com/czlonkowski/n8n-mcp#installation)
-          - [Docker Deployment](https://github.com/czlonkowski/n8n-mcp/blob/main/docs/DOCKER_README.md)
-          - [n8n Integration](https://github.com/czlonkowski/n8n-mcp/blob/main/docs/N8N_DEPLOYMENT.md)
-          - [Complete Changelog](https://github.com/czlonkowski/n8n-mcp/blob/main/docs/CHANGELOG.md)
+          - [Installation Guide](https://github.com/AdvancedNolik22-dev/n8n-mcp#installation)
+          - [Docker Deployment](https://github.com/AdvancedNolik22-dev/n8n-mcp/blob/main/docs/DOCKER_README.md)
+          - [n8n Integration](https://github.com/AdvancedNolik22-dev/n8n-mcp/blob/main/docs/N8N_DEPLOYMENT.md)
+          - [Complete Changelog](https://github.com/AdvancedNolik22-dev/n8n-mcp/blob/main/docs/CHANGELOG.md)
           
           🤖 *Generated with [Claude Code](https://claude.ai/code)*
           EOF
@@ -423,12 +423,12 @@ jobs:
             }
           };
           pkg.bin = { 'n8n-mcp': './dist/mcp/stdio-wrapper.js' };
-          pkg.repository = { type: 'git', url: 'git+https://github.com/czlonkowski/n8n-mcp.git' };
+          pkg.repository = { type: 'git', url: 'git+https://github.com/AdvancedNolik22-dev/n8n-mcp.git' };
           pkg.keywords = ['n8n', 'mcp', 'model-context-protocol', 'ai', 'workflow', 'automation'];
-          pkg.author = 'Romuald Czlonkowski @ www.aiadvisors.pl/en';
+          pkg.author = 'AdvancedNolik22-dev @ github.com/AdvancedNolik22-dev';
           pkg.license = 'MIT';
-          pkg.bugs = { url: 'https://github.com/czlonkowski/n8n-mcp/issues' };
-          pkg.homepage = 'https://github.com/czlonkowski/n8n-mcp#readme';
+          pkg.bugs = { url: 'https://github.com/AdvancedNolik22-dev/n8n-mcp/issues' };
+          pkg.homepage = 'https://github.com/AdvancedNolik22-dev/n8n-mcp#readme';
           pkg.files = ['dist/**/*', 'ui-apps/dist/**/*', 'data/nodes.db', '.env.example', 'README.md', 'LICENSE'];
           delete pkg.private;
           require('fs').writeFileSync('./package.json', JSON.stringify(pkg, null, 2));
@@ -703,8 +703,8 @@ jobs:
           
           if [ "${{ needs.build-docker.result }}" = "success" ]; then
             echo "- ✅ Docker images built and pushed" >> $GITHUB_STEP_SUMMARY
-            echo "  - Standard: \`ghcr.io/czlonkowski/n8n-mcp:v$VERSION\`" >> $GITHUB_STEP_SUMMARY
-            echo "  - Railway: \`ghcr.io/czlonkowski/n8n-mcp-railway:v$VERSION\`" >> $GITHUB_STEP_SUMMARY
+            echo "  - Standard: \`ghcr.io/AdvancedNolik22-dev/n8n-mcp:v$VERSION\`" >> $GITHUB_STEP_SUMMARY
+            echo "  - Railway: \`ghcr.io/AdvancedNolik22-dev/n8n-mcp-railway:v$VERSION\`" >> $GITHUB_STEP_SUMMARY
           else
             echo "- ❌ Docker image building failed" >> $GITHUB_STEP_SUMMARY
           fi
@@ -723,7 +723,7 @@ jobs:
           echo "npx n8n-mcp" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "# Docker" >> $GITHUB_STEP_SUMMARY
-          echo "docker run -p 3000:3000 ghcr.io/czlonkowski/n8n-mcp:v$VERSION" >> $GITHUB_STEP_SUMMARY
+          echo "docker run -p 3000:3000 ghcr.io/AdvancedNolik22-dev/n8n-mcp:v$VERSION" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
           
           echo "🎉 Release automation completed for v$VERSION!"

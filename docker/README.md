@@ -11,7 +11,7 @@ docker run -d -p 3000:3000 \
   --name n8n-mcp-server \
   -e MCP_MODE=http \
   -e AUTH_TOKEN=your-secure-token-here \
-  ghcr.io/czlonkowski/n8n-mcp:latest
+  ghcr.io/AdvancedNolik22-dev/n8n-mcp:latest
 ```
 
 ### Method 2: Using docker-compose
@@ -45,7 +45,7 @@ Run with the config file:
 docker run -d -p 3000:3000 \
   --name n8n-mcp-server \
   -v $(pwd)/config.json:/app/config.json:ro \
-  ghcr.io/czlonkowski/n8n-mcp:latest
+  ghcr.io/AdvancedNolik22-dev/n8n-mcp:latest
 ```
 
 ### Method 4: Using the n8n-mcp serve Command
@@ -54,7 +54,7 @@ docker run -d -p 3000:3000 \
 docker run -d -p 3000:3000 \
   --name n8n-mcp-server \
   -e AUTH_TOKEN=your-secure-token-here \
-  ghcr.io/czlonkowski/n8n-mcp:latest \
+  ghcr.io/AdvancedNolik22-dev/n8n-mcp:latest \
   n8n-mcp serve
 ```
 

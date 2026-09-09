@@ -20,7 +20,7 @@ Contributions are welcome! Here's how to get started.
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/czlonkowski/n8n-mcp.git
+git clone https://github.com/AdvancedNolik22-dev/n8n-mcp.git
 cd n8n-mcp
 
 # 2. Clone n8n docs (optional but recommended)

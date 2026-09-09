@@ -7,11 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.84.0] - 2026-09-09
+
+### Changed
+
+- **Updated n8n to 2.38.x.** n8n-nodes-base 2.37.2 → 2.38.2, n8n-core 2.37.3 → 2.38.2, n8n-workflow 2.37.2 → 2.38.1, @n8n/n8n-nodes-langchain 2.37.3 → 2.38.2. Rebuilt the node database: 2,755 nodes (832 core: 703 from n8n-nodes-base, 129 from @n8n/n8n-nodes-langchain; 1,923 community, 1,591 verified); `node_versions` grew from 623 to 625 rows. The community node refresh saved 154 node rows across 63 packages and dropped 2 rows their packages no longer declare, and README fetching brought the community nodes with a README to 1,911 of 1,923 (22 fetches failed). With the compressed bulk columns from 2.83.0 the database is 63.2 MiB after the rebuild.
+- **n8n 2.38 contract check.** The Public API moved workflow update and delete, and the deprecated activate and deactivate aliases, from the AJV-validated handlers onto the zod-validated controllers that create already used, so `PUT /workflows/{id}` now rejects an unknown settings key with the `Unrecognized key(s) in object` wording that 2.81.1 recognises; the settings and node key sets are unchanged from 2.37 (`check:settings-drift` reports none). The update body now accepts `description`, which n8n-mcp keeps omitting because older versions reject it, and the update response no longer carries `shared`, which n8n-mcp reads only from the list endpoint. `DELETE /workflows/{id}` answers 409 for a published workflow only when the workflow publication service is enabled, which it is not by default. n8n's instance-level MCP server changed only handshake telemetry and the agent tools: saved sub-agents no longer have to be published, and `search_agents` lost its `publishedOnly` argument, which the `n8n_manage_agents` documentation no longer lists. Every management tool family passed a live run against n8n 2.38.5, including the update and delete routes that moved validators and the agents family through the instance-level MCP server, whose served reference already describes sub-agents as saved rather than published.
+
 ## [2.83.0] - 2026-09-09
 
 ### Changed
 
-- **Bulk columns in the bundled node database are stored gzip-compressed** ([#1067](https://github.com/czlonkowski/n8n-mcp/issues/1067)). `nodes.properties_schema` and `nodes.npm_readme` are written gzip+base64, the layout `templates.workflow_json_compressed` and `node_versions.properties_schema` already used, and decoded in the node repository on read. `data/nodes.db` drops from 98.3 MiB to 62.7 MiB; it had been 1.7 MiB under GitHub's 100 MiB file limit and growing by 1.5 to 2 MiB per n8n minor, so the next n8n update would not have been pushable. Per column: `properties_schema` 30.6 MiB → 3.9 MiB, `npm_readme` 12.4 MiB → 6.1 MiB. Values under 1 KiB stay plain, and plain values written by earlier versions are still read, so an existing database keeps working with this release. `nodes.operations` and `templates.description` stay plain because the FTS indexes tokenise them. Inflating every schema in the database costs 88 ms in total, so there is no cache; `get_node`, `search_nodes` and property search latency are unchanged within noise. `npm run rebuild` repacks the community rows that survive a rebuild, prints the database size after `VACUUM`, and fails at 100 MiB.
+- **Bulk columns in the bundled node database are stored gzip-compressed** ([#1067](https://github.com/AdvancedNolik22-dev/n8n-mcp/issues/1067)). `nodes.properties_schema` and `nodes.npm_readme` are written gzip+base64, the layout `templates.workflow_json_compressed` and `node_versions.properties_schema` already used, and decoded in the node repository on read. `data/nodes.db` drops from 98.3 MiB to 62.7 MiB; it had been 1.7 MiB under GitHub's 100 MiB file limit and growing by 1.5 to 2 MiB per n8n minor, so the next n8n update would not have been pushable. Per column: `properties_schema` 30.6 MiB → 3.9 MiB, `npm_readme` 12.4 MiB → 6.1 MiB. Values under 1 KiB stay plain, and plain values written by earlier versions are still read, so an existing database keeps working with this release. `nodes.operations` and `templates.description` stay plain because the FTS indexes tokenise them. Inflating every schema in the database costs 88 ms in total, so there is no cache; `get_node`, `search_nodes` and property search latency are unchanged within noise. `npm run rebuild` repacks the community rows that survive a rebuild, prints the database size after `VACUUM`, and fails at 100 MiB.
 
 ## [2.82.1] - 2026-09-03
 
@@ -38,41 +45,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **Workflow writes retry without the settings an n8n instance rejects as unknown.** Settings are forwarded untouched on purpose, because the bundled settings table trails n8n's releases and a property dropped up front is dropped silently. The cost was that a setting the instance's write schema does not accept failed the whole write with `request/body/settings must NOT have additional properties`, a message that never names the key, which is what users hit when a GET echoes a property such as `timeSavedMode` that their n8n version stores but does not accept on PUT ([#1017](https://github.com/czlonkowski/n8n-mcp/pull/1017)). The API client now retries without candidates in a fixed order: keys absent from the settings table first, together, then known keys from newest to oldest; keys that predate n8n 1.119.0 are never dropped, since instances that old still report their version and are filtered precisely. Each dropped key is reported in the tool response `warnings` and remembered for the client's lifetime so later writes skip the probe. `timeSavedMode` itself stays writable: n8n 2.36 accepts and echoes it, so marking it derived would have dropped a real setting on current instances.
+- **Workflow writes retry without the settings an n8n instance rejects as unknown.** Settings are forwarded untouched on purpose, because the bundled settings table trails n8n's releases and a property dropped up front is dropped silently. The cost was that a setting the instance's write schema does not accept failed the whole write with `request/body/settings must NOT have additional properties`, a message that never names the key, which is what users hit when a GET echoes a property such as `timeSavedMode` that their n8n version stores but does not accept on PUT ([#1017](https://github.com/AdvancedNolik22-dev/n8n-mcp/pull/1017)). The API client now retries without candidates in a fixed order: keys absent from the settings table first, together, then known keys from newest to oldest; keys that predate n8n 1.119.0 are never dropped, since instances that old still report their version and are filtered precisely. Each dropped key is reported in the tool response `warnings` and remembered for the client's lifetime so later writes skip the probe. `timeSavedMode` itself stays writable: n8n 2.36 accepts and echoes it, so marking it derived would have dropped a real setting on current instances.
 
 ### Fixed
 
-- **Node properties that n8n echoes on GET but rejects on PUT are stripped before a write** ([#983](https://github.com/czlonkowski/n8n-mcp/pull/983)). n8n's node schema is `additionalProperties: false`, and a GET can carry `issues`, `runIndex` or `data`, so a round trip failed with `request/body/nodes/0 must NOT have additional properties`. `cleanWorkflowForCreate` and `cleanWorkflowForUpdate` now keep only the properties of the node schema; the allowlist is derived from that schema, so it cannot drift from it. `onError` and `webhookId` were missing from the schema and are accepted.
-- **A rollback that n8n persisted before rejecting is no longer reported as failed** ([#979](https://github.com/czlonkowski/n8n-mcp/pull/979)). n8n's public API can commit workflow content and then throw on a later check, so `n8n_update_partial_workflow` could warn that a workflow was left broken when it had in fact been restored. After a rollback PUT throws, the handler re-reads the workflow and compares the writable fields with the pre-update snapshot; a match is reported as `rollbackVerifiedAfterError: true`. Webhook ids generated for the comparison are ignored; ids the workflow already carried are compared.
-- **Engine health check reported a hard-coded version** ([#908](https://github.com/czlonkowski/n8n-mcp/pull/908)). `N8NMCPEngine.healthCheck()` returned `2.24.1` regardless of the installed version; it now reports the package version. The HTTP server's response logging reads `writableEnded` instead of the deprecated `finished`.
+- **Node properties that n8n echoes on GET but rejects on PUT are stripped before a write** ([#983](https://github.com/AdvancedNolik22-dev/n8n-mcp/pull/983)). n8n's node schema is `additionalProperties: false`, and a GET can carry `issues`, `runIndex` or `data`, so a round trip failed with `request/body/nodes/0 must NOT have additional properties`. `cleanWorkflowForCreate` and `cleanWorkflowForUpdate` now keep only the properties of the node schema; the allowlist is derived from that schema, so it cannot drift from it. `onError` and `webhookId` were missing from the schema and are accepted.
+- **A rollback that n8n persisted before rejecting is no longer reported as failed** ([#979](https://github.com/AdvancedNolik22-dev/n8n-mcp/pull/979)). n8n's public API can commit workflow content and then throw on a later check, so `n8n_update_partial_workflow` could warn that a workflow was left broken when it had in fact been restored. After a rollback PUT throws, the handler re-reads the workflow and compares the writable fields with the pre-update snapshot; a match is reported as `rollbackVerifiedAfterError: true`. Webhook ids generated for the comparison are ignored; ids the workflow already carried are compared.
+- **Engine health check reported a hard-coded version** ([#908](https://github.com/AdvancedNolik22-dev/n8n-mcp/pull/908)). `N8NMCPEngine.healthCheck()` returned `2.24.1` regardless of the installed version; it now reports the package version. The HTTP server's response logging reads `writableEnded` instead of the deprecated `finished`.
 
 ### Changed
 
-- Round-trip tests for GET→UPDATE workflow writes ([#925](https://github.com/czlonkowski/n8n-mcp/pull/925), [#433](https://github.com/czlonkowski/n8n-mcp/issues/433)): unit tests for the cleaners and integration tests against a live instance for the spread-a-GET-into-an-update patterns the n8n API is particular about.
+- Round-trip tests for GET→UPDATE workflow writes ([#925](https://github.com/AdvancedNolik22-dev/n8n-mcp/pull/925), [#433](https://github.com/AdvancedNolik22-dev/n8n-mcp/issues/433)): unit tests for the cleaners and integration tests against a live instance for the spread-a-GET-into-an-update patterns the n8n API is particular about.
 
 ## [2.80.1] - 2026-09-03
 
 ### Fixed
 
-- **`n8n_executions` now returns the data of AI Agent sub-nodes and of every run of a node** ([#965](https://github.com/czlonkowski/n8n-mcp/pull/965)). The execution processors read only `runData[node][0].data.main`, so a Chat Model, Tool, Memory or Output Parser node, whose task data lives under `ai_*` connection types, showed no items, and a node invoked more than once in an execution (an agent's model, called once per tool round) lost every run after the first. Items are now merged across runs, keyed by connection type and output port, so a node whose runs populate different types keeps them apart, and a port n8n recorded as `null` stays `null`. The last failing run's error is reported in every mode, `executionTime` is the sum across runs, and `preview` mode reads the first item without merging. In `summary` and `filtered` modes only as many items as the limit are merged, and inputs (`includeInputData`), which for AI sub-nodes carry whole prompts, are truncated with the same limit and described by a new `inputMetadata` field. The error processor reads the same helpers, so `error` mode's upstream context and execution path include AI sub-nodes too.
+- **`n8n_executions` now returns the data of AI Agent sub-nodes and of every run of a node** ([#965](https://github.com/AdvancedNolik22-dev/n8n-mcp/pull/965)). The execution processors read only `runData[node][0].data.main`, so a Chat Model, Tool, Memory or Output Parser node, whose task data lives under `ai_*` connection types, showed no items, and a node invoked more than once in an execution (an agent's model, called once per tool round) lost every run after the first. Items are now merged across runs, keyed by connection type and output port, so a node whose runs populate different types keeps them apart, and a port n8n recorded as `null` stays `null`. The last failing run's error is reported in every mode, `executionTime` is the sum across runs, and `preview` mode reads the first item without merging. In `summary` and `filtered` modes only as many items as the limit are merged, and inputs (`includeInputData`), which for AI sub-nodes carry whole prompts, are truncated with the same limit and described by a new `inputMetadata` field. The error processor reads the same helpers, so `error` mode's upstream context and execution path include AI sub-nodes too.
 
 ## [2.80.0] - 2026-09-03
 
 ### Fixed
 
-- **The two SSRF validators agree on loopback literals under `WEBHOOK_SECURITY_MODE=moderate`** ([#1033](https://github.com/czlonkowski/n8n-mcp/issues/1033), [#1040](https://github.com/czlonkowski/n8n-mcp/pull/1040)). The synchronous check that gates `x-n8n-url` and the instance URL accepted `http://localhost:5678` in moderate mode but refused `http://127.0.0.1:5678` as a private address, while the DNS-resolving check used for webhook triggers accepted both. A shared loopback test now drives both validators, so `localhost`, any `127.0.0.0/8` literal, `0.0.0.0` and `[::1]` are treated alike: allowed in moderate, refused in strict. The resolved-address check keeps its previous narrower rule, so a DNS name that resolves to `0.0.0.0` is still refused. Cloud metadata endpoints and IPv6 tunneling prefixes are checked before the moderate allowance in both validators, as before. The `SECURITY_HARDENING.md` row for the mode lists the accepted spellings.
+- **The two SSRF validators agree on loopback literals under `WEBHOOK_SECURITY_MODE=moderate`** ([#1033](https://github.com/AdvancedNolik22-dev/n8n-mcp/issues/1033), [#1040](https://github.com/AdvancedNolik22-dev/n8n-mcp/pull/1040)). The synchronous check that gates `x-n8n-url` and the instance URL accepted `http://localhost:5678` in moderate mode but refused `http://127.0.0.1:5678` as a private address, while the DNS-resolving check used for webhook triggers accepted both. A shared loopback test now drives both validators, so `localhost`, any `127.0.0.0/8` literal, `0.0.0.0` and `[::1]` are treated alike: allowed in moderate, refused in strict. The resolved-address check keeps its previous narrower rule, so a DNS name that resolves to `0.0.0.0` is still refused. Cloud metadata endpoints and IPv6 tunneling prefixes are checked before the moderate allowance in both validators, as before. The `SECURITY_HARDENING.md` row for the mode lists the accepted spellings.
 
 ## [2.79.1] - 2026-09-03
 
 ### Fixed
 
-- **Telemetry sanitizer no longer redacts non-secret workflow fields** ([n8n-mcp-backend#151](https://github.com/czlonkowski/n8n-mcp-backend/issues/151)). The sanitizer that strips secrets from opt-in telemetry treated any run of 20 or more token characters as a secret and matched sensitive key names by substring, so `authentication: predefinedCredentialType`, `nodeCredentialType`, `$getWorkflowStaticData` in Code nodes, long field names in expressions, UUID node ids and webhook paths, the auto-generated `$fromAI` comment and `maxTokens` all arrived as `[REDACTED]`. Measured on 1,200 bundled templates, 270 of the 749 workflows that validate cleanly no longer validated after sanitization; with this release none fail. The generic fallback now fires only on runs of 32 or more characters that contain at least three digits and never on UUIDs. Key names are matched by whole word (`accessToken` and `client_secret` are secrets, `authentication` and `tokenizer` are not), `*Id` keys and resource-locator `value`s are treated as identifiers, and a `{ name, value }` parameter inherits its sibling's classification so `X-API-Key` and `Authorization` header values are still redacted. Three patterns that could destroy surrounding content are tightened: the URL-with-credentials pattern could span several lines of code up to a later `@`, a `/webhook/` URL anywhere in a string replaced the whole string, and the Bearer and webhook patterns consumed `{{ }}` expressions. The phone pattern no longer matches digit runs inside hex identifiers, and the email pattern no longer scans to the end of every long token run, which made sanitization quadratic on hyphen-dense code. URL-named fields stay fully redacted (GHSA-f3rg-xqjj-cj9w); secrets under secret-named keys, provider-specific keys, JWTs, emails and phone numbers are redacted as before, and a few shapes the old generic fallback had covered by accident are now matched explicitly: `Basic` credentials, Google API keys and OAuth client secrets, SendGrid, Anthropic and Shopify keys, secrets in URL query strings, Slack and Discord webhook URLs, and strings inside arrays.
+- **Telemetry sanitizer no longer redacts non-secret workflow fields** ([n8n-mcp-backend#151](https://github.com/AdvancedNolik22-dev/n8n-mcp-backend/issues/151)). The sanitizer that strips secrets from opt-in telemetry treated any run of 20 or more token characters as a secret and matched sensitive key names by substring, so `authentication: predefinedCredentialType`, `nodeCredentialType`, `$getWorkflowStaticData` in Code nodes, long field names in expressions, UUID node ids and webhook paths, the auto-generated `$fromAI` comment and `maxTokens` all arrived as `[REDACTED]`. Measured on 1,200 bundled templates, 270 of the 749 workflows that validate cleanly no longer validated after sanitization; with this release none fail. The generic fallback now fires only on runs of 32 or more characters that contain at least three digits and never on UUIDs. Key names are matched by whole word (`accessToken` and `client_secret` are secrets, `authentication` and `tokenizer` are not), `*Id` keys and resource-locator `value`s are treated as identifiers, and a `{ name, value }` parameter inherits its sibling's classification so `X-API-Key` and `Authorization` header values are still redacted. Three patterns that could destroy surrounding content are tightened: the URL-with-credentials pattern could span several lines of code up to a later `@`, a `/webhook/` URL anywhere in a string replaced the whole string, and the Bearer and webhook patterns consumed `{{ }}` expressions. The phone pattern no longer matches digit runs inside hex identifiers, and the email pattern no longer scans to the end of every long token run, which made sanitization quadratic on hyphen-dense code. URL-named fields stay fully redacted (GHSA-f3rg-xqjj-cj9w); secrets under secret-named keys, provider-specific keys, JWTs, emails and phone numbers are redacted as before, and a few shapes the old generic fallback had covered by accident are now matched explicitly: `Basic` credentials, Google API keys and OAuth client secrets, SendGrid, Anthropic and Shopify keys, secrets in URL query strings, Slack and Discord webhook URLs, and strings inside arrays.
 
 ## [2.79.0] - 2026-09-02
 
 ### Changed
 
-- **The most common agent call errors now resolve instead of failing** ([#1051](https://github.com/czlonkowski/n8n-mcp/issues/1051)). Telemetry for the last week showed roughly 1,800 `error_occurred` events from three call shapes that carried enough information to act on. `n8n_executions` no longer requires `action`: an omitted value lists executions, and `action=get` without an `id` lists the executions of the given workflow (or recent executions) and says so in the response `message`; `delete` still requires `id`, and an unknown action gets a suggestion when the value belongs to another tool or is a common misspelling of `list`. `n8n_workflow_versions` defaults `mode` to `list`. `n8n_workflow_versions` and `n8n_test_workflow` accept `id` as an alias for `workflowId`, and the missing-parameter error of `n8n_test_workflow` names the parameter and the alias. `get_node` maps the retired `get_node_essentials` / `get_node_info` vocabulary onto the canonical parameters before validation: `mode` values `essentials`, `minimal`, `standard`, `full` and `operations` become `mode=info` at the matching `detail`, `properties` and `search` become `search_properties`, and `detail` values `essentials`, `summary` and `short` become `standard`, `minimal` and `minimal`. Aliases are logged at debug level; the schemas and documentation advertise only the canonical values. The `DISABLED_TOOL_OPERATIONS` policy treats an omitted `action` or `mode` as the new default, so a rule that disables `list` still applies, the `get`-without-`id` fallback refuses to list when `list` is disabled, and a filtered tool schema drops a `default` that names a disabled operation. Callers that already pass the canonical parameters see no change.
+- **The most common agent call errors now resolve instead of failing** ([#1051](https://github.com/AdvancedNolik22-dev/n8n-mcp/issues/1051)). Telemetry for the last week showed roughly 1,800 `error_occurred` events from three call shapes that carried enough information to act on. `n8n_executions` no longer requires `action`: an omitted value lists executions, and `action=get` without an `id` lists the executions of the given workflow (or recent executions) and says so in the response `message`; `delete` still requires `id`, and an unknown action gets a suggestion when the value belongs to another tool or is a common misspelling of `list`. `n8n_workflow_versions` defaults `mode` to `list`. `n8n_workflow_versions` and `n8n_test_workflow` accept `id` as an alias for `workflowId`, and the missing-parameter error of `n8n_test_workflow` names the parameter and the alias. `get_node` maps the retired `get_node_essentials` / `get_node_info` vocabulary onto the canonical parameters before validation: `mode` values `essentials`, `minimal`, `standard`, `full` and `operations` become `mode=info` at the matching `detail`, `properties` and `search` become `search_properties`, and `detail` values `essentials`, `summary` and `short` become `standard`, `minimal` and `minimal`. Aliases are logged at debug level; the schemas and documentation advertise only the canonical values. The `DISABLED_TOOL_OPERATIONS` policy treats an omitted `action` or `mode` as the new default, so a rule that disables `list` still applies, the `get`-without-`id` fallback refuses to list when `list` is disabled, and a filtered tool schema drops a `default` that names a disabled operation. Callers that already pass the canonical parameters see no change.
 
 ## [2.78.0] - 2026-09-02
 
@@ -91,17 +98,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **A rejected workflow write now names the keys it sent** ([#1047](https://github.com/czlonkowski/n8n-mcp/issues/1047)). n8n answers an unknown property in a workflow write with `must NOT have additional properties` and never says which property broke it — diagnosing an instance of this class meant diffing n8n source (#248, #466, #1043). When the rejection hits `request/body` or `request/body/settings`, the error now appends the top-level or settings key names that were actually sent, flags settings keys missing from n8n-mcp's known-settings table, and surfaces the property name when n8n's validator params carry one. Key names only, never values.
+- **A rejected workflow write now names the keys it sent** ([#1047](https://github.com/AdvancedNolik22-dev/n8n-mcp/issues/1047)). n8n answers an unknown property in a workflow write with `must NOT have additional properties` and never says which property broke it — diagnosing an instance of this class meant diffing n8n source (#248, #466, #1043). When the rejection hits `request/body` or `request/body/settings`, the error now appends the top-level or settings key names that were actually sent, flags settings keys missing from n8n-mcp's known-settings table, and surfaces the property name when n8n's validator params carry one. Key names only, never values.
 
 ### Fixed
 
-- **Multi-tenant: rotated credentials no longer keep serving from frozen sessions** ([#1045](https://github.com/czlonkowski/n8n-mcp/issues/1045)). Two defects in the `instance` session strategy. The session's `configHash` — its config identity — covered only the URL and instance ID, so rotating the n8n API key or the instance-level MCP access token produced a byte-identical hash, so a routing layer comparing config identities had no way to tell that a live session was still bound to the pre-rotation secrets. The hash input now includes both credentials, so a rotation changes the session's config identity and the stale session can be detected and re-initialized (an initialize always binds the fresh credentials); only the first 8 characters of the digest — keyed with the server's auth token, so it cannot be used to verify credential guesses offline — ever appear in session IDs and logs, never the values. The server also refreshes a live `instance`-strategy session itself when a request arrives carrying the complete tenant identity (API key plus the same instance ID and same URL the session is bound to) with changed credentials. Fields a request omits stay as stored, and a partial context, a different instance ID, or a different URL never overwrites a session's credentials. Separately, `exportSessionState()`/`restoreSessionState()` rebuilt the context field by field and silently dropped `n8nMcpAccessToken` (and the timeout/retry tuning) for every session persisted across a restart, so `n8n_manage_agents` reported `NOT_CONFIGURED` after every deploy for a token that was still correctly stored. `SessionState['context']` is now derived from `InstanceContext` and export/restore copy the whole context, so every field — current and future — survives the round-trip.
+- **Multi-tenant: rotated credentials no longer keep serving from frozen sessions** ([#1045](https://github.com/AdvancedNolik22-dev/n8n-mcp/issues/1045)). Two defects in the `instance` session strategy. The session's `configHash` — its config identity — covered only the URL and instance ID, so rotating the n8n API key or the instance-level MCP access token produced a byte-identical hash, so a routing layer comparing config identities had no way to tell that a live session was still bound to the pre-rotation secrets. The hash input now includes both credentials, so a rotation changes the session's config identity and the stale session can be detected and re-initialized (an initialize always binds the fresh credentials); only the first 8 characters of the digest — keyed with the server's auth token, so it cannot be used to verify credential guesses offline — ever appear in session IDs and logs, never the values. The server also refreshes a live `instance`-strategy session itself when a request arrives carrying the complete tenant identity (API key plus the same instance ID and same URL the session is bound to) with changed credentials. Fields a request omits stay as stored, and a partial context, a different instance ID, or a different URL never overwrites a session's credentials. Separately, `exportSessionState()`/`restoreSessionState()` rebuilt the context field by field and silently dropped `n8nMcpAccessToken` (and the timeout/retry tuning) for every session persisted across a restart, so `n8n_manage_agents` reported `NOT_CONFIGURED` after every deploy for a token that was still correctly stored. `SessionState['context']` is now derived from `InstanceContext` and export/restore copy the whole context, so every field — current and future — survives the round-trip.
 
 ## [2.76.1] - 2026-08-31
 
 ### Fixed
 
-- **Workflow updates no longer fail with `settings must NOT have additional properties` against n8n ≥ 2.36.0** ([#1043](https://github.com/czlonkowski/n8n-mcp/issues/1043)). n8n 2.36.0 added `engineType` to the workflow's persisted settings without adding it to the Public API write schema, so `n8n_update_partial_workflow` and `n8n_update_full_workflow` — which read the workflow, apply the change and write it back — echoed the property into a `PUT` the schema rejects. `engineType` is now stripped from every create and update payload, like `binaryMode` and `credentialResolverId` before it. Stripping does not change the setting on the instance: n8n keeps stored settings for keys the request omits.
+- **Workflow updates no longer fail with `settings must NOT have additional properties` against n8n ≥ 2.36.0** ([#1043](https://github.com/AdvancedNolik22-dev/n8n-mcp/issues/1043)). n8n 2.36.0 added `engineType` to the workflow's persisted settings without adding it to the Public API write schema, so `n8n_update_partial_workflow` and `n8n_update_full_workflow` — which read the workflow, apply the change and write it back — echoed the property into a `PUT` the schema rejects. `engineType` is now stripped from every create and update payload, like `binaryMode` and `credentialResolverId` before it. Stripping does not change the setting on the instance: n8n keeps stored settings for keys the request omits.
 
 ### Changed
 
@@ -557,7 +564,7 @@ A systematic false-positive audit of the validators — every rule inventoried (
 
 - **Documented npm cache contention for multi-client `npx` setups** (#866). Added guidance to `docs/SELF_HOSTING.md` for running several `npx n8n-mcp` clients on one machine: give each client a unique `npm_config_cache` to avoid concurrent-extraction races, and keep `DISABLE_CONSOLE_OUTPUT` set for stdio clients.
 
-Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.59.4] - 2026-06-23
 
@@ -566,7 +573,7 @@ Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
 - **Server no longer crashes on startup with `ERR_REQUIRE_ESM`** (#864). v2.59.1's `uuid` 10 → 14 bump (#850) moved the dependency to an ESM-only build (`"type": "module"`, no `require` export condition), but the shipped artifact is compiled to CommonJS and calls `require('uuid')`. On the supported minimum Node (`>=18`) — and any Node 20.x before 20.19 or 22.x before 22.12, including the reporter's 22.11 — Node's CommonJS loader throws `ERR_REQUIRE_ESM` at module load, before any config is read, so every MCP client (Claude Code, Cursor, etc.) just saw `MCP error -32000: Connection closed`. It slipped through release verification because `tsc` only type-checks, the Vitest suite runs under an ESM transform pipeline, and CI/Docker/local dev all ran Node ≥ 20.19/22.12 where `require()` of an ESM module is silently tolerated. `uuid` is now pinned to `^11.1.1`, which ships a CommonJS build (a `node.require` export condition) and still clears the original advisory (GHSA-w5hq-g745-h8pq / CVE-2026-41907 does not affect v11), so the security fix from #850 is preserved with no source changes — `v4`/`v5` named exports are API-identical across v10/v11/v14. Reported by @anpe-efficy (André Pereira).
 - **Added a CommonJS runtime smoke test** (`npm run test:cjs-runtime` and a dedicated `cjs-runtime` CI job) that loads the compiled `dist/` under the strictest CommonJS loader the running Node supports. On Node ≥ 20.19/22.12 it forces `require()`-of-ESM off via `--no-experimental-require-module` so the mismatch can't be masked; on older Node (down to the `>=18` floor) that strict behavior is already the default and the flag — which doesn't exist there — is omitted. Either way a CJS/ESM mismatch in any shipped dependency fails CI regardless of the runner's Node version, closing the gap that let #864 reach three releases.
 
-Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.59.3] - 2026-06-21
 
@@ -583,7 +590,7 @@ Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
 
 - **Railway deployment guide gains an upfront `AUTH_TOKEN` callout** (#152). Added a "Before You Deploy" section near the top of `docs/RAILWAY_DEPLOYMENT.md` covering both deploy paths — the one-click template (which pre-sets a placeholder `AUTH_TOKEN` you must replace) and a self-hosted repo/Dockerfile deploy (where Railway does not auto-create the variable, so the server won't start until you add it). Reported by @gthay.
 
-Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.59.2] - 2026-06-19
 
@@ -591,7 +598,7 @@ Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
 
 - **`MULTI_TENANT_ALLOW_CONCURRENT_SESSIONS` env flag** (multi-tenant `instance` strategy). By default the instance strategy assumes one MCP session per instance and, on every `initialize`, eagerly evicts all other live sessions for that same instance (`reason: instance_reconnect`). When several MCP clients target the same instance concurrently — e.g. an automation agent, an IDE, and a web client all authenticated as one tenant — each client's `initialize` destroys the others' active sessions, so their next tool call fast-fails with `-32000 "Session not found or expired"` and the client reports a dropped connection. Set `MULTI_TENANT_ALLOW_CONCURRENT_SESSIONS=true` to skip the eager eviction and let concurrent same-instance sessions coexist; sessions are then reclaimed only by their natural lifecycle (transport close, the `SESSION_TIMEOUT_MINUTES` idle sweep, and the `N8N_MCP_MAX_SESSIONS` cap). Default `false` preserves the previous one-session-per-instance behavior. Hosted multi-client deployments should enable it.
 
-Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.59.1] - 2026-06-19
 
@@ -603,7 +610,7 @@ Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
 
 The remaining open Dependabot advisories are not addressed here because they do not reach a shipped artifact: the bulk are transitive dependencies of the n8n packages (`n8n-core`, `n8n-nodes-base`, `n8n-workflow`, `@n8n/n8n-nodes-langchain`), which are build-time-only (used to generate `data/nodes.db`) and are absent from `package.runtime.json` — they clear on the regular n8n dependency updates. One low-severity `esbuild` advisory (Windows dev-server arbitrary file read, GHSA-g7r4-m6w7-qqqr) remains pinned by `vite`'s `^0.27.0` range and is unreachable in this project (esbuild is an internal Vite/Vitest transform, not an exposed dev server; CI is Linux).
 
-Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.59.0] - 2026-06-18
 
@@ -611,7 +618,7 @@ Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
 
 - **`n8n_get_workflow` gains `mode="filtered"`** for reading a single node (or a handful of nodes) without pulling the whole workflow. On large workflows with long Code-node source, `mode="full"`/`mode="active"` can return a payload big enough to be truncated client-side, leaving `jsCode`/`pythonCode` unreadable. The new mode takes a `nodeNames` array (matched against node names *or* node IDs) and returns only those nodes with their full config, plus light metadata (`nodeCount`, `returnedCount`, and a `notFound` list for any keys that matched nothing). Recommended flow: `mode="structure"` to discover node names, then `mode="filtered"` to pull the specific heavy node. Requested by @MiRaIOMeZaSu (#101).
 
-Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.58.0] - 2026-06-17
 
@@ -624,7 +631,7 @@ Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
 - **`npm run update:n8n` no longer aborts at its validation step.** The post-rebuild validation invoked a `test-nodes` npm script pointing at `dist/scripts/test-nodes.js`, a file removed long ago, so every run ended with `Cannot find module .../test-nodes.js` and `❌ Update failed at validation step` even though the dependency bump and database rebuild had completed. The redundant `test-nodes` step (critical-node checks are already covered by `npm run validate`) and its dangling npm script have been removed.
 - **Published runtime manifest aligned with the build.** `package.runtime.json` (the manifest published to npm) pinned `@modelcontextprotocol/sdk` to `1.20.1` while the code is built and tested against `1.28.0`, and declared `node >=16.0.0` despite depending on `express@^5` (which requires Node ≥18). Both are now corrected (SDK `1.28.0`, engine `>=18.0.0`) so runtime-only installs match the tested build.
 
-Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.57.4] - 2026-06-13
 
@@ -632,7 +639,7 @@ Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
 
 - Fix incorrect authorization for tenant-scoped workflow version backups in multi-tenant HTTP mode (GHSA-2cf7-hpwf-47h9). Reported by @DavidCarliez.
 
-Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.57.3] - 2026-06-10
 
@@ -641,7 +648,7 @@ Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
 - **Workflow payloads mangled by HTTP MCP clients are repaired before validation (#814).** Some HTTP MCP clients (opencode confirmed) re-serialize nested tool arguments before they reach the server: arrays arrive as dense numeric-index records (`[x, y]` → `{"0": x, "1": y}`), numbers as strings (`typeVersion: "3"`), and objects as JSON strings (`parameters: "{}"`), which made `n8n_update_partial_workflow` effectively unusable and `n8n_create_workflow` intermittently fail on those clients. A new input normalizer restores the intended shapes inside the Zod schemas for workflow create/update, the partial-update diff request (the `operations` array itself plus `node`, `updates`, `patches`, `connections`, `settings`, and `position` fields), and `tags` on `n8n_list_workflows`. Guard rails: only canonical array-index keys trigger conversion (leading-zero keys like `"00"` are preserved as objects), number coercion accepts canonical decimal strings only (no `"0x10"`/`"1e3"`), normalization is depth-capped against pathological nesting, nested strings are never JSON-parsed (so `jsCode` payloads are safe), and node `credentials` — never an array in n8n — are exempt from dense conversion. Well-formed input from stdio clients passes through byte-identical. Likely also resolves #600, #611, and #492. Thanks to @cnYui for the fix (#836).
 - **`n8n_manage_credentials` now explains itself when an n8n instance cannot read credentials (#809).** Not every n8n deployment allows credential reads through its public API: older versions reject `GET /credentials` outright (405), and API-key scopes or instance settings can block it (403) — so the `list` action failed with a bare `GET method not allowed` and agents could not tell an unsupported action from a transient error. `list` and `get` now detect the rejection and return a clear `NOT_SUPPORTED` response explaining the likely causes (version vs. permissions), noting that `create`, `delete`, and `getSchema` generally still work (`update` too, where the API version supports it), pointing to the n8n UI for credential IDs, and carrying the underlying status code and message in `details` for diagnosis. The tool description documents the requirement. Deployments whose API does permit credential reads (used by `list` pagination and the `get` list-fallback since 2.57.1) are unaffected.
 
-Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.57.2] - 2026-06-09
 
@@ -650,7 +657,7 @@ Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
 - **`n8n_update_partial_workflow` no longer fails with `request/body must NOT have additional properties` on n8n 2.x.** n8n's Public API write schema (`PUT /workflows/{id}`) declares `additionalProperties: false`, but its `GET` response echoes back server-managed fields that the write schema does not accept — including a top-level `availableInMCP` column on n8n 2.x, plus fields not even in the OpenAPI spec (`activeVersionId`, `versionCounter`, `nodeGroups`). The previous payload cleaner used a denylist, so any newly-echoed field leaked into the update request and was rejected. `cleanWorkflowForUpdate` now uses an allowlist (`name`, `nodes`, `connections`, `settings`), which is forward-compatible — fields n8n adds in future versions can no longer break updates. (`availableInMCP` *inside* `settings` remains a valid, writable property and is preserved.) Also resolves the `nodeGroups` reports (#831, #838).
 - **`n8n_update_full_workflow` no longer rejects updates that omit `name` or `settings`.** n8n's `PUT /workflows/{id}` is a full replace and requires `name`, `nodes`, `connections` and `settings` to all be present, but the tool lists them as optional. The handler now always fetches the current workflow and merges the caller's partial update over it, so omitted required fields are preserved from the existing workflow instead of failing with `request/body must have required property 'name'`.
 
-Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.57.1] - 2026-06-03
 
@@ -658,7 +665,7 @@ Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
 
 - **`n8n_manage_credentials` can now paginate past 100 credentials (#816).** The `list` action accepts a `cursor` (and optional `limit`) and returns `nextCursor`, mirroring `n8n_list_workflows`, so callers can page through every credential on instances with more than 100. This also fixes two silent knock-on bugs: `get` by id no longer returns a false "not found" for credentials living beyond the first page (its list-fallback now scans all pages), and `includeUsage: true` on `list` now performs a complete all-pages scan instead of reporting only the first 100, so credential inventory/rotation audits no longer under-report.
 
-Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.57.0] - 2026-06-02
 
@@ -666,7 +673,7 @@ Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
 
 - **Updated n8n to 2.23.0.** Bumped the four n8n packages this server loads at build time: `n8n-nodes-base` 2.21.2 → 2.23.0, `n8n-core` 2.21.4 → 2.23.1, `n8n-workflow` 2.21.1 → 2.23.0, and `@n8n/n8n-nodes-langchain` 2.21.4 → 2.23.0. The node database was rebuilt from the upgraded packages (822 core nodes, 1,143 AI-capable tool variants, 606 versioned nodes, 271 triggers) and the existing community-node corpus (1,029 nodes) was preserved with its READMEs and AI summaries intact. README badge and node-count copy updated to 1,851 total (822 core + 1,029 community).
 
-Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.56.1] - 2026-06-02
 
@@ -678,7 +685,7 @@ Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
 
 - **Removed the global `truncate` mode from `n8n_workflow_versions`.** Per-workflow `delete`/`prune` plus the automatic retention sweep replace it.
 
-Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.56.0] - 2026-05-23
 
@@ -686,7 +693,7 @@ Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
 
 - **`additionalTools` hook on `EngineOptions` for host-injected MCP tools (#798, #799).** Multi-tenant consumers of `N8NMCPEngine` (notably the n8n-mcp SaaS at api.n8n-mcp.com) need to expose a small number of tools that belong to their hosting layer rather than upstream — for example a tool that lets the AI agent enumerate and switch between the multiple n8n instances a single user has registered, which depends on host-specific concepts (multi-tenant credential storage, named instance registry, per-user defaults) that have no place in this repo. Before this change there was no way to inject such a tool into the engine's `tools/list` / `tools/call` surface without forking the MCP server layer or wrapping it externally and reimplementing the JSON-RPC request/response boundary, both of which couple the host to upstream wire-format details. `EngineOptions` now accepts an optional `additionalTools?: AdditionalTool[]`, where each entry pairs a standard MCP `Tool` (name, description, inputSchema) with an `async handler(args, { instanceContext })` that returns a `CallToolResult`. The option threads through `N8NMCPEngine` → `SingleSessionHTTPServer` → `N8NDocumentationMCPServer`, registering tools at construction; collisions with built-in documentation or management tool names — and duplicate names within `additionalTools` — throw immediately so misconfiguration fails fast rather than shadowing core tools. Enabled additional tools are appended to `tools/list` after the built-in surfaces, and the existing `DISABLED_TOOLS` env-var filter applies uniformly. `tools/call` routes by name: matching calls dispatch to the host's handler with the current per-session `InstanceContext` (so per-tenant credentials and defaults are available), and the handler's `CallToolResult` is returned unchanged — the built-in stringify/wrap path that built-in tools go through is skipped, letting hosts control the response shape and content types. Non-matching calls continue through the existing built-in dispatch. Argument validation (`expected object`) applies to additional tools the same way it does to built-ins. New `AdditionalTool` and `AdditionalToolContext` types are re-exported from `src/index.ts` and `src/mcp-engine.ts` for integrator use. Hosts that prefer not to emit internal tool names in telemetry should filter at the telemetry sink — additional tools receive the same `trackToolUsage(name, true, duration)` treatment as built-ins. Coverage: six unit tests against the registry covering handler dispatch with `instanceContext`, non-object argument rejection, `DISABLED_TOOLS` filtering, collision rejection against both documentation and management tool name lists, duplicate-name rejection, and a request-handler-level test that asserts the additional tool's `CallToolResult` is returned unchanged through the full `tools/call` path (no double-wrapping regression). No breaking changes — the field is optional and existing engine consumers see identical behavior when omitted.
 
-Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.55.0] - 2026-05-22
 
@@ -694,7 +701,7 @@ Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
 
 - **Updated n8n to 2.21.7.** Bumped the four n8n packages this server loads at build time: `n8n-nodes-base` 2.20.4 → 2.21.2, `n8n-core` 2.20.3 → 2.21.4, `n8n-workflow` 2.20.0 → 2.21.1, and `@n8n/n8n-nodes-langchain` 2.20.4 → 2.21.4. The node database was rebuilt from the upgraded packages (822 core nodes, 542 AI-capable tool variants, 86% documentation coverage) and the community-node corpus was refreshed against the n8n verified-nodes Strapi API and the npm registry — total community count is now 1,029 (911 verified + 118 unverified), and incremental README/AI-summary generation backfilled the new arrivals (1,022/1,029 with README, 1,021/1,029 with AI summary). README badge and node-count copy updated to 1,851 total (822 core + 1,029 community, 911 verified).
 
-Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.54.0] - 2026-05-18
 
@@ -702,7 +709,7 @@ Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
 
 - **MCP Resources surface for n8n-skills markdown.** The `n8n-skills` repo ships seven expert skills (~30 markdown files covering Code node JavaScript/Python, expression syntax, node configuration, validation, workflow patterns, and the n8n-mcp tools themselves) as a Claude Code plugin. That distribution path only reaches Claude Code users with the plugin installed; every other MCP client — Cursor, Claude Desktop without plugins, the OpenAI Agents SDK, custom agents — had no way to discover or read this content even though they all consume `n8n-mcp`. The MCP `resources` capability is the standard surface for on-demand markdown context, and the server already implemented `ListResources`/`ReadResource` for UI apps under `ui://n8n-mcp/{id}` (`src/mcp/server.ts:901-938`), so a parallel `skill://n8n-mcp/{name}/{file}` namespace fits the existing plumbing exactly. A new `SkillResourceRegistry` mirrors `UIAppRegistry`: it scans `data/skills/*/*.md` at server construction, parses frontmatter (or the first heading as fallback) for resource metadata, and serves each markdown file with `mimeType: text/markdown`. A bare `skill://n8n-mcp/{name}` URI resolves to that skill's `SKILL.md` as a convenience, and a new `resources/templates/list` handler advertises both URI templates (`skill://n8n-mcp/{name}` and `skill://n8n-mcp/{name}/{file}`) so capable clients can construct URIs without enumerating first. The existing `ui://n8n-mcp/{id}` resolution is unchanged — both schemes coexist in the same `ListResources`/`ReadResource` handlers. The skill markdown is brought into the npm artifact and Docker image via a new `npm run sync:skills` script that copies from a sibling `n8n-skills/skills/` checkout (configurable via `N8N_SKILLS_SOURCE`), with the copy committed under `data/skills/` so CI and downstream consumers do not need the sibling repo present. `package.json` `files` and the Dockerfile both ship `data/skills/`. Skills are exposed unconditionally — they are low-cost (~28k lines, loaded once at startup) and Claude Code's plugin distribution and the MCP Resources surface intentionally serve different clients: a Claude Code user installs the plugin for the auto-loaded `Skill` tool UX, and everyone else now gets the same content via `resources/list`. Coverage: 15 unit tests against the registry.
 
-Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.53.2] - 2026-05-18
 
@@ -710,7 +717,7 @@ Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
 
 - **Batch `n8n_update_partial_workflow` operations no longer fail with a phantom "Source node not found" when a later `updateNode` renames a node referenced by an earlier connection op (#788).** The diff engine previously processed operations in two passes — every node op (add/remove/update/move/enable/disable) ran first, then every connection op — so a batch like `[removeConnection NodeA→NodeB, removeNode NodeB, updateNode NodeA→{name:"NodeB"}, addConnection NodeB→NodeC]` validated `operation 0` against state that already had the rename projected on it, even though the rename was scheduled for `operation 3`. Because connection references are rewritten in-place when a node is renamed (the #353 auto-update behavior), the original `NodeA` had effectively vanished from the validator's view before its own `removeConnection` ran, and the error's "Available nodes" list — which showed the **post-rename** node set against a failure reported on `operation 0` — was the giveaway. The engine now applies operations strictly in caller order and runs `flushPendingRenames()` after each op so connection references catch up to the new node name *before* the next op validates; chained renames (`A→B` then `B→C`) consequently compose correctly, where the previous renameMap-based post-pass would have collided on the intermediate key. A single backward-compat case is preserved: an `addConnection` or `rewireConnection` that references an `addNode` declared later in the same batch is still accepted — that one `addNode` is hoisted to just before its first earlier reference. Other op kinds (notably `removeConnection X→Y` before `addNode X`, or `replaceConnections` referencing a not-yet-added node) are no longer reordered and now fail validation at their actual call site, which matches what the caller is actually asking for. As a defense against a related Copilot-flagged edge case, `applyUpdateNode` no longer records a rename intent in `renameMap` before the updates loop runs — if a subsequent path inside the same updates object throws (forbidden path keys, `__patch_find_replace` failures), the rename is never committed, so `continueOnError` mode cannot carry a phantom rename into a later op and silently rewrite connection keys to a name no node carries. Six regression tests cover the #788 batch in both `validateOnly` modes, the `continueOnError` variant, the legacy hoist, the strict negative case, and the rename-leak guard. The `docs/workflow-diff-examples.md` "two-pass processing" section is rewritten to describe the new sequential semantics and the single backward-compat hoist. Reported by @DocksDocks; fix by @AjTheSpidey.
 
-Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.53.1] - 2026-05-18
 
@@ -718,7 +725,7 @@ Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
 
 - **SSRF guard no longer blanket-rejects IPv6 addresses on DNS64/NAT64 networks reaching public IPv4 servers.** A community user reported that every n8n API call started failing with `SSRF protection: IPv6 private address not allowed` after their environment switched to a resolver that synthesizes `AAAA` records via DNS64 — Node 17+ returns the synthetic `64:ff9b::<public-IPv4>` address first under default verbatim DNS ordering, and the previous blanket block on the `64:ff9b::/96` prefix rejected it. The IPv6 helper now inspects the canonical hextets of recognized tunneling prefixes and extracts the embedded IPv4, then applies the same `PRIVATE_IP_RANGES` and `CLOUD_METADATA` policy already enforced on plain IPv4 destinations. Supported layouts: NAT64 RFC 6052 well-known `64:ff9b::/96`; NAT64 RFC 8215 local-use at the `64:ff9b:1::/96` sub-prefix layout (parts[3..5] == 0) — RFC 8215 §3.1 recommends operators carve /96 sub-prefixes for IPv4 embedding, so this covers the realistic deployment; 6to4 RFC 3056 `2002::/16`; and Teredo RFC 4380 `2001::/32`. Tunneled private/metadata IPv4 — including the original GHSA-56c3-vfp2-5qqj payloads `64:ff9b::a9fe:a9fe`, `2002:a9fe:a9fe::`, and the equivalent loopback/RFC1918 embeddings — stays blocked. Tunneled public IPv4 (e.g. `64:ff9b::8.8.8.8`) is now allowed. Non-canonical shapes within the same prefix families — `64:ff9b:` outside the supported /96 layouts (including the literal RFC 6052 /48 embedding that interleaves the IPv4 around a u-octet at bits 64-71), and any 6to4/Teredo we don't recognize — fail safe and are blocked. Tunneled cloud-metadata and non-canonical tunneling shapes are now gated in **every** security mode (including permissive), restoring the "metadata blocked in all modes" promise and the fail-safe stance for unknown wire formats. IPv6 parsing is delegated to `ipaddr.js` (already a transitive dependency via `express → proxy-addr`, now promoted to a direct dep at the same `^1.9.1` version, so the install footprint is unchanged). Reported by Luca M.
 
-Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.53.0] - 2026-05-14
 
@@ -732,7 +739,7 @@ Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
 
 - **`n8n_get_workflow` gains `mode='active'` for inspecting the published graph.** Because n8n's editor saves a draft separately from the published/running version, callers that need to reason about what is actually executing (rather than what is being edited) now have a dedicated mode. The response is single-shaped — `nodes` and `connections` are populated from `activeVersion`, with `activeVersionId`, `versionCreatedAt`, and `versionName` exposed at the top level. `versionCreatedAt` is the version row's creation timestamp (within ~1s of the publish event in current n8n; we don't claim they're identical). On older n8n versions without the draft/publish split, the mode falls back to `workflow.nodes` when `active: true` so the mode stays usable across n8n versions; `NO_ACTIVE_VERSION` is returned only for inactive workflows that were never published. Type-safe support for the new fields was added to the `Workflow` interface as `ActiveWorkflowVersion`.
 
-Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.52.0] - 2026-05-13
 
@@ -743,9 +750,9 @@ Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
 
 ### Fixed
 
-- **Community nodes: stop advertising npm package version as `typeVersion` (#781).** For community nodes, `get_node` previously returned the npm package version (e.g. `"0.2.21"`) in the `version` field and emitted `versionNotice: "Use typeVersion: 0.2.21 when creating this node"`. The advertised value is not a valid JS number — assigning `typeVersion: 0.2` produced workflows that n8n's runtime rendered as red/broken nodes even though both `validate_workflow` and `n8n_validate_workflow` reported them as valid. The community-node parser no longer falls back to the npm package version when the descriptor's version is missing (Strapi path) and never seeds the npm version as `typeVersion` (npm-only path); both default to `1`, which is what declarative community nodes register at runtime. The `get_node` response, for community nodes, surfaces `isCommunity: true`, `npmVersion`, a community-aware `versionNotice`, and a `metadata.versionCoerced` audit field whenever stale seed data has to be resolved on the fly. The shipped `data/nodes.db` is migrated in place: 118 community rows whose stored `version` was a multi-dot semver or contained letters were reset to `'1'`. `WorkflowValidator.validateAllNodes` now rejects non-finite typeVersions (including `NaN`) with an explicit "must be a finite non-negative number" message, parses comma-separated and array-form `nodeInfo.version` strings before min/max comparisons, falls back to suggesting `typeVersion: 1` when the database version is unparseable, and emits a "Cannot validate typeVersion" warning when stored seed data is unparseable so callers know the min/max checks were skipped rather than silently passed. Reported by @czlonkowski.
+- **Community nodes: stop advertising npm package version as `typeVersion` (#781).** For community nodes, `get_node` previously returned the npm package version (e.g. `"0.2.21"`) in the `version` field and emitted `versionNotice: "Use typeVersion: 0.2.21 when creating this node"`. The advertised value is not a valid JS number — assigning `typeVersion: 0.2` produced workflows that n8n's runtime rendered as red/broken nodes even though both `validate_workflow` and `n8n_validate_workflow` reported them as valid. The community-node parser no longer falls back to the npm package version when the descriptor's version is missing (Strapi path) and never seeds the npm version as `typeVersion` (npm-only path); both default to `1`, which is what declarative community nodes register at runtime. The `get_node` response, for community nodes, surfaces `isCommunity: true`, `npmVersion`, a community-aware `versionNotice`, and a `metadata.versionCoerced` audit field whenever stale seed data has to be resolved on the fly. The shipped `data/nodes.db` is migrated in place: 118 community rows whose stored `version` was a multi-dot semver or contained letters were reset to `'1'`. `WorkflowValidator.validateAllNodes` now rejects non-finite typeVersions (including `NaN`) with an explicit "must be a finite non-negative number" message, parses comma-separated and array-form `nodeInfo.version` strings before min/max comparisons, falls back to suggesting `typeVersion: 1` when the database version is unparseable, and emits a "Cannot validate typeVersion" warning when stored seed data is unparseable so callers know the min/max checks were skipped rather than silently passed. Reported by @AdvancedNolik22-dev.
 
-Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.51.3] - 2026-05-11
 
@@ -758,7 +765,7 @@ Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
 - **Telemetry output format changed.** Anyone consuming the local telemetry analytics will see `[REDACTED_URL]` in place of the previous `https://[domain]/<path>?<query>` and `[REDACTED_URL_WITH_AUTH]` placeholders for `url`, `endpoint`, `webhook`, and similarly-named fields. Pattern-specific placeholders (`[REDACTED_SUPABASE_URL]`, `[REDACTED_N8N_HOST_URL]`, `[REDACTED_WEBHOOK]`, etc.) still apply to free-text node parameters that happen to contain those URLs (e.g. `jsCode`, `systemMessage`).
 - The webhook short-circuit in `sanitizeString` (returns `https://[webhook-url]` when a string value contains `/webhook/` or `/hook/`) remains for non-URL-named fields whose value embeds a webhook URL.
 
-Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.51.2] - 2026-05-11
 
@@ -766,7 +773,7 @@ Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
 
 - Fix silent env-credential fallback in multi-tenant HTTP mode (GHSA-jxx9-px88-pj69). When `ENABLE_MULTI_TENANT=true`, requests that omitted the `x-n8n-url` and `x-n8n-key` headers fell through to the process-level `N8N_API_URL` / `N8N_API_KEY`, letting one authenticated MCP tenant operate on the operator's n8n instance. Both paths now fail closed: the HTTP edge rejects header-less multi-tenant requests with `400 Multi-tenant headers required`, and `getN8nApiClient` refuses to construct an env-fallback client when `ENABLE_MULTI_TENANT=true`. Single-tenant mode is unchanged. Reported by @u-ktdi.
 
-Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.51.1] - 2026-05-06
 
@@ -774,7 +781,7 @@ Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
 
 - **Hardened `WorkflowSanitizer` (telemetry workflow ingestion) against new secret and PII categories (#779).** Added regex coverage for OpenAI `sk-proj-` / OpenRouter `sk-or-`, Stripe, GitHub PATs, GitLab, Hugging Face, Notion, GoHighLevel, Slack, AWS access key IDs, generic JWTs, Supabase secret/publishable keys, self-hosted n8n hostnames, and Supabase project URLs — all with type-aware placeholders (`[REDACTED_LLM_API_KEY]`, `[REDACTED_SUPABASE_KEY]`, `[REDACTED_STRIPE_KEY]`, `[REDACTED_API_TOKEN]`, `[REDACTED_JWT]`, `[REDACTED_N8N_HOST_URL]`, `[REDACTED_SUPABASE_URL]`). Added email and phone redaction for free-text node parameters (`systemMessage`, `text`, `html`, `prompt`, …). Made the generic 20-31 / 32+ char fallbacks idempotent via a `(?!REDACTED)` negative lookahead and dropped the early-break in `sanitizeString` so strings with secrets matching different patterns get every match redacted. Tightened the Bearer regex to stop at common string delimiters (quotes, commas, semicolons, closing brackets) so `auth: 'Bearer <token>'` no longer eats the closing quote. Tightened the phone regex with digit/hyphen lookbehind/lookahead so UUIDs and other hex-with-hyphen IDs aren't misclassified as phone numbers.
 
-Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.51.0] - 2026-05-06
 
@@ -782,7 +789,7 @@ Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
 
 - **`n8n_manage_credentials` now reports which workflows reference each credential.** Pass `includeUsage: true` to `action: "list"` or `action: "get"` to attach a `usedIn: [{id, name, active}]` array and a `usageCount` to every credential. The reverse index is built client-side by scanning workflows (n8n's public API has no native lookup), deduplicated per workflow, and capped at the same 5000-workflow limit `n8n_audit_instance` uses. Default behavior is unchanged — no extra API calls when the flag is omitted. If the workflow scan fails the response degrades to base credentials with a `usageScanError` field rather than failing the whole call.
 
-Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.50.5] - 2026-05-05
 
@@ -790,7 +797,7 @@ Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
 
 - **Advertise the Bearer auth scheme on `401` responses (#604).** HTTP-mode `/mcp`, `/sse`, and `/messages` now return an RFC 6750-compliant `WWW-Authenticate` challenge alongside the existing JSON-RPC `-32001` error body. Missing-credentials responses use `Bearer realm="n8n-mcp"` (no `error=` keyword, per RFC 6750 §3); rejected credentials use `error="invalid_request"` for non-Bearer schemes and `error="invalid_token"` for bad bearer secrets. Lets MCP scanners and OAuth-discovery clients distinguish "auth required" from "endpoint unreachable" without reading the JSON body. Originally authored by @voidborne-d (#767).
 
-Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.50.4] - 2026-05-05
 
@@ -800,7 +807,7 @@ Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
 - The same coercion is applied to `n8n_manage_datatable` (list/create/get-rows actions), `n8n_test_workflow`, and `n8n_trigger_webhook_workflow`, all of which had the same vulnerability surface from a broader audit.
 - `serializeDataTableParams` in the n8n API client now also skips blank-string values as defense-in-depth.
 
-Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.50.3] - 2026-05-04
 
@@ -810,7 +817,7 @@ Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
 - The rollback no longer fires (and no longer claims `(workflow restored to prior state)`) when n8n rejected the PUT before persisting. The handler now compares `versionId` / `versionCounter` / `updatedAt` from a fresh GET to detect whether persistence actually happened.
 - Rollback-failure responses include `details.priorVersionId` so callers can recover the right snapshot via `n8n_workflow_versions`.
 
-Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.50.2] - 2026-05-04
 
@@ -822,7 +829,7 @@ Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
 
 - The n8n API client now validates `N8N_API_URL` through the same SSRF gate as user-supplied webhook URLs. Operators running n8n on the same host as n8n-mcp (`N8N_API_URL=http://localhost:5678` or an RFC1918 address) must set `WEBHOOK_SECURITY_MODE=moderate` (allows localhost, still blocks cloud metadata) to keep the API client functional after upgrade. Default `strict` is unchanged for production deployments with a public n8n URL.
 
-Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.50.1] - 2026-05-04
 
@@ -832,7 +839,7 @@ Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
 - Fix redirect-following on validated webhook, form, and chat trigger requests (GHSA-8g7g-hmwm-6rv2). Reported by @cybercraftsolutionsllc.
 - Redact mutation telemetry payloads before storage (GHSA-8g7g-hmwm-6rv2). Reported by @cybercraftsolutionsllc.
 
-Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.50.0] - 2026-05-02
 
@@ -853,7 +860,7 @@ Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
 - Template fetch only drops the `templates` and `templates_fts` tables — never `nodes`. Community nodes were verified intact at 768 mid-run before the separate community refresh added the 62 new ones.
 - A backup of the pre-fetch database lives at `/tmp/nodes-pre-template-update-20260502-093230.db` on the maintainer's machine.
 
-Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.49.0] - 2026-04-28
 
@@ -869,7 +876,7 @@ Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
 - **Rebuilt node database**: 1,588 nodes total — 820 core (675 from `n8n-nodes-base` + 145 from `@n8n/n8n-nodes-langchain`) + 768 community (668 verified + 100 from npm). Community READMEs refreshed via `generate:docs:readme-only` (763/768 with READMEs, 581/768 with AI summaries — the AI-summary backfill for newly-added community nodes runs separately via the local LLM step).
 - **README badges and node counts updated** to reflect the new n8n version, node totals, and current passing-test count (`5,418`).
 
-Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.48.3] - 2026-04-28
 
@@ -877,7 +884,7 @@ Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
 
 - **Validator warning for `__rl` resourceLocator fields missing `cachedResultName` (#715, originally reported in #516 by @upsurge911-lgtm).** When a `__rl` field has `mode` and `value` but no `cachedResultName`, the workflow runs but the n8n UI shows "Choose..." in dropdowns and dependent metadata fetches (column lists, base names, etc.) never fire — users see "No columns found" with no obvious cause. Pre-fix the validator was completely silent on this. New `missing-cached-result-name` warning fires at `runtime`/`ai-friendly`/`strict` profiles (suppressed at `minimal`). The warning is gated to modes where the n8n UI renders a dropdown that displays the cached label (`id`, `list`, `name`) — modes with raw inputs (`expression`, `url`) are skipped to avoid false positives. The autofix half (live n8n API resolution + placeholder fallback) ships in a separate follow-up PR.
 
-Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.48.2] - 2026-04-28
 
@@ -886,7 +893,7 @@ Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
 - **`n8n_audit_instance` error message now distinguishes server-side from client-side failures (#736, reported by @waltho1123-cloud).** Pre-fix the warning was always `Built-in audit failed: <message>`, hiding HTTP status. The reporter's Zeabur deployment generates the `Invalid URL` string inside n8n's own audit code (likely from missing `N8N_PROTOCOL`/`N8N_HOST` env vars) and returned it as the response body — but the warning made it look like a client bug. Three new shapes: `endpoint not available` (404, unchanged); `Built-in audit failed (HTTP <status>): <reason>` for any other status; `Built-in audit failed (no response from n8n): <reason>` when no status was returned (timeouts, ECONNREFUSED). Also fixed a long-standing nit where the error path computed `builtinAuditMs` against `totalStart` instead of `auditStart`.
 - **`n8n_manage_credentials` accepts `oAuth2Api` + `clientCredentials` payloads (#740, reported by @bwsnwl).** n8n's upstream Ajv schema for `oAuth2Api` has a known bug: the `if/then/else` on `useDynamicClientRegistration` uses `properties.x.enum` to test value, which evaluates true vacuously when the field is absent — so both `then` branches fire simultaneously and there is no payload shape that satisfies the schema for a plain `clientCredentials` grant. New `applyCredentialDataShims` helper normalizes the payload for that specific combination: strips `useDynamicClientRegistration` when falsy, injects `sendAdditionalBodyProperties: false`, `additionalBodyProperties: ''`, and `serverUrl: ''` (only when the DCR branch fires spuriously — explicit `useDynamicClientRegistration: true` callers are left alone so n8n surfaces real missing-field errors). Applied symmetrically on both create and update paths. Will be removed once n8n fixes the schema upstream.
 
-Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.48.1] - 2026-04-28
 
@@ -896,7 +903,7 @@ Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
   - **Path divergence:** `validateOnly: true` returned the structural-validation early-exit BEFORE `validateWorkflowStructure` ran. Reporters could see a green `valid: true` from validate-only and then fail the apply call with a structural error. The structural check now runs in both paths, and the validate-only response includes the same `structureErrors` the apply path would surface, plus a `valid` boolean that reflects post-diff structural validity. The diff engine's `validateOnly` return now carries the simulated post-diff `workflow` so the handler has something to validate against.
   - **Zod 4 record-key incompatibility:** Single-arg `z.record(valueSchema)` is reinterpreted by Zod 4 (bundled by `@modelcontextprotocol/sdk`) as `z.record(keySchema=valueSchema)`, causing node-name strings like `"W-05b Set Context"` to fail with `_zod` / `Invalid key in record`. All `z.record` calls in `n8n-validation.ts` (`workflowNodeSchema.parameters`, `.credentials`, `workflowConnectionSchema`) and `handlers-n8n-manager.ts` (`createWorkflowSchema.connections`, `updateWorkflowSchema.connections`) now use the explicit two-arg `z.record(z.string(), valueSchema)` form which is unambiguous in both Zod 3 and Zod 4.
 
-Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.48.0] - 2026-04-28
 
@@ -908,7 +915,7 @@ Three validator/diff false-positive fixes that were blocking valid workflows fro
 - **`validate_workflow` no longer false-flags operations on community nodes with empty schema (#739, reported by @priyasogani8-star).** `EnhancedConfigValidator.validateResourceAndOperation` was emitting `Invalid operation "X" for node ...` for any non-empty operation value when the node was missing or had empty operation metadata. The puppeteer community node (and similarly indexed packages) ARE in the local DB but with empty `operations`/`properties_schema` columns, so `getNodeOperations()` returned `[]` and any explicit operation was rejected. Three new guards: top-of-method early-exit when `getNode()` returns null, plus per-field skips when the node has zero resource schema or zero operation schema globally. Real typos on KNOWN nodes (e.g. `operation: "sendMessage"` on Slack) still surface correctly.
 - **`n8n_validate_workflow` no longer false-flags Code nodes with template literals or compact `}}` (#746, reported by @MarsSall).** `ExpressionFormatValidator.validateRecursive` walked into `jsCode`/`pythonCode` fields and fed the source to a bracket-balance check that miscounted `{{` vs `}}` on JS object literals like `[{json:{x:1}}]`. The validator now skips raw-code field keys (`jsCode`, `pythonCode`, `functionCode`) — mirrors the existing guard in `ExpressionValidator.validateParametersRecursive`. The skip applies wherever those keys appear in the parameters tree (top-level or nested).
 
-Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.47.14] - 2026-04-21
 
@@ -916,7 +923,7 @@ Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
 
 - Fix IPv6-mapped SSRF bypass in synchronous URL validation (GHSA-56c3-vfp2-5qqj, CVSS 8.5 High). `SSRFProtection.validateUrlSync` now rejects IPv4-mapped IPv6 (`::ffff:169.254.169.254`, `::ffff:127.0.0.1`, etc.) and private IPv6 addresses, matching the async webhook validator. The sync gate is the sole SSRF check in the SDK embedder path (`validateInstanceContext` → `getN8nApiClient`), so the bypass enabled cloud metadata access and `x-n8n-api-key` leakage for callers of `N8NDocumentationMCPServer` / `N8NMCPEngine` with user-supplied `InstanceContext`. Reported by @manthanghasadiya.
 
-Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.47.13] - 2026-04-20
 
@@ -924,7 +931,7 @@ Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
 
 - Redact MCP tool-call arguments in server logs (GHSA-wg4g-395p-mqv3, CVSS 4.3 Medium). Reported by @Mirr2.
 
-Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.47.12] - 2026-04-17
 
@@ -943,7 +950,7 @@ Batch of ten fixes from the 2026-04-16 staging QA regression (release-blockers a
 - **`n8n_update_partial_workflow` tool description now documents `patchNodeField` parameters inline (QA #5, LOW).** Added `fieldPath (dot path, e.g. "parameters.jsCode") and patches: [{find, replace}]` to the short tool description so agents can construct the operation without an extra `tools_documentation` round-trip.
 - **`n8n_manage_datatable` `deleteRows` dryRun no longer returns a null "after" row (QA #10, LOW).** Stripped entries with `dryRunState: "after"` from delete responses — those rows always had every field null because there is no "after" state for a delete, and they surfaced as noise. Update/upsert dryRun responses are unchanged.
 
-Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.47.11] - 2026-04-16
 
@@ -951,7 +958,7 @@ Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
 
 - Fix sensitive data logging in HTTP mode (GHSA-pfm2-2mhg-8wpx). Reported by @S4nso.
 
-Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.47.10] - 2026-04-16
 
@@ -967,7 +974,7 @@ Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
 
 - **Removed incorrect pitfall claiming `projectId` could not be set via the public API** in `n8n_manage_datatable` tool docs. The n8n API has always supported it; this documentation was misleading agents into manual UI workarounds.
 
-Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.47.9] - 2026-04-16
 
@@ -977,7 +984,7 @@ Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
 - **Rebuilt node database.** 1,505 nodes total: 812 core (675 from `n8n-nodes-base` + 137 from `@n8n/n8n-nodes-langchain`) and 693 community nodes (605 verified, 88 unverified). Community nodes preserved incrementally across the rebuild via backup/restore — 108 new READMEs fetched for nodes added since the last sync.
 - **Updated README** n8n version badge (2.14.2 → 2.16.1) and node counts (1,396 → 1,505; 516 → 605 verified community).
 
-Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.47.8] - 2026-04-14
 
@@ -986,7 +993,7 @@ Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
 - **`n8n_create_workflow` / `n8n_update_full_workflow` failures from JSON-stringified array parameters (Issue #611, reported by @Mte90).** VS Code + GitHub Copilot and some other MCP clients serialize array/object tool arguments as JSON strings rather than native JSON types. This reliably affected workflows with 3+ nodes or complex nested parameters (e.g. `__rl` resource-locator objects, filter conditions), producing the error `"nodes must be an array, got string"` while 1-2 node payloads happened to slip through. The `n8n_update_partial_workflow` schema already preprocessed its `operations` field with `tryParseJson` (from the prior #600/#611 fix), but the create/update-full schemas did not — now they do. `nodes`, `connections`, and `settings` on both schemas, plus the `tags` filter on `n8n_list_workflows`, are wrapped with `z.preprocess(tryParseJson, ...)` so stringified JSON is parsed before Zod validation runs. The `tryParseJson` helper was relocated to sit next to its first usage rather than 2,400 lines below it.
 - **Silent JSON parse failures in `coerceStringifiedJsonParams` now log a warning.** The top-level client-bug workaround in `server.ts` had two `catch {}` blocks that swallowed parse errors without trace, so malformed or truncated JSON from buggy MCP clients presented only as downstream Zod errors. Both catch blocks now emit a `logger.warn` with the parse error, a 200-char value preview, and the length — enough to diagnose serialization bugs without digging into transport-level logs.
 
-Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.47.7] - 2026-04-13
 
@@ -997,7 +1004,7 @@ Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
 - **Controlled loop false positive (Issue #721).** Intentional pagination loops (e.g., HTTP Request → IF → Wait → HTTP Request) were flagged as "Workflow contains a cycle (infinite loop)" because the cycle detector only recognized SplitInBatches/Loop nodes as legitimate. It now also recognizes IF, Switch, and Filter nodes as conditional exit points that can bound a loop.
 - **Expression bracket scanning in Code node fields.** The expression validator scanned `jsCode`, `pythonCode`, and `functionCode` fields for unmatched `{{ }}` brackets, producing false positives on ordinary JavaScript/Python curly braces. These raw code fields are now excluded from expression bracket validation.
 
-Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.47.6] - 2026-04-09
 
@@ -1005,7 +1012,7 @@ Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
 
 - Fix missing authentication on HTTP endpoints and information disclosure via `/health` (GHSA-75hx-xj24-mqrw). Reported by @yotampe-pluto.
 
-Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.47.5] - 2026-04-08
 
@@ -1020,7 +1027,7 @@ Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
 - First-run telemetry banner is no longer printed on cold start via `npx n8n-mcp` because `stdio-wrapper.js` suppresses all `console.log` output before the server imports. This was already the behavior when users invoked the wrapper directly; it becomes user-visible now that the wrapper is the published bin. Run `npx n8n-mcp telemetry status` to see current telemetry state.
 - Added `tests/integration/mcp/stdio-shutdown.test.ts` with 3 regression cases that spawn `dist/mcp/stdio-wrapper.js` (the published bin entry, matching the `npx` path) and assert exit-on-stdin-close / exit-on-SIGTERM within a 500ms budget, covering the exact Issue #711 repro.
 
-Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.47.4] - 2026-04-08
 
@@ -1028,7 +1035,7 @@ Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
 
 - Fix authenticated SSRF in multi-tenant header handling (GHSA-4ggg-h7ph-26qr). Reported by Eresus Security Research Team.
 
-Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.47.3] - 2026-04-08
 
@@ -1039,7 +1046,7 @@ Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
 - `createCacheKey` in `src/utils/cache-utils.ts` now derives its output via a CodeQL-approved KDF with aggressive memoization. Semantically deterministic per-process, O(1) on cache hits.
 - Chat trigger session ID format changed from `session_{timestamp}_{9-char-alnum}` to `session_{timestamp}_{UUIDv4}`. Accompanying test regex updated.
 
-Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.47.2] - 2026-04-07
 
@@ -1057,7 +1064,7 @@ Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
 - The published `n8n-mcp` npm package is unchanged — it uses `package.runtime.json` and has always shipped with zero n8n deps.
 - No functional change to node loading: the full set of 812 base nodes (676 from `n8n-nodes-base` + 136 from `@n8n/n8n-nodes-langchain`) loads correctly, as verified by the integration test suite.
 
-Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.47.1] - 2026-04-04
 
@@ -1067,7 +1074,7 @@ Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
 - **Credential update accepts `type` field** — `n8n_manage_credentials({action: "update"})` now forwards the optional `type` field to the n8n API, which some n8n versions require in the PATCH payload
 - **Credential response stripping** — `create` and `update` handlers now strip the `data` field from responses (defense-in-depth, matching the `get` handler pattern)
 
-Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.47.0] - 2026-04-04
 
@@ -1092,7 +1099,7 @@ Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
 - **Cursor dedup guard** — `listAllWorkflows()` tracks seen cursors to prevent infinite pagination loops
 - **PII findings classified as review** — PII detections (email, phone, credit card) are marked as `review_recommended` instead of `auto_fixable`, preventing nonsensical auto-remediation
 
-Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.46.1] - 2026-04-03
 
@@ -1117,7 +1124,7 @@ Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
 - **Rate limiting on all authenticated endpoints** — `authLimiter` now applied to `GET /sse` and `POST /messages` in addition to `POST /mcp`
 - **Transport type guards** — `instanceof` checks prevent cross-protocol access (SSE session IDs rejected on StreamableHTTP endpoint and vice versa)
 
-Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.46.0] - 2026-04-03
 
@@ -1136,7 +1143,7 @@ Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
 - **ReDoS protection** — regex patterns with nested quantifiers or overlapping alternations are rejected to prevent catastrophic backtracking
 - **Resource limits** — max 50 patches per operation, max 500-char regex patterns, max 512KB field size for regex operations
 
-Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.45.1] - 2026-04-02
 
@@ -1149,7 +1156,7 @@ Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
 
 - **Updated publish scripts** to use `stdio-wrapper.js` as the npm bin entry point, ensuring the fix persists across releases
 
-Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.45.0] - 2026-04-01
 
@@ -1162,7 +1169,7 @@ Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
   - `@n8n/n8n-nodes-langchain`: 2.13.1 → 2.14.1
 - **Rebuild FTS5 search index** with all 1396 nodes (812 base + 584 community)
 
-Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.44.1] - 2026-04-01
 
@@ -1175,7 +1182,7 @@ Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
 
 - **Upgrade GitHub Actions** to latest versions across all CI/CD workflows (docker, release, test, update-n8n-deps) — contributed by @salmanmkc in #663
 
-Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.44.0] - 2026-04-01
 
@@ -1193,7 +1200,7 @@ Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
 
 - **Tool documentation updated**: Essentials and full docs reflect the three-step flow with examples for each step.
 
-Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.43.0] - 2026-03-31
 
@@ -1209,7 +1216,7 @@ Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
 
 - **Tools documentation count**: Corrected n8n API tools count and added missing `n8n_manage_datatable` entry to tools overview.
 
-Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.42.3] - 2026-03-30
 
@@ -1223,7 +1230,7 @@ Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
 
 - **`search_nodes` examples trimmed**: Reduced from 11 to 6 examples in full docs, removing near-duplicates.
 
-Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.42.2] - 2026-03-30
 
@@ -1231,7 +1238,7 @@ Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
 
 - **`workflow-patterns.json` missing from npm package** (Issue #681): Added `data/workflow-patterns.json` to the `files` array in `package.json` so the patterns file is included in the published npm package and works out of the box without manual generation.
 
-Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.42.1] - 2026-03-30
 
@@ -1241,7 +1248,7 @@ Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
 
 - **Community node service missing resource extraction**: `extractOperations()` in `community-node-service.ts` was not extracting `resource` from `displayOptions.show.resource`, same issue that was fixed in `property-extractor.ts` in v2.42.0.
 
-Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.42.0] - 2026-03-30
 
@@ -1259,7 +1266,7 @@ Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
 
 - **FTS-to-LIKE fallback dropped search options**: When the FTS5 search fell back to LIKE-based search (e.g., for "http request"), the `options` object (including `includeOperations`, `includeExamples`, `source`) was silently lost. Now correctly passed through.
 
-Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.41.4] - 2026-03-30
 
@@ -1271,7 +1278,7 @@ Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
 
 - **Expression validator does not detect unwrapped n8n expressions** (Issue #677): Added heuristic pre-pass that detects bare `$json`, `$node`, `$input`, `$execution`, `$workflow`, `$prevNode`, `$env`, `$now`, `$today`, `$itemIndex`, and `$runIndex` references missing `={{ }}` wrappers. Uses anchored patterns to avoid false positives. Emits warnings, not errors.
 
-Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.41.3] - 2026-03-27
 
@@ -1283,7 +1290,7 @@ Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
 
 - **`undefined` values rejected in MCP tool calls from VS Code** (Issue #611): Strip explicit `undefined` values from tool arguments before Zod validation. VS Code sends `undefined` as a value which Zod's `.optional()` rejects (it expects the field to be missing, not present-but-undefined).
 
-Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.41.2] - 2026-03-27
 
@@ -1291,7 +1298,7 @@ Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
 
 - **MCP initialization floods Claude Desktop with JSON parse errors** (Issues #628, #627, #567): Intercept `process.stdout.write` in stdio mode to redirect non-JSON-RPC output to stderr. Console method suppression alone was insufficient — native modules (better-sqlite3), n8n packages, and third-party code can call `process.stdout.write()` directly, corrupting the JSON-RPC stream. Only writes containing valid JSON-RPC messages (`{"jsonrpc":...}`) are now allowed through stdout; everything else is redirected to stderr. This fixes the flood of "Unexpected token is not valid JSON" warnings on every new chat in Claude Desktop, including leaked `refCount`, `dbPath`, `clientVersion`, `protocolVersion`, and other debug strings.
 
-Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.41.1] - 2026-03-27
 
@@ -1309,7 +1316,7 @@ Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
 - Added `exists`/`notExists` to unary operator lists for consistency across sanitizer and validator
 - Fixed recovery guidance referencing non-existent `validate_node_operation` tool (now `validate_node`)
 
-Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.41.0] - 2026-03-25
 
@@ -1321,7 +1328,7 @@ Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
 - **Improved documentation generator**: Strip `<think>` tags from thinking-model responses; use raw fetch for vLLM `chat_template_kwargs` support
 - **Incremental community node updates**: `fetch:community` now upserts by default, preserving existing READMEs and AI summaries. Use `--rebuild` for clean slate
 
-Conceived by Romuald Czlonkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.40.5] - 2026-03-22
 
@@ -1329,7 +1336,7 @@ Conceived by Romuald Czlonkowski - https://www.aiadvisors.pl/en
 
 - **Webhook workflows created via MCP get 404 errors** (Issue #643): Auto-inject `webhookId` (UUID) on webhook-type nodes (`webhook`, `webhookTrigger`, `formTrigger`, `chatTrigger`) during `cleanWorkflowForCreate()` and `cleanWorkflowForUpdate()`. n8n 2.10+ requires this field for proper webhook URL registration; without it, webhooks silently fail with 404. Existing `webhookId` values are preserved.
 
-Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.40.4] - 2026-03-22
 
@@ -1338,7 +1345,7 @@ Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
 - **Incorrect data tables availability info**: Removed "enterprise/cloud only" restriction from tool description and documentation — data tables are available on all n8n plans including self-hosted
 - **Redundant pitfalls removed**: Removed "Requires N8N_API_URL and N8N_API_KEY" and "enterprise or cloud plans" pitfalls — the first is implicit for all n8n management tools, the second was incorrect
 
-Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.40.3] - 2026-03-22
 
@@ -1349,7 +1356,7 @@ Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
 - **`updateTable` silently ignoring `columns` parameter**: Now returns a warning message when `columns` is passed to `updateTable`, clarifying that table schema is immutable after creation via the public API
 - **Tool schema descriptions clarified**: `name` and `columns` parameter descriptions now explicitly document that `updateTable` is rename-only and columns are for `createTable` only
 
-Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.40.2] - 2026-03-22
 
@@ -1358,7 +1365,7 @@ Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
 - **Double URL-encoding of `filter` and `sortBy` in `getRows`/`deleteRows`**: Moved `encodeURIComponent()` from handler layer to a custom `paramsSerializer` in the API client. Handlers were encoding values before passing them as Axios params, causing double-encoding (`%257B` instead of `%7B`). Handlers now pass raw values; the API client encodes once via `serializeDataTableParams()`
 - **`updateTable` documentation clarified**: Explicitly notes that only renaming is supported (no column modifications via public API)
 
-Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.40.1] - 2026-03-21
 
@@ -1369,7 +1376,7 @@ Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
 - **`json` column type rejected by n8n API**: Removed `json` from column type enum (n8n only accepts string/number/boolean/date)
 - **Garbled 404 error messages**: Fixed `N8nNotFoundError` constructor — API error messages are now passed through cleanly instead of being wrapped in "Resource with ID ... not found"
 
-Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.40.0] - 2026-03-21
 
@@ -1389,7 +1396,7 @@ Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
 
 - `n8n_create_data_table` tool replaced by `n8n_manage_datatable` with `action: "createTable"`
 
-Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.38.0] - 2026-03-20
 
@@ -1405,7 +1412,7 @@ Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
   - `inferIntentFromOperations` returns descriptive intent for transfer operations
   - `N8nApiClient.transferWorkflow()` method added
 
-Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.37.4] - 2026-03-18
 
@@ -1414,7 +1421,7 @@ Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
 - **Updated n8n dependencies**: n8n 2.11.4 → 2.12.3, n8n-core 2.11.1 → 2.12.0, n8n-workflow 2.11.1 → 2.12.0, @n8n/n8n-nodes-langchain 2.11.2 → 2.12.0
 - **Rebuilt node database**: 1,239 nodes (809 from n8n-nodes-base and @n8n/n8n-nodes-langchain, 430 community)
 
-Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.37.3] - 2026-03-15
 
@@ -1425,7 +1432,7 @@ Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
 - **Connection schema and reference validation** (Issue #581): Added `.catchall()` to `workflowConnectionSchema` for unknown AI connection types, and extended connection reference validation to check all connection types (not just `main`)
 - **autofix `filterOperationsByFixes` ID-vs-name mismatch**: Typeversion-upgrade operations now include `nodeName` alongside `nodeId`, and the filter checks both fields. Previously, `applyFixes=true` silently dropped all typeversion fixes because `fixedNodes` contained names but the filter only checked `nodeId` (UUID)
 
-Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.37.2] - 2026-03-15
 
@@ -1435,7 +1442,7 @@ Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
 - **Code validator helper function return false positive** (Issue #293): `function isValid(item) { return false; }` no longer triggers "Cannot return primitive values directly" error. Added helper function detection to skip primitive return checks when named functions or arrow function assignments are present
 - **Null property removal in diff engine** (Issue #611): `{continueOnFail: null}` no longer causes Zod validation error "Expected boolean, received null". The diff engine now treats `null` values as property deletion (`delete` operator), and documentation updated from `undefined` to `null` for property removal
 
-Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.37.1] - 2026-03-14
 
@@ -1447,7 +1454,7 @@ Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
 - **n8n_create_workflow undefined ID** (Issue #602): Added defensive check for missing workflow ID in API response with actionable error message
 - **Flaky CI performance test**: Relaxed bulk insert ratio threshold from 15 to 20 to accommodate CI runner variability
 
-Conceived by Romuald Czlonkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.37.0] - 2026-03-14
 
@@ -1469,7 +1476,7 @@ Conceived by Romuald Czlonkowski - https://www.aiadvisors.pl/en
 - **`updateWorkflowTags` API client method**: New method on `N8nApiClient` for managing workflow tag associations via the dedicated endpoint
 - **`operationsApplied` in top-level response**: Promoted from nested `details` to top-level for easier consumption by MCP clients
 
-Conceived by Romuald Czlonkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.36.2] - 2026-03-14
 
@@ -1480,7 +1487,7 @@ Conceived by Romuald Czlonkowski - https://www.aiadvisors.pl/en
 - Rebuilt node database with 1,239 nodes (809 core + 430 community preserved)
 - Updated README badge with new n8n version and node counts
 
-Conceived by Romuald Czlonkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.36.1] - 2026-03-08
 
@@ -1497,7 +1504,7 @@ Conceived by Romuald Czlonkowski - https://www.aiadvisors.pl/en
 
 - **Refactored output index validation**: Extracted `getShortNodeType()` and `getConditionalOutputInfo()` helpers to eliminate duplicated conditional node detection logic between `validateOutputIndexBounds` and the new `validateConditionalBranchUsage`
 
-Conceived by Romuald Czlonkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.36.0] - 2026-03-07
 
@@ -1511,7 +1518,7 @@ Conceived by Romuald Czlonkowski - https://www.aiadvisors.pl/en
   - BFS-based trigger reachability analysis: Replaces simple orphan detection with proper graph traversal from trigger nodes, flagging unreachable subgraphs
   - Flexible `WorkflowConnection` interface: Changed from explicit `main?/error?/ai_tool?` to `[outputType: string]` for accurate validation of all connection types
 
-Conceived by Romuald Czlonkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.35.6] - 2026-03-04
 
@@ -1520,7 +1527,7 @@ Conceived by Romuald Czlonkowski - https://www.aiadvisors.pl/en
 - **Updated n8n dependencies**: n8n 2.8.3 → 2.10.3, n8n-core 2.8.1 → 2.10.1, n8n-workflow 2.8.0 → 2.10.1, @n8n/n8n-nodes-langchain 2.8.1 → 2.10.1
 - Rebuilt node database with 806 core nodes (community nodes preserved from previous build)
 
-Conceived by Romuald Czlonkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.35.5] - 2026-02-22
 
@@ -1532,7 +1539,7 @@ Conceived by Romuald Czlonkowski - https://www.aiadvisors.pl/en
   - Added `[Diagnostic]` section to error responses showing received argument types, enabling users to report exactly what their MCP client sends
   - Added 9 new unit tests (24 total) covering number, boolean, and number-to-string coercion
 
-Conceived by Romuald Czlonkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.35.4] - 2026-02-20
 
@@ -1546,7 +1553,7 @@ Conceived by Romuald Czlonkowski - https://www.aiadvisors.pl/en
   - Affects 9 tools with object/array params: `validate_node`, `validate_workflow`, `n8n_create_workflow`, `n8n_update_full_workflow`, `n8n_update_partial_workflow`, `n8n_validate_workflow`, `n8n_autofix_workflow`, `n8n_test_workflow`, `n8n_executions`
   - Added 15 unit tests covering coercion, no-op, safety, and end-to-end scenarios
 
-Conceived by Romuald Czlonkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.35.3] - 2026-02-19
 
@@ -1558,7 +1565,7 @@ Conceived by Romuald Czlonkowski - https://www.aiadvisors.pl/en
 - Rebuilt node database with 1,236 nodes (673 from n8n-nodes-base, 133 from @n8n/n8n-nodes-langchain, 430 community)
 - Refreshed community nodes (361 verified + 69 npm) with 424/430 AI documentation summaries
 
-Conceived by Romuald Czlonkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.35.2] - 2026-02-09
 
@@ -1566,7 +1573,7 @@ Conceived by Romuald Czlonkowski - https://www.aiadvisors.pl/en
 
 - **MCP Apps: Disable non-rendering apps in Claude.ai**: Disabled 3 MCP Apps (workflow-list, execution-history, health-dashboard) that render as collapsed accordions in Claude.ai, and removed `n8n_deploy_template` tool mapping which renders blank content. The server sets `_meta` correctly on the wire but the Claude.ai host ignores it for these tools. The 2 working apps (operation-result for 6 tools, validation-summary for 3 tools) remain active. Disabled apps can be re-enabled once the host-side issue is resolved.
 
-Conceived by Romuald Czlonkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.35.1] - 2026-02-09
 
@@ -1574,7 +1581,7 @@ Conceived by Romuald Czlonkowski - https://www.aiadvisors.pl/en
 
 - **MCP Apps: Fix UI not rendering for some tools in Claude**: Added legacy flat `_meta["ui/resourceUri"]` key alongside the nested `_meta.ui.resourceUri` in tool definitions. Claude.ai reads the flat key format; without it, tools like `n8n_health_check` and `n8n_list_workflows` showed as collapsed accordions instead of rendering their rich UI apps. Both key formats are now set by `injectToolMeta()`, matching the behavior of the official `registerAppTool` helper from `@modelcontextprotocol/ext-apps/server`.
 
-Conceived by Romuald Czlonkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.35.0] - 2026-02-09
 
@@ -1591,7 +1598,7 @@ Conceived by Romuald Czlonkowski - https://www.aiadvisors.pl/en
 - **React hooks violation**: Fixed `useMemo` called after early returns in `execution-history/App.tsx` and `validation-summary/App.tsx`, causing React error #310 ("Rendered more hooks than during the previous render") and blank iframes
 - **JSON-RPC catch-all handler**: Preview harness responds to unknown SDK requests to prevent hangs
 
-Conceived by Romuald Czlonkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.34.5] - 2026-02-08
 
@@ -1599,7 +1606,7 @@ Conceived by Romuald Czlonkowski - https://www.aiadvisors.pl/en
 
 - **MCP Apps: Fix blank UI and wrong status badge in Claude**: Rewrote `useToolData` hook to use the official `useApp` hook from `@modelcontextprotocol/ext-apps/react` for proper lifecycle management. Updated UI types and components to match actual server response format (`success: boolean` instead of `status: string`, nested `data` object for workflow details). Validation summary now handles both direct and wrapped (`n8n_validate_workflow`) response shapes.
 
-Conceived by Romuald Czlonkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.34.3] - 2026-02-07
 
@@ -1607,7 +1614,7 @@ Conceived by Romuald Czlonkowski - https://www.aiadvisors.pl/en
 
 - **MCP Apps: Use correct MIME type for ext-apps spec**: Changed resource MIME type from `text/html` to `text/html;profile=mcp-app` (the `RESOURCE_MIME_TYPE` constant from `@modelcontextprotocol/ext-apps`). Without this profile parameter, Claude Desktop/web fails to recognize resources as MCP Apps and shows "Failed to load MCP App: the resource may exceed the 5 MB size limit."
 
-Conceived by Romuald Czlonkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.34.2] - 2026-02-07
 
@@ -1618,7 +1625,7 @@ Conceived by Romuald Czlonkowski - https://www.aiadvisors.pl/en
   - Added `ui-apps/dist/` to npm publish staging directory
   - Added `ui-apps/dist/**/*` to published package files list
 
-Conceived by Romuald Czlonkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.34.1] - 2026-02-07
 
@@ -1633,7 +1640,7 @@ Conceived by Romuald Czlonkowski - https://www.aiadvisors.pl/en
   - UI apps now use `@modelcontextprotocol/ext-apps` `App` class instead of `window.__MCP_DATA__`
   - Updated `ReadResource` URI parser to match new `ui://` scheme
 
-Conceived by Romuald Czlonkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.34.0] - 2026-02-07
 
@@ -1676,7 +1683,7 @@ Conceived by Romuald Czlonkowski - https://www.aiadvisors.pl/en
 - **Tool Responses**: Tools with matching UI apps now include `_meta.ui.app` URI pointing to their visual representation
 - **Graceful Degradation**: Server starts and operates normally without `ui-apps/dist/`; UI metadata is only injected when HTML is available
 
-Conceived by Romuald Czlonkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 ## [2.33.6] - 2026-02-06
 
@@ -2274,7 +2281,7 @@ N8N_MCP_LLM_TIMEOUT=60000                       # Request timeout
   - CORS configuration
 
 - **Docker Support**: Official Docker image
-  - `ghcr.io/czlonkowski/n8n-mcp`
+  - `ghcr.io/AdvancedNolik22-dev/n8n-mcp`
   - Railway one-click deploy
   - Environment-based configuration
 

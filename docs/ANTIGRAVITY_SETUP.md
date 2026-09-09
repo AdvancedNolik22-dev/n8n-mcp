@@ -249,7 +249,7 @@ The `addConnection` operation takes `source` and `target` as **separate string p
 }
 ```
 
-**Reference**: [GitHub Issue #327](https://github.com/czlonkowski/n8n-mcp/issues/327)
+**Reference**: [GitHub Issue #327](https://github.com/AdvancedNolik22-dev/n8n-mcp/issues/327)
 
 ### ⚠️ CRITICAL: IF Node Multi-Output Routing
 

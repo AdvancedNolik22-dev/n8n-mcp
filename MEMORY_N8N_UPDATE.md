@@ -75,7 +75,7 @@ git commit -m "chore: update n8n to X.X.X and bump version to 2.XX.X
 - Updated README badge with new n8n version and node counts
 - Updated CHANGELOG with dependency changes
 
-Conceived by Romuald Członkowski - https://www.aiadvisors.pl/en
+Conceived by AdvancedNolik22-dev - https://github.com/AdvancedNolik22-dev
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
 

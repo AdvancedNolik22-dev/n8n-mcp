@@ -4,7 +4,7 @@
  * Use SingleSessionHTTPServer from http-server-single-session.ts instead.
  *
  * This implementation does not support SSE streaming required by clients like OpenAI Codex.
- * See: https://github.com/czlonkowski/n8n-mcp/issues/524
+ * See: https://github.com/AdvancedNolik22-dev/n8n-mcp/issues/524
  *
  * Original purpose: Fixed HTTP server for n8n-MCP that properly handles
  * StreamableHTTPServerTransport initialization by bypassing it entirely.
@@ -141,7 +141,7 @@ export async function startFixedHTTPServer() {
   logger.warn(
     'DEPRECATION: startFixedHTTPServer() is deprecated as of v2.31.8. ' +
     'Use SingleSessionHTTPServer which supports SSE streaming. ' +
-    'See: https://github.com/czlonkowski/n8n-mcp/issues/524'
+    'See: https://github.com/AdvancedNolik22-dev/n8n-mcp/issues/524'
   );
 
   validateEnvironment();
@@ -223,7 +223,7 @@ export async function startFixedHTTPServer() {
         header: 'Authorization: Bearer <token>',
         required_for: ['POST /mcp']
       },
-      documentation: 'https://github.com/czlonkowski/n8n-mcp'
+      documentation: 'https://github.com/AdvancedNolik22-dev/n8n-mcp'
     });
   });
 
@@ -288,7 +288,7 @@ export async function startFixedHTTPServer() {
           authentication: 'None'
         }
       },
-      documentation: 'https://github.com/czlonkowski/n8n-mcp'
+      documentation: 'https://github.com/AdvancedNolik22-dev/n8n-mcp'
     });
   });
 
@@ -342,7 +342,7 @@ export async function startFixedHTTPServer() {
     const token = authHeader.slice(7).trim();
 
     // SECURITY: Use timing-safe comparison to prevent timing attacks
-    // See: https://github.com/czlonkowski/n8n-mcp/issues/265 (CRITICAL-02)
+    // See: https://github.com/AdvancedNolik22-dev/n8n-mcp/issues/265 (CRITICAL-02)
     const isValidToken = authToken &&
       AuthManager.timingSafeCompare(token, authToken);
 

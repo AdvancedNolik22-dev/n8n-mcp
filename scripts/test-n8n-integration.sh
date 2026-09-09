@@ -180,7 +180,7 @@ trap cleanup EXIT INT TERM
 # Check if we're in the right directory
 if [ ! -f "package.json" ] || [ ! -d "dist" ]; then
     echo -e "${RED}❌ Error: Must run from n8n-mcp directory${NC}"
-    echo "Please cd to /Users/romualdczlonkowski/Pliki/n8n-mcp/n8n-mcp"
+    echo "Please cd to ."
     exit 1
 fi
 

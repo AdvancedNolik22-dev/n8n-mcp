@@ -14,7 +14,7 @@ This guide helps you connect n8n-MCP to Claude Desktop, giving Claude comprehens
 
 1. **Install and build:**
    ```bash
-   git clone https://github.com/czlonkowski/n8n-mcp.git
+   git clone https://github.com/AdvancedNolik22-dev/n8n-mcp.git
    cd n8n-mcp
    npm install
    npm run build
@@ -57,7 +57,7 @@ No installation needed - runs directly from Docker:
         "-e", "MCP_MODE=stdio",
         "-e", "LOG_LEVEL=error",
         "-e", "DISABLE_CONSOLE_OUTPUT=true",
-        "ghcr.io/czlonkowski/n8n-mcp:latest"
+        "ghcr.io/AdvancedNolik22-dev/n8n-mcp:latest"
       ]
     }
   }
@@ -169,7 +169,7 @@ See the [n8n Management Tools table](../README.md#n8n-management-tools-21-tools-
 **"Cannot find image" error:**
 ```bash
 # Pull the latest image
-docker pull ghcr.io/czlonkowski/n8n-mcp:latest
+docker pull ghcr.io/AdvancedNolik22-dev/n8n-mcp:latest
 ```
 
 **Permission denied:**

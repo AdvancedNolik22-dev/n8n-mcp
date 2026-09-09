@@ -62,7 +62,7 @@ docker logs n8n-mcp | grep -i config
 
 1. **Update to v2.7.16 or later:**
 ```bash
-docker pull ghcr.io/czlonkowski/n8n-mcp:latest
+docker pull ghcr.io/AdvancedNolik22-dev/n8n-mcp:latest
 ```
 
 2. **Ensure path ends with .db:**
@@ -108,7 +108,7 @@ Use Docker's special hostnames instead of `localhost`:
         "run", "-i", "--rm",
         "-e", "N8N_API_URL=http://host.docker.internal:5678",
         "-e", "N8N_API_KEY=your-api-key",
-        "ghcr.io/czlonkowski/n8n-mcp:latest"
+        "ghcr.io/AdvancedNolik22-dev/n8n-mcp:latest"
       ]
     }
   }
@@ -152,7 +152,7 @@ services:
       - "5678:5678"
   
   n8n-mcp:
-    image: ghcr.io/czlonkowski/n8n-mcp:latest
+    image: ghcr.io/AdvancedNolik22-dev/n8n-mcp:latest
     environment:
       N8N_API_URL: http://n8n:5678
       N8N_API_KEY: ${N8N_API_KEY}
@@ -181,7 +181,7 @@ networks:
   "command": "docker",
   "args": [
     "run", "-i", "--rm", "--init",
-    "ghcr.io/czlonkowski/n8n-mcp:latest"
+    "ghcr.io/AdvancedNolik22-dev/n8n-mcp:latest"
   ]
 }
 ```
@@ -215,7 +215,7 @@ docker run -d \
   -e AUTH_TOKEN=your-token \
   -e WEBHOOK_SECURITY_MODE=moderate \
   -p 3000:3000 \
-  ghcr.io/czlonkowski/n8n-mcp:latest
+  ghcr.io/AdvancedNolik22-dev/n8n-mcp:latest
 
 # For Docker Compose - add to environment:
 services:
@@ -304,7 +304,7 @@ ipconfig | findstr IPv4
     "run", "-i", "--rm",
     "--network", "host",
     "-e", "N8N_API_URL=http://localhost:5678",
-    "ghcr.io/czlonkowski/n8n-mcp:latest"
+    "ghcr.io/AdvancedNolik22-dev/n8n-mcp:latest"
   ]
 }
 ```
@@ -327,7 +327,7 @@ docker run -d \
   -e AUTH_TOKEN=your-token \
   -e N8N_API_URL=http://host.docker.internal:5678 \
   -e N8N_API_KEY=your-n8n-key \
-  ghcr.io/czlonkowski/n8n-mcp:latest
+  ghcr.io/AdvancedNolik22-dev/n8n-mcp:latest
 
 # Configure Claude with mcp-remote
 ```
@@ -347,14 +347,14 @@ docker run -d \
 ### 2. Test Connectivity
 ```bash
 # Test from n8n-mcp container
-docker run --rm ghcr.io/czlonkowski/n8n-mcp:latest \
+docker run --rm ghcr.io/AdvancedNolik22-dev/n8n-mcp:latest \
   sh -c "apk add curl && curl -v http://host.docker.internal:5678/api/v1/workflows"
 ```
 
 ### 3. Check Docker Logs
 ```bash
 # View n8n-mcp logs
-docker logs $(docker ps -q -f ancestor=ghcr.io/czlonkowski/n8n-mcp:latest)
+docker logs $(docker ps -q -f ancestor=ghcr.io/AdvancedNolik22-dev/n8n-mcp:latest)
 
 # View n8n logs
 docker logs n8n
@@ -363,7 +363,7 @@ docker logs n8n
 ### 4. Validate Environment
 ```bash
 # Check what n8n-mcp sees
-docker run --rm ghcr.io/czlonkowski/n8n-mcp:latest \
+docker run --rm ghcr.io/AdvancedNolik22-dev/n8n-mcp:latest \
   sh -c "env | grep N8N"
 ```
 
@@ -398,13 +398,13 @@ docker run --rm busybox nslookup host.docker.internal
 1. **Check n8n logs** for API-related errors
 2. **Verify firewall/security** isn't blocking connections
 3. **Try simpler setup** - Run n8n-mcp on host instead of Docker
-4. **Report issue** with debug logs at [GitHub Issues](https://github.com/czlonkowski/n8n-mcp/issues)
+4. **Report issue** with debug logs at [GitHub Issues](https://github.com/AdvancedNolik22-dev/n8n-mcp/issues)
 
 ## Useful Commands
 
 ```bash
 # Remove all n8n-mcp containers
-docker rm -f $(docker ps -aq -f ancestor=ghcr.io/czlonkowski/n8n-mcp:latest)
+docker rm -f $(docker ps -aq -f ancestor=ghcr.io/AdvancedNolik22-dev/n8n-mcp:latest)
 
 # Test n8n API with curl
 curl -H "X-N8N-API-KEY: your-key" http://localhost:5678/api/v1/workflows
@@ -414,7 +414,7 @@ docker run -it --rm \
   -e LOG_LEVEL=debug \
   -e N8N_API_URL=http://host.docker.internal:5678 \
   -e N8N_API_KEY=your-key \
-  ghcr.io/czlonkowski/n8n-mcp:latest \
+  ghcr.io/AdvancedNolik22-dev/n8n-mcp:latest \
   sh
 
 # Check container networking

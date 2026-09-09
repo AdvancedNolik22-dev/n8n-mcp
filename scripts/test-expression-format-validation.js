@@ -44,7 +44,7 @@ async function runTests() {
         credentials: {
           smtp: {
             id: '7AQ08VMFHubmfvzR',
-            name: 'romuald@aiadvisors.pl'
+            name: 'advancednolik22@gmail.com'
           }
         }
       }
