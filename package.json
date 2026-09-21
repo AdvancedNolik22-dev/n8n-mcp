@@ -146,7 +146,7 @@
     "@types/node": "^22.15.30",
     "@types/ws": "^8.18.1",
     "@vitest/coverage-v8": "^3.2.6",
-    "@vitest/runner": "^3.2.6",
+    "@vitest/runner": "^4.1.11",
     "@vitest/ui": "^3.2.6",
     "axios": "^1.18.1",
     "axios-mock-adapter": "^2.1.0",
